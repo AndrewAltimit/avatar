@@ -1,9 +1,43 @@
 # Contributing
 
-This is a Rust monorepo (workspace, edition 2024, `resolver = "3"`) of tools that operate on the
-*files* a VRChat SDK3 avatar is made of. Read [`PLAN.md`](PLAN.md) for the architecture and roadmap,
-[`CLAUDE.md`](CLAUDE.md) for the documentation map, and the per-crate `README.md`s for each crate's
-purpose and API. This file is the how-to for building, testing, and extending the codebase.
+This repository does not accept external contributions of any kind. All code changes are authored
+by the maintainer and by AI agents operating under human direction.
+
+## No External Contributions
+
+This is a single-maintainer project. The development workflow itself — self-hosted CI, the generated
+docs site, the commit-hook gate, and the conventions below — is tightly integrated and built around
+maintainer + AI-agent authorship with human oversight. External pull requests would break the
+assumptions the tooling is built on and will not be merged.
+
+## No Feature Requests, Guidance, or Support
+
+Feature requests from external parties will not be accepted or implemented. The maintainer does not
+provide guidance, advice, consulting, or support on the use, adaptation, deployment, or integration
+of anything in this repository. No advisory relationship exists or is implied. This project is not
+affiliated with or endorsed by VRChat Inc. or Unity Technologies.
+
+## No Community Engagement
+
+The maintainer does not seek community engagement, discussion, or collaboration. Issues and comments
+filed by external parties may be ignored without acknowledgment or response. This is intentional.
+
+## What You Can Do
+
+- **Fork it.** Clone the repo and adapt it however you want. The code is dual-licensed
+  [MIT](LICENSE-MIT) OR [Unlicense](LICENSE).
+- **Study it.** The docs cover the FBX/Unity-YAML layers, SDK3 linting, performance ranking, asset
+  generation, and the OSC runtime. Start with [`PLAN.md`](PLAN.md) and [`CLAUDE.md`](CLAUDE.md).
+- **Use it.** Any component, for any lawful purpose, under those licenses.
+
+You do so entirely at your own risk and without any expectation of support, maintenance, or
+acknowledgment from the maintainer.
+
+---
+
+The remainder of this file is an **internal development reference** for the maintainer and the AI
+agents working in this repo. It is documentation of how the codebase is built and extended — not an
+invitation to contribute.
 
 ## Build, test, lint
 
@@ -15,19 +49,31 @@ cargo test --workspace
 cargo run -p avatar-cli -- <subcommand>      # e.g. lint path/to/UnityProject
 ```
 
-CI runs `fmt --check` + `clippy --all-targets -D warnings` + `test --workspace`; all three must be
-green. Warnings are denied, so treat clippy lints as errors. The toolchain is pinned in
-`rust-toolchain.toml` (fbxcel + edition 2024 want a recent compiler) — let it select the version.
+CI runs `fmt --check` + `clippy --all-targets -D warnings` + `test --workspace` on a self-hosted
+runner (`.github/workflows/main-ci.yml`); all three must be green. Warnings are denied, so treat
+clippy lints as errors. The toolchain is pinned in `rust-toolchain.toml` (fbxcel + edition 2024 want
+a recent compiler) — let it select the version.
 
-### Pre-commit hook
+### Pre-commit hooks
 
-Install the tracked hook once per clone; it runs `fmt` + `clippy` before each commit:
+Install the hooks once per clone:
 
 ```sh
+pipx install pre-commit   # or: pip install pre-commit
 scripts/install-hooks.sh
 ```
 
-This sets `core.hooksPath` to `scripts/git-hooks`. It is the same gate CI runs, locally.
+This wires in the [pre-commit framework](https://pre-commit.com) (`.pre-commit-config.yaml`): file
+hygiene (trailing whitespace, EOF, line endings, JSON/YAML validation, merge-conflict / large-file
+guards), [`actionlint`](https://github.com/rhysd/actionlint) on the workflows,
+[`shellcheck`](https://www.shellcheck.net) on shell scripts, and local `cargo fmt` (autofix) +
+`cargo clippy --all-targets --workspace -D warnings` — the same Rust gate CI runs. Sweep the whole
+tree at any time with `pre-commit run --all-files`.
+
+If `pre-commit` isn't installed, `scripts/install-hooks.sh` falls back to the tracked native hook
+(`scripts/git-hooks/pre-commit`, `core.hooksPath = scripts/git-hooks`), which covers `fmt` + `clippy`
+only. The lint test fixtures (`crates/*/tests/fixtures/`) and the `acceptance/` Unity project are
+excluded from the hygiene hooks because tests read them verbatim.
 
 ## Conventions
 
@@ -114,5 +160,3 @@ Mirror an existing crate (e.g. `crates/lint` or `crates/stats`):
    `CLAUDE.md` and `README.md`.
 5. Keep `glam` out of the lint/CLI graph — it is confined to the runtime rig tier
    (`pose` / `input` / `gltf`).
-</content>
-</invoke>

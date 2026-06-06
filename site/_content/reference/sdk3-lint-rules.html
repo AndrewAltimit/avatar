@@ -1,0 +1,58 @@
+<header class="page-header">
+  <div class="breadcrumb"><a href="../index.html">home</a> &middot; <a href="index.html">reference</a> &middot; sdk3 lint rules</div>
+  <h1>SDK3 lint rules</h1>
+  <p class="lede">
+    Rules emitted by <code>avatar lint &lt;project&gt;</code> (the <code>avatar-lint</code> crate). Errors are
+    things VRChat will reject or that break the avatar; warnings are likely-but-not-certain problems. Codes
+    are grouped: <code>VRC00x</code> project, <code>VRC01x</code> parameters, <code>VRC02x</code> menus,
+    <code>VRC03x</code> Avatar Descriptor, <code>VRC04x</code> animator controllers. Full text:
+    <code>docs/reference/sdk3-lint-rules.md</code>.
+  </p>
+</header>
+
+<section class="doc-section" id="rules">
+  <h2>The rules</h2>
+  <table>
+    <thead><tr><th>Code</th><th>Severity</th><th>Rule</th></tr></thead>
+    <tbody>
+      <tr><td><code>VRC001</code></td><td><span class="tag tag-partial">warn</span></td><td>VRChat avatar SDK (<code>com.vrchat.avatars</code>) not found in <code>vpm-manifest.json</code></td></tr>
+      <tr><td><code>VRC002</code></td><td><span class="tag tag-stub">info</span></td><td>No VRC Avatar Descriptor found under <code>Assets/</code> (only when the avatar SDK is present)</td></tr>
+      <tr><td><code>VRC010</code></td><td><span class="tag tag-open">error</span></td><td>Synced expression parameters exceed the <strong>256-bit</strong> budget (Bool = 1, Int/Float = 8; only <code>networkSynced</code> count)</td></tr>
+      <tr><td><code>VRC011</code></td><td><span class="tag tag-partial">warn</span></td><td>Duplicate expression parameter name within one asset</td></tr>
+      <tr><td><code>VRC020</code></td><td><span class="tag tag-open">error</span></td><td>Expression menu has more than <strong>8</strong> controls</td></tr>
+      <tr><td><code>VRC021</code></td><td><span class="tag tag-partial">warn</span></td><td>Menu control references a parameter not declared anywhere (and not built-in); may be build-time generated</td></tr>
+      <tr><td><code>VRC030</code></td><td><span class="tag tag-partial">warn</span></td><td>Custom expressions but the <strong>Expression Parameters</strong> reference is unassigned/missing/wrong type</td></tr>
+      <tr><td><code>VRC031</code></td><td><span class="tag tag-partial">warn</span></td><td>As <code>VRC030</code>, for the <strong>Expression Menu</strong> reference</td></tr>
+      <tr><td><code>VRC032</code></td><td><span class="tag tag-partial">warn</span></td><td>A custom playable layer references an animator controller whose guid is absent</td></tr>
+      <tr><td><code>VRC033</code></td><td><span class="tag tag-partial">warn</span></td><td>Viseme Blend Shape lip-sync but the viseme mesh is unassigned, or blend-shape count ≠ 15</td></tr>
+      <tr><td><code>VRC034</code></td><td><span class="tag tag-partial">warn</span></td><td>Eye Look enabled but no eye bones assigned</td></tr>
+      <tr><td><code>VRC035</code></td><td><span class="tag tag-partial">warn</span></td><td>Eyelid Type is Blendshapes but no eyelid skinned mesh assigned</td></tr>
+      <tr><td><code>VRC036</code></td><td><span class="tag tag-partial">warn</span></td><td>An Expression Parameter is used by none of the resolvable non-default playable-layer controllers</td></tr>
+      <tr><td><code>VRC037</code></td><td><span class="tag tag-partial">warn</span></td><td>An Expression Parameter shares a name with an animator parameter but an incompatible type</td></tr>
+      <tr><td><code>VRC040</code></td><td><span class="tag tag-partial">warn</span></td><td>A transition condition references an undeclared animator parameter (transition silently never fires)</td></tr>
+      <tr><td><code>VRC041</code></td><td><span class="tag tag-partial">warn</span></td><td>A blend tree reads an undeclared animator parameter (respects 1D/2D/Direct blend type)</td></tr>
+      <tr><td><code>VRC042</code></td><td><span class="tag tag-partial">warn</span></td><td>A state machine has child states but no default state (never enters any state)</td></tr>
+      <tr><td><code>VRC043</code></td><td><span class="tag tag-partial">warn</span></td><td>Duplicate animator parameter name within a controller</td></tr>
+      <tr><td><code>VRC044</code></td><td><span class="tag tag-partial">warn</span></td><td>States in one controller mix Write Defaults on and off (common cause of broken/sticky animations)</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section class="doc-section" id="identification">
+  <h2>How assets are identified</h2>
+  <p>
+    VRChat assets are recognized <strong>structurally</strong>, not by a hardcoded script GUID: an Expression
+    Parameters asset has a <code>parameters</code> list whose entries carry <code>valueType</code>/<code>name</code>;
+    an Expression Menu has a <code>controls</code> list; an Avatar Descriptor MonoBehaviour carries
+    <code>baseAnimationLayers</code> + <code>ViewPosition</code>. This keeps the linter working across SDK
+    versions. <code>.asset</code>, <code>.prefab</code>, and <code>.unity</code> are all scanned;
+    cross-asset references are resolved through a guid&rarr;path index built from <code>.meta</code> files.
+  </p>
+  <div class="hint">
+    A Unity guid is 32 hex characters and is parsed as a string; a reference with only a local
+    <code>fileID</code> (no guid) can't be resolved across files and is skipped rather than flagged.
+    <code>.controller</code> files are parsed into a typed <code>AnimatorController</code> by
+    <code>avatar-unity-asset</code>; the <code>VRC04x</code> rules aggregate fields by Unity class id, which
+    keeps them robust to SDK drift.
+  </div>
+</section>

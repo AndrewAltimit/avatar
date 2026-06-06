@@ -1,0 +1,69 @@
+# Pre-commit hooks for the avatar tools repo.
+# Modeled on faultline/.pre-commit-config.yaml, adapted for this repo.
+#
+#   Install the framework:  pipx install pre-commit   (or: pip install pre-commit)
+#   Wire it into git:       scripts/install-hooks.sh   (or: pre-commit install)
+#   Run manually:           pre-commit run --all-files
+#
+# Byte-sensitive trees are excluded globally so the hygiene/JSON hooks never
+# rewrite them: the lint crate's test fixtures (Unity YAML + vpm manifests) and
+# the Unity acceptance project are parsed/compared verbatim by tests, and
+# Cargo.lock is machine-generated.
+exclude: |
+  (?x)^(
+    crates/.*/tests/fixtures/.*|
+    acceptance/.*|
+    Cargo\.lock
+  )$
+
+repos:
+  # General file hygiene
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+        args: [--unsafe]
+      - id: check-added-large-files
+        args: [--maxkb=1000]
+      - id: check-json
+      - id: pretty-format-json
+        args: [--autofix, --no-sort-keys]
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: mixed-line-ending
+        args: [--fix=lf]
+
+  # GitHub Actions workflow linting
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.10
+    hooks:
+      - id: actionlint
+
+  # Shell script linting
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.10.0.1
+    hooks:
+      - id: shellcheck
+        types: [shell]
+        args: [-x]
+
+  # Rust formatting + linting (local, runs against the installed toolchain).
+  # rust-fmt is autofixing: it rewrites drift in place, so pre-commit aborts the
+  # commit and you re-stage the formatted files (same UX as the hygiene hooks).
+  - repo: local
+    hooks:
+      - id: rust-fmt
+        name: Rust format (autofix)
+        entry: cargo fmt --all --
+        language: system
+        files: '\.rs$'
+        pass_filenames: false
+
+      - id: rust-clippy
+        name: Rust clippy lint
+        entry: cargo clippy --all-targets --workspace -- -D warnings
+        language: system
+        files: '\.rs$'
+        pass_filenames: false

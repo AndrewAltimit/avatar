@@ -1,0 +1,78 @@
+<header class="page-header" id="top">
+  <div class="breadcrumb">project &middot; VRChat SDK3 / Avatars 3.0 &middot; Rust monorepo</div>
+  <h1>avatar <span class="hero-sub">tools for the files a VRChat avatar is made of</span></h1>
+  <p class="lede">
+    A Rust monorepo that operates on the <strong>files</strong> a VRChat SDK3 avatar is built from &mdash;
+    binary FBX and Unity YAML &mdash; to diagnose, fix, lint, generate, and drive them, plus an OSC runtime
+    layer. It does <strong>not</strong> replace Unity or the VRChat SDK upload step: you still build &amp;
+    upload in Unity. These tools handle everything up to that point, and the live OSC layer after it.
+  </p>
+</header>
+
+<div class="notice warn">
+  <div class="notice-title">Status: early / alpha (WIP)</div>
+  The crates build green and are covered by tests, but those tests run against <em>synthetic fixtures</em> &mdash;
+  the tools are not yet validated against real Unity imports or a live VRChat. Verify in Unity before you rely
+  on output. APIs, CLI flags, and report formats may change.
+</div>
+
+<section class="doc-section" id="two-layers">
+  <h2>The two-layer model</h2>
+  <p>Read this first. There are two layers we own in Rust, and one we don't.</p>
+  <div class="card-grid">
+    <a class="card" href="architecture.html#fbx-layer">
+      <div class="card-title">3D asset layer &middot; <code>.fbx</code></div>
+      <div class="card-body">Armature/skeleton, bone names, bind poses, skinning weights, blendshapes. Fully ours &mdash; native binary read <em>and</em> write via <code>fbxcel</code>.</div>
+    </a>
+    <a class="card" href="architecture.html#unity-layer">
+      <div class="card-title">Unity / VRChat layer &middot; UnityYAML</div>
+      <div class="card-body"><code>.anim</code>, <code>.controller</code>, <code>.asset</code>, <code>.prefab</code>, scenes, <code>.meta</code>: humanoid mapping, Avatar Descriptor, animator layers, expression menus/params. Read/lint &amp; generate.</div>
+    </a>
+    <a class="card" href="architecture.html#upload">
+      <div class="card-title">Upload / build &middot; not ours</div>
+      <div class="card-body">The VRCSDK control panel &rarr; VRChat servers. Interactive account login, effectively Windows-only. We hand off generated assets; you upload.</div>
+    </a>
+  </div>
+</section>
+
+<section class="doc-section" id="do">
+  <h2>What you can do today</h2>
+  <div class="card-grid">
+    <a class="card" href="reference/armature-repair.html">
+      <div class="card-title">Fix the armature</div>
+      <div class="card-body">Canonicalize a raw Mixamo rig so Unity auto-configures it as Humanoid. Topology / scale / orientation issues are flagged. <code>avatar armature fix</code>.</div>
+    </a>
+    <a class="card" href="reference/sdk3-lint-rules.html">
+      <div class="card-title">Lint a project</div>
+      <div class="card-body">SDK3 compliance over an entire Unity project: params, menus, descriptor refs, visemes, animator controllers. <code>avatar lint</code> &mdash; exits non-zero for CI.</div>
+    </a>
+    <a class="card" href="reference/performance-stats.html">
+      <div class="card-title">Rank performance offline</div>
+      <div class="card-body">VRChat's Excellent&rarr;Very Poor rank computed without Unity, against PC + Android limits. <code>avatar stats</code>.</div>
+    </a>
+    <a class="card" href="reference/anim-gen.html">
+      <div class="card-title">Generate assets</div>
+      <div class="card-body">Emit Unity <code>.anim</code> clips and analog-gesture blend trees with deterministic, diffable fileIDs. <code>avatar anim-gen</code>.</div>
+    </a>
+    <a class="card" href="reference/osc-runtime.html">
+      <div class="card-title">Drive avatars over OSC</div>
+      <div class="card-body">Speak VRChat's OSC parameter protocol and run the analog-gesture daemon &mdash; "Vive advanced controls on any hardware". <code>avatar osc</code>.</div>
+    </a>
+    <a class="card" href="crates/index.html">
+      <div class="card-title">Browse the crates</div>
+      <div class="card-body">Sixteen crates from FBX I/O through the runtime rig layer to the OSC daemon &mdash; purpose, key API, and status for each.</div>
+    </a>
+  </div>
+</section>
+
+<section class="doc-section" id="status">
+  <h2>Where the build is</h2>
+  <p>
+    Built and green through <strong>M3</strong> (FBX read/write + armature fix, project linting), with the
+    <strong>M4</strong> asset-generation and <strong>M5</strong> OSC-runtime layers landed and wired to the
+    <code>avatar anim-gen</code> / <code>avatar osc</code> subcommands &mdash; including the analog-gesture
+    daemon. The remaining on-device piece is the daemon's OpenXR input backend. The full roadmap of record
+    lives in <code>PLAN.md</code>; this site mirrors the committed docs under <code>docs/</code>.
+  </p>
+  <div class="cli"><code>cargo run -p avatar-cli -- --help</code></div>
+</section>

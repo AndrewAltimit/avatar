@@ -2,8 +2,9 @@
 # valid Humanoid avatar in a real Unity editor — the "last mile" the Rust tests can't cover.
 #
 # This is the automated form of the manual check in docs/reference/armature-repair.md. It runs the
-# Unity editor inside GameCI's x86_64 Docker image on a GitHub-hosted (amd64) runner, so it needs
-# no local Unity install of any kind — your workstation's CPU architecture is irrelevant.
+# Unity editor inside GameCI's x86_64 Docker image on a self-hosted (amd64) runner, so it needs no
+# local Unity install of any kind — only Docker on the runner. The runner must be x86_64 because
+# GameCI publishes amd64-only editor images.
 #
 # One-time setup. Unity retired the manual web-activation page for *Personal* (free) licenses, so
 # the .alf -> upload -> .ulf route only works for Plus/Pro. For a Personal license you need a .ulf
@@ -29,7 +30,7 @@ env:
 
 jobs:
   humanoid-acceptance:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
 

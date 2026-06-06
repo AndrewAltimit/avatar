@@ -1,0 +1,64 @@
+<header class="page-header">
+  <div class="breadcrumb"><a href="index.html">home</a> &middot; quick start</div>
+  <h1>Quick start</h1>
+  <p class="lede">
+    Build the workspace, then drive the <code>avatar</code> binary through the FBX &rarr; armature &rarr; lint
+    &rarr; stats &rarr; generate &rarr; OSC flow. Every command below runs offline; the only thing that talks
+    to the network is <code>avatar osc</code>, and only to a VRChat instance on localhost. The full
+    end-to-end walkthrough is <code>docs/tutorial.md</code>.
+  </p>
+</header>
+
+<section class="doc-section" id="build">
+  <h2>Build</h2>
+  <div class="cli"><code>cargo build --workspace</code></div>
+  <p>Standard workspace conventions: edition 2024, <code>anyhow</code> + <code>clap</code> v4. The full CI gate is fmt + clippy (<code>-D warnings</code>) + test + build:</p>
+  <div class="cli"><code>cargo fmt --all -- --check
+cargo clippy --all-targets --workspace -- -D warnings
+cargo test --workspace</code></div>
+</section>
+
+<section class="doc-section" id="inspect-fix">
+  <h2>Inspect &amp; fix an FBX</h2>
+  <div class="cli"><code>cargo run -p avatar-cli -- fbx inspect path/to/model.fbx
+cargo run -p avatar-cli -- armature check path/to/model.fbx
+cargo run -p avatar-cli -- armature fix path/to/model.fbx                # dry run: print the plan
+cargo run -p avatar-cli -- armature fix path/to/model.fbx -o fixed.fbx   # write a repaired FBX</code></div>
+  <p>
+    <code>armature fix</code> rewrites a non-standard rig (e.g. a raw Mixamo export) so Unity auto-configures
+    it as Humanoid: it canonicalizes bone names (<code>mixamorig:LeftArm</code> &rarr;
+    <code>LeftUpperArm</code>), which is what the humanoid auto-mapper keys on. It is a <strong>dry run by
+    default</strong> &mdash; pass <code>-o</code> to write. Mis-wired parent topology and scale/orientation
+    problems are reported but not auto-applied: they need a geometry transform (Blender), not a metadata
+    relabel. See <code>docs/reference/armature-repair.md</code>.
+  </p>
+</section>
+
+<section class="doc-section" id="lint-stats">
+  <h2>Lint &amp; rank a project</h2>
+  <div class="cli"><code>cargo run -p avatar-cli -- lint path/to/UnityProject                   # SDK3 compliance report
+cargo run -p avatar-cli -- lint path/to/UnityProject --deny-warnings   # also fail CI on warnings
+cargo run -p avatar-cli -- stats path/to/model.fbx                     # performance rank (geometry)
+cargo run -p avatar-cli -- stats path/to/UnityProject                  # performance rank (components)</code></div>
+  <p><code>avatar lint</code> exits non-zero when the report contains errors (or, with <code>--deny-warnings</code>, any warnings), so it gates CI directly.</p>
+</section>
+
+<section class="doc-section" id="generate-drive">
+  <h2>Generate assets &amp; drive over OSC</h2>
+  <div class="cli"><code>cargo run -p avatar-cli -- anim-gen clip --name Smile --blendshape Body:Smile:100 -o Smile.anim
+cargo run -p avatar-cli -- osc send VRCEmote 3                         # drive a running VRChat over OSC
+cargo run -p avatar-cli -- osc query path/to/avatar-osc-config.json    # list an avatar's OSC parameters
+cargo run -p avatar-cli -- osc gestures --seconds 10                   # analog-gesture daemon (demo sweep)</code></div>
+</section>
+
+<section class="doc-section" id="samples">
+  <h2>Tests &amp; sample assets</h2>
+  <p>
+    Integration tests that need a real asset are <strong>gated by an env var</strong> (e.g.
+    <code>AVATAR_SAMPLE_FBX</code>) pointing at a sample file. If unset, the test prints a skip notice and
+    passes, so CI without fixtures stays green. User FBX/Unity projects are never committed. On CI, the
+    self-hosted <em>Sample-Gated Tests</em> job runs the full suite with <code>AVATAR_SAMPLE_FBX</code> set
+    from a repository variable.
+  </p>
+  <div class="hint">Install the local pre-commit hook (fmt + clippy) with <code>scripts/install-hooks.sh</code>.</div>
+</section>

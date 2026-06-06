@@ -1,0 +1,30 @@
+<header class="page-header">
+  <div class="breadcrumb"><a href="../index.html">home</a> &middot; <a href="index.html">reference</a> &middot; runtime rig layer</div>
+  <h1>Runtime rig layer</h1>
+  <p class="lede">
+    The "load and drive a rig at runtime" foundation &mdash; renderer-agnostic, the basis for a VR spectator
+    view. It spans several crates and is validated by a renderer-free rest-pose reproduction invariant. Full
+    text: <code>docs/reference/rig-runtime.md</code>.
+  </p>
+</header>
+
+<section class="doc-section" id="crates">
+  <h2>The crates</h2>
+  <ul>
+    <li><code>avatar-mesh</code> &mdash; POD <code>RawMesh</code> / skin interchange, no <code>glam</code>.</li>
+    <li><code>avatar-fbx::meshes()</code> + <code>avatar-gltf</code> &mdash; FBX / glTF &rarr; <code>RawMesh</code> + skin/bind.</li>
+    <li><code>avatar-pose</code> &mdash; <code>PosedSkeleton</code> &rarr; world matrices, GPU bone-matrix palette, CPU skinning, <code>pose::ik</code> two-bone IK.</li>
+    <li><code>avatar-input</code> &mdash; <code>TrackerState</code> / <code>TrackerSource</code>; <code>MockSource</code> + an <code>osc</code>-feature backend; OpenXR planned.</li>
+  </ul>
+</section>
+
+<section class="doc-section" id="bind">
+  <h2>Bind &amp; the rest-pose invariant</h2>
+  <p>
+    Bind comes from <code>TransformLink</code> / inverse-bind &mdash; <strong>never</strong> recomposed from
+    <code>Lcl</code> + <code>PreRotation</code>. The load &rarr; pose &rarr; skin pipeline is validated by a
+    renderer-free <strong>rest-pose reproduction</strong> invariant: posing the skeleton at its rest pose and
+    skinning must reproduce the original mesh.
+  </p>
+  <div class="hint"><code>glam</code> (f32) is confined to pose/input/gltf &mdash; it never reaches the lint/cli graph, which is verified by <code>cargo tree</code>.</div>
+</section>

@@ -1,0 +1,45 @@
+<header class="page-header">
+  <div class="breadcrumb"><a href="../index.html">home</a> &middot; <a href="index.html">reference</a> &middot; osc runtime</div>
+  <h1>OSC runtime (M5)</h1>
+  <p class="lede">
+    <code>avatar-osc</code> speaks VRChat's OSC <em>parameter</em> protocol, and <code>avatar-osc-gestures</code>
+    layers the analog-gesture daemon on top. This is the live layer that drives an already-uploaded avatar.
+    Full text: <code>docs/reference/osc-runtime.md</code>.
+  </p>
+</header>
+
+<section class="doc-section" id="protocol">
+  <h2>The parameter protocol</h2>
+  <p>
+    <code>avatar-osc</code> handles <code>/avatar/parameters/*</code>, <code>/input/*</code> (axes/buttons,
+    reset-to-zero), and <code>/avatar/change</code>, split into a <strong>pure</strong> <code>codec</code>
+    (encode/decode <code>rosc::OscMessage</code>, fully unit-tested) and a thin non-blocking
+    <code>ParamClient</code> UDP transport (send to VRChat :9000, poll :9001). <code>query</code> parses an
+    avatar's OSCQuery config JSON (<code>AvatarConfig</code>: parameter names, OSC type tags, read/write
+    access) offline.
+  </p>
+  <div class="hint">
+    This is distinct from the VMC <em>tracker</em> OSC in <code>avatar_input::osc</code> &mdash; that carries
+    transforms to drive a local rig, not avatar parameters.
+  </div>
+</section>
+
+<section class="doc-section" id="gestures">
+  <h2>The analog-gesture daemon</h2>
+  <p>
+    <code>avatar-osc-gestures</code> is the "Vive advanced controls on any hardware" feature: read a
+    controller's analog trigger/grip, map to a VRChat gesture (<code>GestureLeft/Right</code> int 0&ndash;7)
+    plus an analog <code>Gesture*Weight</code>, and send via <code>ParamClient</code>. It is deliberately
+    <strong>glam-free</strong> &mdash; it defines its own minimal <code>AnalogSource</code> rather than
+    depending on <code>avatar-input</code>, so the cli graph stays out of <code>glam</code>.
+  </p>
+  <ul>
+    <li>Pure <code>HandMapping</code> &mdash; deadzone rescale <code>(dz,1] → (0,1]</code>, Fist by default, optional grip gesture.</li>
+    <li><code>GestureFrame::updates_since</code> change detection &mdash; only changed params re-sent.</li>
+    <li><code>GestureDaemon</code> loop (<code>tick</code>/<code>run</code>/<code>run_for</code>) over a <code>ParamSink</code>.</li>
+  </ul>
+  <p>On-device input is OpenXR (an <code>AnalogSource</code> adapter, pending); headless uses a deterministic <code>DemoSource</code> triangle sweep.</p>
+  <div class="cli"><code>avatar osc send VRCEmote 3
+avatar osc query path/to/avatar-osc-config.json
+avatar osc gestures --seconds 10</code></div>
+</section>
