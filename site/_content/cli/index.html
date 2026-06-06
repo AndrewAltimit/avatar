@@ -1,0 +1,66 @@
+<header class="page-header">
+  <div class="breadcrumb"><a href="../index.html">home</a> &middot; cli commands</div>
+  <h1>CLI commands</h1>
+  <p class="lede">
+    Everything is driven through the single <code>avatar</code> binary (crate <code>avatar-cli</code>, clap v4
+    subcommands). The groups below mirror the layers: FBX/armature on the 3D side, lint/stats on the project
+    side, anim-gen for generation, and osc for the live runtime. Run any command with <code>--help</code> for
+    flags.
+  </p>
+</header>
+
+<section class="doc-section" id="fbx-armature">
+  <h2>FBX &amp; armature</h2>
+  <table>
+    <thead><tr><th>Command</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td><code>avatar fbx inspect &lt;model.fbx&gt;</code></td><td>Node hierarchy, skeleton roots, bone count, scale/orientation, units; flags unapplied transforms, wrong axis/units, extra root, unskinned mesh, missing T-pose.</td></tr>
+      <tr><td><code>avatar armature check &lt;model.fbx&gt;</code></td><td>Map detected bones &rarr; Unity Humanoid; report missing/mis-mapped. Exits 0 when humanoid-ready.</td></tr>
+      <tr><td><code>avatar armature fix &lt;model.fbx&gt;</code></td><td>Print the repair plan (dry run by default).</td></tr>
+      <tr><td><code>avatar armature fix &lt;model.fbx&gt; -o fixed.fbx</code></td><td>Write a repaired FBX: canonical bone renames applied; topology/scale/orientation flagged, not applied.</td></tr>
+    </tbody>
+  </table>
+  <p>Details: <code>docs/reference/armature-repair.md</code>.</p>
+</section>
+
+<section class="doc-section" id="lint-stats">
+  <h2>Lint &amp; stats</h2>
+  <table>
+    <thead><tr><th>Command</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td><code>avatar lint &lt;UnityProject&gt;</code></td><td>SDK3 compliance report; exits non-zero on errors.</td></tr>
+      <tr><td><code>avatar lint &lt;UnityProject&gt; --deny-warnings</code></td><td>Also fail on warnings &mdash; gate CI directly.</td></tr>
+      <tr><td><code>avatar stats &lt;model.fbx&gt;</code></td><td>Performance rank from geometry (triangles/meshes/material slots/bones).</td></tr>
+      <tr><td><code>avatar stats &lt;UnityProject&gt;</code></td><td>Performance rank from per-avatar components (PhysBones/colliders/contacts/particles/constraints, texture VRAM for PC + Android).</td></tr>
+    </tbody>
+  </table>
+  <p>Rule codes: <code>docs/reference/sdk3-lint-rules.md</code>. Metrics: <code>docs/reference/performance-stats.md</code>.</p>
+</section>
+
+<section class="doc-section" id="anim-gen">
+  <h2>Asset generation</h2>
+  <table>
+    <thead><tr><th>Command</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td><code>avatar anim-gen clip --name Smile --blendshape Body:Smile:100 -o Smile.anim</code></td><td>Emit a Unity <code>.anim</code> clip (blendshape-weight / GameObject-active curves).</td></tr>
+      <tr><td><code>avatar anim-gen blendtree ...</code></td><td>Emit an FX-layer analog-gesture blend tree (<code>BlendTree</code>, blending <code>GestureLeft/RightWeight</code>).</td></tr>
+    </tbody>
+  </table>
+  <p>Output goes to stdout or <code>-o</code>, with deterministic fileIDs so assets are diffable. Details: <code>docs/reference/anim-gen.md</code>.</p>
+</section>
+
+<section class="doc-section" id="osc">
+  <h2>OSC runtime</h2>
+  <table>
+    <thead><tr><th>Command</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td><code>avatar osc send &lt;param&gt; &lt;value&gt;</code></td><td>Set an avatar parameter on a running VRChat (e.g. <code>osc send VRCEmote 3</code>).</td></tr>
+      <tr><td><code>avatar osc input ...</code></td><td>Drive <code>/input/*</code> axes &amp; buttons (with reset-to-zero).</td></tr>
+      <tr><td><code>avatar osc monitor</code></td><td>Poll inbound OSC on :9001.</td></tr>
+      <tr><td><code>avatar osc change</code></td><td>Handle <code>/avatar/change</code>.</td></tr>
+      <tr><td><code>avatar osc query &lt;config.json&gt;</code></td><td>Parse an avatar's OSCQuery config offline: parameter names, OSC type tags, read/write access.</td></tr>
+      <tr><td><code>avatar osc gestures --seconds 10</code></td><td>Run the analog-gesture daemon (headless demo sweep; <code>--hz</code>/<code>--period</code> tunable).</td></tr>
+    </tbody>
+  </table>
+  <p>Details: <code>docs/reference/osc-runtime.md</code>.</p>
+</section>

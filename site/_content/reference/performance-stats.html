@@ -1,0 +1,44 @@
+<header class="page-header">
+  <div class="breadcrumb"><a href="../index.html">home</a> &middot; <a href="index.html">reference</a> &middot; performance stats</div>
+  <h1>Performance stats</h1>
+  <p class="lede">
+    <code>avatar stats &lt;path&gt;</code> (crate <code>avatar-stats</code>) computes VRChat's performance
+    ranking offline &mdash; Excellent&rarr;Very Poor, against the PC and Android limit tables, with no Unity in
+    the loop. The overall rank is the worst measured metric. Full text:
+    <code>docs/reference/performance-stats.md</code>.
+  </p>
+</header>
+
+<section class="doc-section" id="geometry">
+  <h2>Geometry (from an FBX)</h2>
+  <p>
+    <code>analyze_fbx</code> measures triangles, meshes, material slots, and bones directly from the FBX
+    geometry.
+  </p>
+</section>
+
+<section class="doc-section" id="components">
+  <h2>Components (from a project)</h2>
+  <p>
+    <code>analyze_project</code> measures per-avatar components: PhysBones, colliders, contacts, particles,
+    lights, renderers, constraints. VRChat dynamics are recognized <strong>structurally</strong>; the rest by
+    Unity class id. A project path additionally resolves:
+  </p>
+  <ul>
+    <li><strong>Triangles</strong> &mdash; renderer <code>m_Mesh</code> guid &rarr; source FBX via the <code>.meta</code> index (distinct files summed once; unresolved meshes flagged).</li>
+    <li><strong>Bones</strong> &mdash; distinct <code>m_Bones</code> transforms.</li>
+    <li><strong>Texture memory for PC <em>and</em> Android</strong> &mdash; renderer &rarr; material &rarr; texture chain; per-texture VRAM estimated from image-header dimensions + the <code>.meta</code> <code>TextureImporter</code> per-platform format (DXT/BC vs ASTC/ETC2). An estimate, since the imported GPU format isn't knowable offline.</li>
+    <li><strong>PhysBone affected-transform &amp; collision-check counts</strong> &mdash; walking the hierarchy under each PhysBone's <code>rootTransform</code> (descendants minus <code>ignoreTransforms</code>, plus an endpoint per chain tip, × assigned colliders).</li>
+    <li><strong>Particles</strong> &mdash; per <code>ParticleSystem</code>, <code>min(maxParticles, ceil(rate × lifetime))</code>, summed.</li>
+    <li><strong>Constraints</strong> &mdash; Unity built-in constraint class ids 320&ndash;325 + VRChat constraint MonoBehaviours; depth = longest constraint&rarr;source chain via a cycle-safe walk.</li>
+  </ul>
+</section>
+
+<section class="doc-section" id="limits">
+  <h2>Limits</h2>
+  <p>
+    PC + Android limit tables are encoded as data on <code>Metric::limits</code>. What remains in
+    <code>not_evaluated</code> is now only the particle sub-metrics (mesh-particle polygons, trail/collision
+    flags).
+  </p>
+</section>

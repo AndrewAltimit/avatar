@@ -126,6 +126,12 @@ transform, not a metadata relabel (see
 [`osc-gestures`](crates/osc-gestures/README.md) ·
 [`cli`](crates/cli/README.md).
 
+## Contributing
+
+This repository does **not** accept external contributions, feature requests, or support requests.
+It is a single-maintainer project authored by the maintainer and AI agents under human direction.
+You are free to fork, study, and use it under the licenses below — see [`CONTRIBUTING.md`](CONTRIBUTING.md).
+
 ## License
 
 Dual-licensed under [MIT](LICENSE-MIT) OR [Unlicense](UNLICENSE), at your option.

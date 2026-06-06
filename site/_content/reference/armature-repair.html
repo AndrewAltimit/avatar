@@ -1,0 +1,47 @@
+<header class="page-header">
+  <div class="breadcrumb"><a href="../index.html">home</a> &middot; <a href="index.html">reference</a> &middot; armature repair</div>
+  <h1>Armature repair &amp; the FBX writer</h1>
+  <p class="lede">
+    What <code>avatar armature fix</code> repairs, what it only flags, and how the native binary FBX
+    write-back works. The repair is deliberately conservative: it applies the changes that are safe as
+    metadata edits and refuses the ones that would silently move geometry. Full text:
+    <code>docs/reference/armature-repair.md</code>.
+  </p>
+</header>
+
+<section class="doc-section" id="applied">
+  <h2>Applied: canonical humanoid renames</h2>
+  <p>
+    The only native repair that is <strong>applied</strong> is canonical humanoid <strong>renames</strong> &mdash;
+    e.g. <code>mixamorig:LeftArm</code> &rarr; <code>LeftUpperArm</code>. That is what Unity's humanoid
+    auto-mapper keys on, so renaming makes a raw export configure as Humanoid without touching geometry. It is
+    a <strong>dry run by default</strong>; pass <code>-o</code> to write the repaired FBX.
+  </p>
+</section>
+
+<section class="doc-section" id="flagged">
+  <h2>Flagged, not applied: topology, scale, orientation</h2>
+  <p>
+    Mis-wired parent topology and scale/orientation problems are <strong>reported</strong> but not applied:
+    they need a geometry transform (i.e. Blender), not a metadata relabel. Re-pointing a bone's
+    <code>OO</code> connection without recomposing its local transform would move its rest/bind pose. The
+    low-level <code>reparent_object</code> primitive exists but is intentionally not wired into
+    <code>apply_plan</code>.
+  </p>
+</section>
+
+<section class="doc-section" id="writer">
+  <h2>The FBX writer</h2>
+  <p>
+    <code>avatar-fbx</code>'s <code>FbxDocument</code> retains <code>fbxcel</code> 0.9's mutable tree (enable
+    the <code>writer</code> feature) and serializes via <code>Writer::write_tree</code> /
+    <code>finalize</code>. It edits objects by FBX <strong>object id</strong> &mdash; skin/anim refs are by id,
+    not name &mdash; so renames are safe. One caveat: <code>fbxcel</code>'s <code>write_tree</code> re-emits
+    arrays uncompressed, so a written FBX is larger than the original but semantically identical.
+  </p>
+  <div class="hint">
+    The optional Unity acceptance CI job (<code>unity-acceptance.yml</code>) closes the loop: it imports a
+    repaired FBX in a real Unity editor (inside a GameCI Docker image) and asserts it configures as Humanoid.
+    It self-skips until a Unity license secret is configured.
+  </div>
+</section>

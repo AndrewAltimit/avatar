@@ -1,0 +1,30 @@
+<header class="page-header">
+  <div class="breadcrumb"><a href="../index.html">home</a> &middot; <a href="index.html">reference</a> &middot; asset generation</div>
+  <h1>Asset generation (M4)</h1>
+  <p class="lede">
+    <code>avatar-anim-gen</code> emits Unity-YAML assets Unity will accept: <code>.anim</code> clips and
+    FX-layer analog-gesture blend trees. The hard part is correct fileIDs and field names &mdash; solved with a
+    faithful hand-written emitter and deterministic, diffable IDs. Full text:
+    <code>docs/reference/anim-gen.md</code>.
+  </p>
+</header>
+
+<section class="doc-section" id="what">
+  <h2>What it generates</h2>
+  <ul>
+    <li><strong>Animation clips</strong> (<code>AnimationClip</code>, class 74) &mdash; blendshape-weight and GameObject-active curves.</li>
+    <li><strong>Analog-gesture blend trees</strong> (<code>BlendTree</code>, class 206) &mdash; blending <code>GestureLeft/RightWeight</code>.</li>
+  </ul>
+  <div class="cli"><code>avatar anim-gen clip --name Smile --blendshape Body:Smile:100 -o Smile.anim
+avatar anim-gen blendtree ...</code></div>
+</section>
+
+<section class="doc-section" id="how">
+  <h2>The emitter</h2>
+  <p>
+    A faithful hand-written YAML emitter (<code>yaml_emit</code>) handles Unity's exact field names, block
+    indentation, and flow maps. <code>IdGen</code> hands out <strong>deterministic</strong> FNV-1a-seeded
+    fileIDs, so generated assets are diffable and reproducible across runs. Every generated clip round-trips
+    through the <code>avatar-unity-yaml</code> reader in tests.
+  </p>
+</section>

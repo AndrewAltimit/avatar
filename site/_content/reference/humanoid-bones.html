@@ -1,0 +1,42 @@
+<header class="page-header">
+  <div class="breadcrumb"><a href="../index.html">home</a> &middot; <a href="index.html">reference</a> &middot; humanoid bones</div>
+  <h1>Humanoid bones &amp; VRChat rig requirements</h1>
+  <p class="lede">
+    Reference for the bone mapping <code>avatar-armature</code> infers and validates, sourced from the
+    <a href="https://creators.vrchat.com/avatars/rig-requirements/" target="_blank" rel="noopener">VRChat Rig
+    Requirements</a> and Unity's <code>HumanBodyBones</code>. Full text:
+    <code>docs/reference/humanoid-bones.md</code>.
+  </p>
+</header>
+
+<section class="doc-section" id="required">
+  <h2>Required by VRChat (humanoid)</h2>
+  <ul>
+    <li><strong>Spine chain:</strong> Hips, Spine, Chest, Neck &mdash; and <strong>Shoulders</strong> &mdash; must all be present/mapped.</li>
+    <li><strong>Head:</strong> Head.</li>
+    <li><strong>Hands:</strong> LeftHand, RightHand (plus the lower/upper arm chain feeding them).</li>
+    <li><strong>Feet:</strong> LeftFoot, RightFoot (plus the leg chain).</li>
+  </ul>
+  <p>Fingers, eyes, jaw, toes, and the upper-chest are <strong>optional</strong> but enable extra features (hand-tracking detail, simulated eye look, visemes/jaw).</p>
+</section>
+
+<section class="doc-section" id="validation">
+  <h2>Notes that drive validation rules</h2>
+  <ul>
+    <li><strong>Eye bones point up.</strong> SDK3 expects eye bones oriented upward, not outward.</li>
+    <li><strong>T-pose</strong> is expected at import for correct muscle/retarget setup.</li>
+    <li>A clean single skeleton root (no stray extra roots) is expected.</li>
+  </ul>
+</section>
+
+<section class="doc-section" id="naming">
+  <h2>Naming conventions we infer from</h2>
+  <p>
+    Bone-name &rarr; Humanoid mapping must tolerate many rig exporters. Examples that all map to
+    <code>Hips</code>: <code>Hips</code>, <code>hip</code>, <code>pelvis</code>,
+    <code>mixamorig:Hips</code>, <code>Bip01_Pelvis</code>, <code>J_Bip_C_Hips</code> (VRoid). The
+    inference table lives in <code>avatar-armature</code> and is data-driven so it can grow. Canonicalizing
+    these names is exactly what <a href="armature-repair.html">armature repair</a> does so Unity's humanoid
+    auto-mapper recognizes the rig.
+  </p>
+</section>

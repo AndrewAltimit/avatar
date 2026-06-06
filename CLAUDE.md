@@ -30,7 +30,7 @@ backend remains. See [`PLAN.md`](PLAN.md) for the roadmap and the [Status](#stat
 | [`docs/reference/anim-gen.md`](docs/reference/anim-gen.md) | `avatar-anim-gen`: `.anim` clip + analog-gesture blend-tree generation (Unity-YAML emitter, deterministic fileIDs). |
 | [`docs/reference/osc-runtime.md`](docs/reference/osc-runtime.md) | `avatar-osc`: VRChat OSC address space, codec, UDP client, OSCQuery avatar-config parsing. |
 | [`docs/tutorial.md`](docs/tutorial.md) | End-to-end CLI walkthrough (FBX → armature → lint → stats). |
-| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Contributor guide: build/test/lint, conventions, adding a lint rule or crate. |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | No-external-contributions policy, then the internal dev reference: build/test/lint, conventions, adding a lint rule or crate. |
 
 **Per-crate READMEs** (purpose · key API · status):
 [`fbx`](crates/fbx/README.md) ·
@@ -92,7 +92,10 @@ cargo test --workspace
 cargo run -p avatar-cli -- <subcommand>
 ```
 
-Install the pre-commit hook (fmt + clippy) with `scripts/install-hooks.sh`.
+Install commit hooks with `scripts/install-hooks.sh` (uses the [pre-commit](https://pre-commit.com)
+framework — `.pre-commit-config.yaml`: file hygiene + actionlint + shellcheck + local fmt/clippy;
+falls back to the native fmt+clippy hook in `scripts/git-hooks/` if `pre-commit` isn't installed).
+Sweep manually with `pre-commit run --all-files`.
 
 ## Status
 

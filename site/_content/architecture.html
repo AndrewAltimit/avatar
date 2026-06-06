@@ -1,0 +1,90 @@
+<header class="page-header">
+  <div class="breadcrumb"><a href="index.html">home</a> &middot; how it stacks</div>
+  <h1>How the layers stack</h1>
+  <p class="lede">
+    The whole repo follows from one architectural reality: a VRChat avatar is assembled from files in two
+    distinct formats, and only one of the two transformation layers is fully ours to own in Rust. Everything
+    &mdash; crate boundaries, what we can fix vs. only flag, why upload isn't in scope &mdash; falls out of
+    this split.
+  </p>
+</header>
+
+<section class="doc-section" id="pipeline">
+  <h2>The pipeline</h2>
+  <pre><code>FBX / Unity project ──► [avatar tools] ──► diagnose · fix · validate · generate
+                                                │
+                                drop generated assets into Unity
+                                                │
+                                    (you) build &amp; upload via VRCSDK
+                                                │
+                          [avatar osc] ──► drive parameters at runtime</code></pre>
+  <p>
+    This repo is <strong>file transformation / analysis / validation / generation</strong> plus an
+    <strong>OSC runtime daemon</strong> &mdash; not a Unity replacement. The conceptual overview lives in
+    <code>docs/overview.md</code>; the architecture + roadmap of record is <code>PLAN.md</code>.
+  </p>
+</section>
+
+<section class="doc-section" id="fbx-layer">
+  <h2>Layer 1 &mdash; the 3D asset (<code>.fbx</code>)</h2>
+  <p>
+    Armature/skeleton, bone names, bind poses, skinning weights, blendshapes. This is where "the armature
+    isn't set up right" lives. Fully ours in Rust on top of <code>fbxcel</code> &mdash; native binary
+    <strong>read and write</strong>. The write-back landed in M3 (<code>avatar_fbx::FbxDocument</code>),
+    resolving the project's long-standing biggest risk.
+  </p>
+  <ul>
+    <li>FBX support is <strong>binary only</strong> (FBX 7.x, the Autodesk/Unity/Blender default). ASCII FBX must be re-exported as binary.</li>
+    <li>Objects are edited by FBX <strong>object id</strong> (skin/anim refs are by id, not name), so renames are safe.</li>
+    <li>Bind comes from <code>TransformLink</code>/inverse-bind, never recomposed from <code>Lcl</code> + <code>PreRotation</code>.</li>
+  </ul>
+  <p>See <code>docs/reference/armature-repair.md</code> and <code>docs/reference/rig-runtime.md</code>.</p>
+</section>
+
+<section class="doc-section" id="unity-layer">
+  <h2>Layer 2 &mdash; the Unity / VRChat project (UnityYAML)</h2>
+  <p>
+    <code>.anim</code>, <code>.controller</code>, <code>.asset</code>, <code>.prefab</code>, scenes,
+    <code>.meta</code>: the Avatar Descriptor, humanoid bone mapping, animator layers, expression
+    menus/params, blend trees, gesture keyframes. <strong>Read/lint is low-risk.</strong>
+    <strong>Generating</strong> assets Unity accepts requires correct fileIDs and GUID references &mdash; the
+    hard part the asset-generation layer (M4) solves with a faithful hand-written YAML emitter and
+    deterministic FNV-1a-seeded fileIDs.
+  </p>
+  <p>
+    A Unity GUID is 32 hex chars and must contain letters; an all-digit "guid" parses as a number and breaks
+    GUID resolution. The lint engine resolves expression/playable-layer references through a guid&rarr;path
+    <code>.meta</code> index.
+  </p>
+</section>
+
+<section class="doc-section" id="upload">
+  <h2>Layer 3 &mdash; upload / build (not ours)</h2>
+  <p>
+    The VRCSDK control panel pushes to VRChat servers. It needs interactive VRChat-account login and a Unity
+    license that is painful in containers &mdash; effectively Windows-only. We deliberately stop here: we
+    generate assets you drop into Unity, you build and upload there, and then the <code>avatar osc</code>
+    layer drives the running avatar's parameters at runtime.
+  </p>
+  <div class="hint">
+    The one place we reach into Unity is the optional headless <strong>Unity acceptance</strong> workflow,
+    which imports a repaired FBX inside a GameCI Docker image to assert it configures as Humanoid &mdash; the
+    "last mile" the Rust tests can't cover. It self-skips until a Unity license secret is configured.
+  </div>
+</section>
+
+<section class="doc-section" id="milestones">
+  <h2>Milestones</h2>
+  <table>
+    <thead><tr><th>Milestone</th><th>Scope</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr><td>M0</td><td>Workspace scaffold</td><td><span class="tag tag-done">done</span></td></tr>
+      <tr><td>M1</td><td>Armature diagnosis, hierarchy-aware humanoid mapping</td><td><span class="tag tag-done">done</span></td></tr>
+      <tr><td>M2</td><td>Project SDK3 linting (<code>avatar lint</code>)</td><td><span class="tag tag-done">done</span></td></tr>
+      <tr><td>M3</td><td>Armature repair + native binary FBX write-back</td><td><span class="tag tag-done">done</span></td></tr>
+      <tr><td>M4</td><td>Asset generation (<code>avatar-anim-gen</code>)</td><td><span class="tag tag-done">done</span></td></tr>
+      <tr><td>M5</td><td>OSC runtime + analog-gesture daemon</td><td><span class="tag tag-partial">OpenXR input pending</span></td></tr>
+    </tbody>
+  </table>
+  <p>The runtime rig layer (skin/pose/IK/input/glTF) also landed alongside M4/M5. Full detail in <code>PLAN.md</code>.</p>
+</section>
