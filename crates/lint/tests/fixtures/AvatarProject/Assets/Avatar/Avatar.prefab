@@ -1,0 +1,54 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &100000
+GameObject:
+  m_ObjectHideFlags: 0
+  m_Name: Avatar
+  m_Component:
+  - component: {fileID: 400000}
+  - component: {fileID: 114000}
+--- !u!4 &400000
+Transform:
+  m_GameObject: {fileID: 100000}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+--- !u!114 &114000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_GameObject: {fileID: 100000}
+  m_Script: {fileID: 11500000, guid: 67cc4cb7839cd3741b63733d5adf0442, type: 3}
+  m_Name:
+  ViewPosition: {x: 0, y: 1.2, z: 0.15}
+  lipSync: 3
+  VisemeSkinnedMesh: {fileID: 0}
+  MouthOpenBlendShapeName: Jaw_Down
+  VisemeBlendShapes:
+  - vrc.v_sil
+  - vrc.v_pp
+  - vrc.v_ff
+  enableEyeLook: 1
+  customEyeLookSettings:
+    eyelidType: 1
+    leftEye: {fileID: 0}
+    rightEye: {fileID: 0}
+    eyelidsSkinnedMesh: {fileID: 0}
+    eyelidsBlendshapes: [-1, -1, -1]
+  customExpressions: 1
+  expressionsMenu: {fileID: 11400000, guid: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb, type: 2}
+  expressionParameters: {fileID: 11400000, guid: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, type: 2}
+  baseAnimationLayers:
+  - isEnabled: 1
+    type: 4
+    animatorController: {fileID: 9100000, guid: dddddddddddddddddddddddddddddddd, type: 2}
+    mask: {fileID: 0}
+    isDefault: 0
+  - isEnabled: 1
+    type: 2
+    animatorController: {fileID: 9100000, guid: eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee, type: 2}
+    mask: {fileID: 0}
+    isDefault: 0
+  specialAnimationLayers:
+  - isEnabled: 0
+    type: 6
+    animatorController: {fileID: 0}
+    mask: {fileID: 0}
+    isDefault: 1

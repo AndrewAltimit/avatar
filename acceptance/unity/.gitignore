@@ -1,0 +1,15 @@
+# Unity-generated, never committed (the root .gitignore's /Library rule doesn't reach this path).
+/Library/
+/Temp/
+/Obj/
+/Logs/
+/UserSettings/
+/Build/
+/Builds/
+/[Aa]ssets/Candidate/
+*.csproj
+*.sln
+
+# The acceptance fixture is generated in CI, never committed (also covered by *.fbx at the root).
+*.fbx
+*.fbx.meta

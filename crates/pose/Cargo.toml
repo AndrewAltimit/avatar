@@ -1,0 +1,15 @@
+[package]
+name = "avatar-pose"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "avatar_pose"
+path = "src/lib.rs"
+
+[dependencies]
+glam.workspace = true
+avatar-mesh = { path = "../mesh" }
+avatar-armature = { path = "../armature" }
+avatar-fbx = { path = "../fbx" }

@@ -1,0 +1,82 @@
+# Headless Unity acceptance for `avatar armature fix`: prove that a repaired FBX configures as a
+# valid Humanoid avatar in a real Unity editor — the "last mile" the Rust tests can't cover.
+#
+# This is the automated form of the manual check in docs/reference/armature-repair.md. It runs the
+# Unity editor inside GameCI's x86_64 Docker image on a GitHub-hosted (amd64) runner, so it needs
+# no local Unity install of any kind — your workstation's CPU architecture is irrelevant.
+#
+# One-time setup. Unity retired the manual web-activation page for *Personal* (free) licenses, so
+# the .alf -> upload -> .ulf route only works for Plus/Pro. For a Personal license you need a .ulf
+# from one of:
+#   * Unity Hub -> Preferences -> Licenses -> "Get a free personal license" (needs Unity Hub, which
+#     has no arm64 Linux build), OR
+#   * scripts/acquire-unity-license.sh — mints the .ulf *locally* (your account credentials never
+#     touch a runner; only the .ulf is uploaded). Recommended for free accounts on arm64.
+# Then add repo secrets: UNITY_LICENSE (.ulf contents), UNITY_EMAIL, UNITY_PASSWORD.
+# Note: Personal .ulf files expire and must be re-generated periodically.
+#
+# Until UNITY_LICENSE is set, the Unity step self-skips with a notice (the job stays green).
+
+name: Unity acceptance
+
+on:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  # Bump in lockstep with acceptance/unity/ProjectSettings/ProjectVersion.txt.
+  UNITY_VERSION: 2022.3.22f1
+
+jobs:
+  humanoid-acceptance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Is a Unity license configured?
+        id: lic
+        run: |
+          if [ -n "${{ secrets.UNITY_LICENSE }}" ]; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::UNITY_LICENSE secret not set — skipping the Unity step. See this workflow's header for setup."
+          fi
+
+      - name: Install Rust toolchain
+        run: rustup show
+
+      - name: Build the CLI + fixture emitter
+        # --examples alone suppresses the default bin build, so name both explicitly.
+        run: cargo build --release --workspace --bins --examples
+
+      - name: Generate a broken rig, repair it, pre-check the artifact
+        run: |
+          ./target/release/examples/emit_broken_rig /tmp/broken.fbx
+          ./target/release/avatar armature fix /tmp/broken.fbx -o /tmp/fixed.fbx
+          # Sanity gate before touching Unity: the repaired rig must be humanoid-ready (exit 0).
+          ./target/release/avatar armature check /tmp/fixed.fbx
+
+      - name: Cache the Unity editor
+        if: steps.lic.outputs.ok == 'true'
+        uses: actions/cache@v4
+        with:
+          path: Library
+          key: Unity-${{ env.UNITY_VERSION }}
+
+      # unity-builder runs the editor in batchmode and calls our -executeMethod. The method does the
+      # import + assertion and exits with its own status code, which fails the job on a bad avatar.
+      - name: Assert the repaired FBX configures as Humanoid
+        if: steps.lic.outputs.ok == 'true'
+        uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          unityVersion: ${{ env.UNITY_VERSION }}
+          projectPath: acceptance/unity
+          targetPlatform: StandaloneLinux64
+          buildMethod: HumanoidAcceptance.Run
+          allowDirtyBuild: true
+          customParameters: -fbx /tmp/fixed.fbx

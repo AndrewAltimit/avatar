@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Pre-commit hook: keep the tree fmt-clean and clippy-clean before it lands.
+# Bypass in an emergency with AVATAR_SKIP_PRECOMMIT=1 git commit ...
+set -euo pipefail
+
+if [[ "${AVATAR_SKIP_PRECOMMIT:-0}" == "1" ]]; then
+    echo "pre-commit: skipped (AVATAR_SKIP_PRECOMMIT=1)"
+    exit 0
+fi
+
+# Skip for commits that touch no Rust/Cargo files (docs-only, etc.).
+if ! git diff --cached --name-only | grep -qE '\.rs$|Cargo\.(toml|lock)$'; then
+    exit 0
+fi
+
+echo "pre-commit: cargo fmt --check"
+if ! cargo fmt --all -- --check; then
+    echo "pre-commit: formatting drift — running 'cargo fmt --all' and re-staging."
+    cargo fmt --all
+    git add -u
+fi
+
+echo "pre-commit: cargo clippy -D warnings"
+cargo clippy --all-targets --workspace -- -D warnings
+
+echo "pre-commit: ok"

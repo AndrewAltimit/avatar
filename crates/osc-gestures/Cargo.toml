@@ -1,0 +1,13 @@
+[package]
+name = "avatar-osc-gestures"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "avatar_osc_gestures"
+path = "src/lib.rs"
+
+[dependencies]
+anyhow.workspace = true
+avatar-osc = { path = "../osc" }

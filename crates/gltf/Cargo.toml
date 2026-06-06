@@ -1,0 +1,20 @@
+[package]
+name = "avatar-gltf"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "avatar_gltf"
+path = "src/lib.rs"
+
+[dependencies]
+anyhow.workspace = true
+glam.workspace = true
+gltf = "1.4"
+avatar-mesh = { path = "../mesh" }
+avatar-armature = { path = "../armature" }
+
+[dev-dependencies]
+# Exercises the importer through the real posing math (rest-pose reproduction parity with FBX).
+avatar-pose = { path = "../pose" }

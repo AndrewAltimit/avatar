@@ -1,0 +1,17 @@
+[package]
+name = "avatar-lint"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "avatar_lint"
+path = "src/lib.rs"
+
+[dependencies]
+anyhow.workspace = true
+serde = { workspace = true }
+avatar-unity-yaml = { path = "../unity-yaml" }
+avatar-unity-asset = { path = "../unity-asset" }
+avatar-vpm = { path = "../vpm" }
+avatar-vrc-descriptor = { path = "../vrc-descriptor" }

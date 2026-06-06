@@ -1,0 +1,15 @@
+[package]
+name = "avatar-anim-gen"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "avatar_anim_gen"
+path = "src/lib.rs"
+
+[dependencies]
+anyhow.workspace = true
+serde = { workspace = true }
+serde_json.workspace = true
+avatar-unity-yaml = { path = "../unity-yaml" }

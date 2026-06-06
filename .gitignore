@@ -1,0 +1,28 @@
+# Rust build output
+/target/
+
+# Local sample assets used for tests/dev (may contain copyrighted avatars).
+# Never commit user-supplied FBX / Unity projects.
+/samples/
+/fixtures/
+*.fbx
+*.unitypackage
+
+# Unity project leftovers, if a project is dropped in for inspection
+/Library/
+/Temp/
+/Logs/
+/Obj/
+
+# Local env overrides (.env.example is committed)
+.env
+
+# Unity license material — acquired locally, never committed (see scripts/acquire-unity-license.sh)
+*.alf
+*.ulf
+
+# Coverage
+*.profraw
+
+# Editor noise
+.DS_Store

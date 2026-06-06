@@ -1,0 +1,26 @@
+[package]
+name = "avatar-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "avatar"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+serde = { workspace = true }
+serde_json.workspace = true
+avatar-fbx = { path = "../fbx" }
+avatar-armature = { path = "../armature" }
+avatar-lint = { path = "../lint" }
+avatar-stats = { path = "../stats" }
+avatar-anim-gen = { path = "../anim-gen" }
+avatar-osc = { path = "../osc" }
+avatar-osc-gestures = { path = "../osc-gestures" }
+
+[dev-dependencies]
+# Used only to synthesize binary FBX fixtures in-memory for the CLI exit-code tests.
+fbxcel = { version = "0.9", features = ["tree", "writer"] }

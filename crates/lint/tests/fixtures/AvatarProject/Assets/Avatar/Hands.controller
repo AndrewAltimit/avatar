@@ -1,0 +1,63 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!91 &9100000
+AnimatorController:
+  m_ObjectHideFlags: 0
+  m_Name: Hands
+  m_AnimatorParameters:
+  - m_Name: GestureLeft
+    m_Type: 3
+    m_DefaultFloat: 0
+  - m_Name: GestureLeftWeight
+    m_Type: 1
+    m_DefaultFloat: 0
+  - m_Name: Toggle1
+    m_Type: 3
+    m_DefaultInt: 0
+  - m_Name: Dup
+    m_Type: 4
+    m_DefaultBool: 0
+  - m_Name: Dup
+    m_Type: 4
+    m_DefaultBool: 0
+  m_AnimatorLayers:
+  - m_Name: Left Hand
+    m_StateMachine: {fileID: 110700000}
+    m_DefaultWeight: 1
+--- !u!1107 &110700000
+AnimatorStateMachine:
+  m_Name: Left Hand
+  m_ChildStates:
+  - serializedVersion: 1
+    m_State: {fileID: 110200001}
+  - serializedVersion: 1
+    m_State: {fileID: 110200002}
+  m_DefaultState: {fileID: 0}
+--- !u!1102 &110200001
+AnimatorState:
+  m_Name: Idle
+  m_WriteDefaultValues: 1
+  m_Motion: {fileID: 0}
+  m_Transitions:
+  - {fileID: 110100000}
+--- !u!1102 &110200002
+AnimatorState:
+  m_Name: Fist
+  m_WriteDefaultValues: 0
+  m_Motion: {fileID: 110600000}
+--- !u!206 &110600000
+BlendTree:
+  m_Name: Fist
+  m_Childs:
+  - m_Motion: {fileID: 0}
+    m_Threshold: 0
+  m_BlendParameter: MissingBlend
+  m_BlendParameterY: Blend
+  m_BlendType: 0
+--- !u!1101 &110100000
+AnimatorStateTransition:
+  m_Conditions:
+  - m_ConditionMode: 1
+    m_ConditionEvent: Undeclared
+    m_EventTreshold: 0
+  m_DstState: {fileID: 110200002}

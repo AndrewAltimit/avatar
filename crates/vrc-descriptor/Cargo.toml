@@ -1,0 +1,14 @@
+[package]
+name = "avatar-vrc-descriptor"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "avatar_vrc_descriptor"
+path = "src/lib.rs"
+
+[dependencies]
+anyhow.workspace = true
+serde = { workspace = true }
+avatar-unity-yaml = { path = "../unity-yaml" }

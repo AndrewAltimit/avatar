@@ -1,0 +1,13 @@
+[package]
+name = "avatar-unity-yaml"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "avatar_unity_yaml"
+path = "src/lib.rs"
+
+[dependencies]
+anyhow.workspace = true
+yaml-rust2.workspace = true

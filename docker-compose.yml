@@ -1,0 +1,27 @@
+# Rust build/test container for the avatar tools.
+#
+#   USER_ID=$(id -u) GROUP_ID=$(id -g) docker compose build rust
+#   docker compose run --rm rust cargo test --workspace
+#   docker compose run --rm rust cargo clippy --all-targets --workspace -- -D warnings
+#
+# UID/GID default to 1000:1000; override via .env (see .env.example) or the shell.
+#
+# This only covers the Rust crates — Unity / VRChat SDK upload is intentionally
+# out of scope here (see PLAN.md §5).
+services:
+  rust:
+    build:
+      context: .
+      dockerfile: docker/rust.Dockerfile
+      args:
+        USER_ID: ${USER_ID:-1000}
+        GROUP_ID: ${GROUP_ID:-1000}
+    init: true
+    volumes:
+      - .:/work
+      - cargo-registry:/usr/local/cargo/registry
+    working_dir: /work
+    command: ["cargo", "build", "--workspace"]
+
+volumes:
+  cargo-registry:

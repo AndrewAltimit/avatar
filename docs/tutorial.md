@@ -1,0 +1,195 @@
+# Tutorial: I have an avatar FBX and a Unity project — what can this do?
+
+This is an end-to-end walkthrough of the `avatar` CLI. The premise: you have a character `.fbx`
+(maybe a raw Mixamo or VRoid export) and a Unity/VRChat SDK3 project, and you want to find and fix
+the common problems before you import and upload. The tools operate on the *files* — they never
+replace Unity or the VRChat SDK upload step (see [`../README.md`](../README.md) for the scope).
+
+Build the binary once:
+
+```sh
+cargo build --workspace
+```
+
+Then run subcommands with `cargo run -p avatar-cli -- <subcommand>`, or run the built `avatar`
+binary directly from `target/`. Every command takes `--json` to emit a machine-readable report
+instead of the human-readable text shown here; `avatar lint` exits non-zero when it finds errors, so
+it can gate CI.
+
+> FBX support is **binary only** (FBX 7.x — the Autodesk/Unity/Blender default). ASCII FBX is not
+> supported; re-export as binary.
+
+## 1. Inspect the FBX — `avatar fbx inspect`
+
+Start by looking at the model's structure, units, and orientation:
+
+```sh
+cargo run -p avatar-cli -- fbx inspect model.fbx
+```
+
+It prints the FBX format version, the unit scale and up-axis (flagged with `[!]` when they don't
+match Unity's expectation — Unity imports centimetres, i.e. a unit scale of `100.0`, and Y-up), the
+object counts (models / geometries / materials / bone-like nodes), and the model hierarchy as a
+tree. This is the first thing to check when an imported avatar comes in at the wrong size or rotated
+ninety degrees — those are almost always a unit-scale or up-axis mismatch you can see here.
+
+## 2. Check the armature — `avatar armature check`
+
+Validate the skeleton against VRChat's humanoid rig requirements:
+
+```sh
+cargo run -p avatar-cli -- armature check model.fbx
+```
+
+It infers which bones map to Unity's humanoid bones (hierarchy-aware, not just by name), then
+reports:
+
+- **Mapped humanoid bones** — each slot and the source bone(s) feeding it.
+- **Missing REQUIRED bones** (`[X]`) — the avatar will not import as humanoid until these exist. This
+  is what fails the command (non-zero exit).
+- **Missing recommended bones** (`[!]`) — VRChat expects a full spine + shoulders; surfaced but not
+  fatal.
+- **Duplicate mappings**, **unmapped bone-like nodes**, and a count of ignored finger / leaf `_End`
+  bones.
+- Multiple armature roots are flagged (`[!]`) — VRChat expects a single root.
+
+The bone table it maps and validates against is documented in
+[`reference/humanoid-bones.md`](reference/humanoid-bones.md). The command exits non-zero only when a
+Unity-*required* bone is missing, so you can gate an import pipeline on it.
+
+## 3. Fix the armature — `avatar armature fix`
+
+If `check` reports a rig that isn't humanoid-ready (the classic case: a raw Mixamo export with
+`mixamorig:` bone prefixes), plan and apply the safe repairs:
+
+```sh
+# Dry run — print the repair plan, write nothing (the default):
+cargo run -p avatar-cli -- armature fix model.fbx
+
+# Write a repaired FBX:
+cargo run -p avatar-cli -- armature fix model.fbx -o fixed.fbx
+```
+
+Flags (from `crates/cli/src/main.rs`): `-o, --output <FILE>` writes the repaired FBX (omit it for a
+dry run); `--force` allows `--output` to overwrite the input file (refused by default); `--json`
+emits the plan as JSON.
+
+The one **native repair that is applied** is canonical humanoid bone **renames**
+(`mixamorig:LeftArm` → `LeftUpperArm`) — that is what Unity's humanoid auto-mapper keys on, and it is
+id-safe (skin/anim references are by FBX object id, not name). Mis-wired parent **topology** and
+**scale/orientation** problems are **flagged, not applied**: each needs a geometry transform (Blender
+territory), not a metadata relabel — re-pointing a bone's connection without recomposing its local
+transform would move its rest/bind pose. The full rationale and the FBX writer's characteristics are
+in [`reference/armature-repair.md`](reference/armature-repair.md).
+
+## 4. Lint the Unity project — `avatar lint`
+
+Once the FBX is set up and you have a Unity/VRChat SDK3 project, check it for SDK3 compliance:
+
+```sh
+cargo run -p avatar-cli -- lint path/to/UnityProject
+
+# Also fail on warnings (useful for gating CI):
+cargo run -p avatar-cli -- lint path/to/UnityProject --deny-warnings
+```
+
+You can point it at the project root or any path inside it — it discovers the project upward. It
+reports the Unity version and avatar SDK version, asset counts (Expression Parameters, menus,
+descriptors, animator controllers, packages), then the diagnostics: each is tagged `[X]` error,
+`[!]` warn, or `[i]` info, with the `VRCNNN` rule code, the offending file, and a fix hint. The
+command exits non-zero when there are errors (or, with `--deny-warnings`, any warnings).
+
+What it covers: the Expression Parameters sync budget and duplicates, menu size and dangling
+parameter references, the VRC Avatar Descriptor parsed from prefabs/scenes (expression / playable-
+layer references resolved via a guid→path `.meta` index, viseme lip-sync, eye-look), animator-
+controller contents (parameter references, default states, Write Defaults consistency), and
+project/VPM info. Every rule code (`VRC001`–`VRC044`) and its encoding is in
+[`reference/sdk3-lint-rules.md`](reference/sdk3-lint-rules.md).
+
+## 5. Estimate performance — `avatar stats`
+
+Reproduce VRChat's performance ranking (Excellent → Very Poor) offline, for **both PC and Android**.
+The argument can be an FBX (geometry side) or a Unity project / any path inside one (component side):
+
+```sh
+cargo run -p avatar-cli -- stats model.fbx          # geometry: triangles, meshes, material slots, bones
+cargo run -p avatar-cli -- stats path/to/UnityProject  # per-avatar components: PhysBones, contacts, ...
+cargo run -p avatar-cli -- stats model.fbx --json   # machine-readable report
+```
+
+It prints a per-metric table with the PC and Android rank for each metric and an **Overall** rank
+(the worst measured metric). Texture Memory is shown as `PC/Android` when the two differ — textures
+recompress per platform. Metrics a given source can't measure (e.g. an FBX can't see texture memory
+or PhysBones) are listed under "Not evaluated for this source" rather than silently assumed clean, so
+you know the real rank could still be lower. Which metrics each source measures, how components are
+recognized, and the PC/Android threshold tables are in
+[`reference/performance-stats.md`](reference/performance-stats.md).
+
+## Putting it together
+
+A typical first pass on a fresh avatar:
+
+```sh
+avatar fbx inspect model.fbx           # units / orientation / structure sane?
+avatar armature check model.fbx        # humanoid-ready?
+avatar armature fix model.fbx -o fixed.fbx   # if not, canonicalize bone names
+avatar stats fixed.fbx                 # geometry within performance budget?
+# ... import fixed.fbx into Unity, build the avatar prefab ...
+avatar lint  path/to/UnityProject      # SDK3 compliance
+avatar stats path/to/UnityProject      # full component-side performance rank
+# ... build & upload in Unity via the VRChat SDK (not part of these tools) ...
+```
+
+## Generate animation assets — `avatar anim-gen`
+
+`avatar-anim-gen` emits Unity assets as text (Unity YAML, in the exact shape Unity's own serializer
+writes), with **deterministic** fileIDs so output is diffable and reproducible. Two subcommands:
+
+```sh
+# A static expression clip: hold a blendshape (and/or toggle a GameObject on).
+avatar anim-gen clip --name Smile --blendshape Body:Smile:100 -o Smile.anim
+avatar anim-gen clip --name HatOn --toggle Armature/Head/Hat -o HatOn.anim
+
+# A 1D analog-gesture blend tree: VRChat blends across your clips by trigger pull.
+# By default emits a self-contained AnimatorStateMachine + State + BlendTree fragment;
+# --tree-only emits just the BlendTree document to graft onto an existing Fist state.
+avatar anim-gen blendtree --name FistBlend --parameter GestureLeftWeight \
+    --clip <relaxed-hand-guid>@0.0 --clip <fist-guid>@1.0 -o FistBlend.asset
+```
+
+Output goes to stdout (pipe/redirect) or a file with `-o`. A wiring note is printed to stderr
+explaining how to splice the result into your FX `.controller`. See
+[`reference/anim-gen.md`](reference/anim-gen.md).
+
+## Drive and inspect a running avatar — `avatar osc`
+
+`avatar-osc` speaks VRChat's OSC parameter protocol. The send/monitor commands need a running VRChat
+with OSC enabled; `osc query` is fully offline.
+
+```sh
+avatar osc send VRCEmote 3                 # set /avatar/parameters/VRCEmote (auto bool/int/float)
+avatar osc input Vertical 0.5              # /input axis, -1..1
+avatar osc input Jump true                 # /input button
+avatar osc monitor --seconds 5            # print the parameters VRChat broadcasts
+avatar osc query path/to/avtr_….json      # list an avatar's parameters from its OSCQuery config
+avatar osc gestures --seconds 10          # analog-gesture daemon (demo trigger sweep)
+```
+
+`osc query --json` emits the parameter list (name, OSC type, read/write access) for tooling.
+
+`osc gestures` runs the **analog-gesture daemon** (`avatar-osc-gestures`, "Vive advanced controls on
+any hardware"): it maps a controller's analog trigger to a VRChat gesture + analog weight and sends
+them over OSC, so the Fist gesture blends by trigger pull on any headset. Headless there is no
+on-device input yet (OpenXR is the production backend), so the CLI drives a synthetic trigger sweep
+you can watch against a running VRChat. See [`reference/osc-runtime.md`](reference/osc-runtime.md).
+
+There is also a renderer-agnostic **runtime rig layer** (`avatar-mesh` / `avatar-gltf` /
+`avatar-pose` / `avatar-input`) for loading and posing a rig at runtime — see
+[`reference/rig-runtime.md`](reference/rig-runtime.md).
+
+## See also
+
+- Library usage examples you can run: `crates/cli/examples/` (`cargo run -p avatar-cli --example
+  lint_report -- <project>`, `--example perf_stats -- <path>`).
+- [`../CONTRIBUTING.md`](../CONTRIBUTING.md) — build / test / lint and how to add a rule or a crate.
+</content>

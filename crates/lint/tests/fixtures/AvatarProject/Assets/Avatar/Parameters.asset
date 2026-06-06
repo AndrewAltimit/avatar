@@ -1,0 +1,23 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 03b990c4d4d4f3a4f9c8c4d4f3a4f9c8, type: 3}
+  m_Name: Parameters
+  parameters:
+  - name: VRCEmote
+    valueType: 0
+    saved: 1
+    defaultValue: 0
+    networkSynced: 1
+  - name: Toggle1
+    valueType: 2
+    saved: 1
+    defaultValue: 0
+    networkSynced: 1
+  - name: FloatThing
+    valueType: 1
+    saved: 0
+    defaultValue: 0
+    networkSynced: 1

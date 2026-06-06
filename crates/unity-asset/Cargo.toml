@@ -1,0 +1,14 @@
+[package]
+name = "avatar-unity-asset"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "avatar_unity_asset"
+path = "src/lib.rs"
+
+[dependencies]
+anyhow.workspace = true
+serde = { workspace = true }
+avatar-unity-yaml = { path = "../unity-yaml" }

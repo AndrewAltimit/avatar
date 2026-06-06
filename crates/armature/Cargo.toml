@@ -1,0 +1,18 @@
+[package]
+name = "avatar-armature"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "avatar_armature"
+path = "src/lib.rs"
+
+[dependencies]
+anyhow.workspace = true
+serde = { workspace = true }
+avatar-fbx = { path = "../fbx" }
+
+[dev-dependencies]
+# Used only to synthesize a binary FBX in-memory for the non-gated write-back test.
+fbxcel = { version = "0.9", features = ["tree", "writer"] }

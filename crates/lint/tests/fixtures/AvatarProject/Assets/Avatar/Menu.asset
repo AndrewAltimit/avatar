@@ -1,0 +1,16 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c0e1cb6f5b0a4a341a4a2a3a4a5a6a7a, type: 3}
+  m_Name: Menu
+  controls:
+  - name: Toggle
+    type: 102
+    parameter:
+      name: Toggle1
+    value: 1
+    subMenu: {fileID: 0}
+    subParameters: []
+    labels: []

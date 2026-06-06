@@ -1,0 +1,23 @@
+[package]
+name = "avatar-stats"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "avatar_stats"
+path = "src/lib.rs"
+
+[dependencies]
+anyhow.workspace = true
+serde = { workspace = true }
+avatar-fbx = { path = "../fbx" }
+avatar-mesh = { path = "../mesh" }
+avatar-unity-yaml = { path = "../unity-yaml" }
+avatar-vpm = { path = "../vpm" }
+avatar-vrc-descriptor = { path = "../vrc-descriptor" }
+
+[dev-dependencies]
+# Used only to synthesize binary FBX fixtures in-memory for the geometry-stats tests
+# (same approach as the avatar-cli exit-code tests — no committed asset needed).
+fbxcel = { version = "0.9", features = ["tree", "writer"] }
