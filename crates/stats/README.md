@@ -51,8 +51,10 @@ guid → source FBX, summed; distinct files counted once, unresolved meshes flag
 DXT/BC for PC, ASTC/ETC2 for Android — an estimate, documented as such), and **PhysBone
 affected-transform / collision-check counts** (walking the transform hierarchy under each PhysBone's
 `rootTransform` — descendants minus `ignoreTransforms`, plus endpoints, × assigned colliders; an
-estimate of VRChat's Avatar-Dynamics cost), for a unified geometry+component rank. Not yet measured
-(listed in each report's `not_evaluated`): total particles and constraints.
+estimate of VRChat's Avatar-Dynamics cost), for a unified geometry+component rank. **Total particles**,
+**constraint count + depth**, **mesh-particle polygon cost** (mesh-mode renderer triangles × particle
+count, resolved through the renderer→mesh→FBX chain — approximate), and **particle trail/collision
+flags** are now measured too, so `not_evaluated` is empty by default.
 
 ## See also
 

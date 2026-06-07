@@ -22,12 +22,14 @@ repairs to make a non-standard rig import cleanly.
 - `humanoid::{HumanBone, BoneCategory, Side, Requirement, classify}` — the bone model + name
   classifier.
 - `repair::{plan_repairs, apply_plan, RepairPlan, RepairEdit}` — diagnose a scene into discrete
-  edits (canonical renames + topology reparents, applied; scale/orientation, flagged) and apply the
-  native ones to an `FbxDocument`.
+  edits (canonical renames, applied; topology reparents + scale/orientation, flagged only) and apply
+  the native ones (renames) to an `FbxDocument`.
 
 ## Status
 
-Diagnosis + hierarchy-aware mapping: **M1**. Repair planning + apply: **M3**.
+Diagnosis + hierarchy-aware mapping: **M1**. Repair planning + apply: **M3** — canonical bone
+**renames** are applied (the only native repair); topology reparents and scale/orientation are
+**flagged, not applied** (they need a geometry transform, not a metadata relabel).
 
 ## See also
 

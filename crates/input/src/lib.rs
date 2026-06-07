@@ -24,7 +24,9 @@ pub mod osc;
 /// A rigid 6-DoF pose (position + orientation). Defaults to the identity at the origin.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Pose6dof {
+    /// World-space position.
     pub position: Vec3,
+    /// World-space orientation.
     pub orientation: Quat,
 }
 
@@ -40,6 +42,7 @@ impl Default for Pose6dof {
 /// A VR controller: a pose plus its analog inputs.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct Controller {
+    /// The controller's 6-DoF pose.
     pub pose: Pose6dof,
     /// Trigger pull, 0..1.
     pub trigger: f32,
@@ -54,8 +57,11 @@ pub struct Controller {
 /// One frame of tracking: head, both hands, and any extra body trackers.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct TrackerState {
+    /// Head-mounted display pose.
     pub hmd: Pose6dof,
+    /// Left-hand controller.
     pub left: Controller,
+    /// Right-hand controller.
     pub right: Controller,
     /// Extra 6-DoF trackers (waist/feet/etc.), backend order.
     pub trackers: Vec<Pose6dof>,
@@ -106,14 +112,18 @@ impl TrackerSource for MockSource {
 /// IK target for one limb: where the end effector should go, and a pole hint for the joint.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct IkTarget {
+    /// Desired end-effector (hand/foot) position.
     pub position: Vec3,
+    /// Pole hint steering which way the joint (elbow/knee) bends.
     pub pole: Vec3,
 }
 
 /// Body IK targets derived from a tracking frame — feed these to `avatar_pose::ik::TwoBoneIk`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct BodyIkTargets {
+    /// IK target for the left arm.
     pub left_hand: IkTarget,
+    /// IK target for the right arm.
     pub right_hand: IkTarget,
     /// Head position (drives neck/look or the camera).
     pub head: Vec3,
