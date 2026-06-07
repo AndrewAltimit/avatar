@@ -69,6 +69,15 @@ pub struct UnityPackage {
     entries: BTreeMap<String, Entry>,
 }
 
+/// Decompression-bomb / unbounded-allocation guards. A `.unitypackage` is gzip+tar of untrusted
+/// origin, so a tiny archive can claim (or actually expand to) an enormous member, and we buffer
+/// every member in memory. These caps are far above any legitimate avatar/world export (real assets
+/// — FBX, textures — are at most tens of MiB; whole packages a few hundred MiB) and exist only so a
+/// pathologically/adversarially crafted archive bails with a clean error instead of exhausting RAM,
+/// mirroring the `MAX_NODE_DEPTH` pattern in `avatar-fbx`.
+const MAX_ENTRY_BYTES: u64 = 512 * 1024 * 1024; // 512 MiB per single archive member
+const MAX_TOTAL_BYTES: u64 = 2 * 1024 * 1024 * 1024; // 2 GiB across all retained members
+
 impl UnityPackage {
     /// Open and fully parse a `.unitypackage` file from disk.
     pub fn open(path: &Path) -> Result<Self> {
@@ -79,9 +88,17 @@ impl UnityPackage {
 
     /// Parse a `.unitypackage` from any reader yielding the gzip stream.
     pub fn read<R: Read>(reader: R) -> Result<Self> {
+        Self::read_capped(reader, MAX_ENTRY_BYTES, MAX_TOTAL_BYTES)
+    }
+
+    /// Parse with explicit decompression caps. Internal; the public [`read`](Self::read) uses the
+    /// production [`MAX_ENTRY_BYTES`]/[`MAX_TOTAL_BYTES`] values, while tests inject tiny caps to
+    /// exercise the bomb guard without crafting multi-hundred-MiB fixtures.
+    fn read_capped<R: Read>(reader: R, max_entry: u64, max_total: u64) -> Result<Self> {
         let gz = GzDecoder::new(reader);
         let mut archive = tar::Archive::new(gz);
         let mut entries: BTreeMap<String, Entry> = BTreeMap::new();
+        let mut total: u64 = 0;
 
         for entry in archive.entries().context("iterating tar entries")? {
             let mut entry = entry.context("reading tar entry")?;
@@ -102,10 +119,28 @@ impl UnityPackage {
                 continue; // deeper than expected; not part of the format
             }
 
+            // Read at most `max_entry + 1` bytes so we can detect an overrun without trusting the
+            // tar header's declared size (a bomb can lie); `bail!` if the member exceeds the cap.
             let mut bytes = Vec::new();
             entry
+                .by_ref()
+                .take(max_entry + 1)
                 .read_to_end(&mut bytes)
                 .with_context(|| format!("reading {}", header_path.display()))?;
+            if bytes.len() as u64 > max_entry {
+                bail!(
+                    "archive member {} exceeds the per-entry size cap ({max_entry} bytes); \
+                     refusing to process a possible decompression bomb",
+                    header_path.display()
+                );
+            }
+            total = total.saturating_add(bytes.len() as u64);
+            if total > max_total {
+                bail!(
+                    "decompressed contents exceed the total size cap ({max_total} bytes); \
+                     refusing to process a possible decompression bomb"
+                );
+            }
 
             let slot = entries.entry(guid.clone()).or_insert_with(|| Entry {
                 guid: guid.clone(),
