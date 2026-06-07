@@ -41,13 +41,11 @@ use avatar_vrc_descriptor::{AssetRef, VrcAsset, extract};
 use crate::texture::estimate_bytes;
 use crate::{Metric, MetricStat, PerfReport, Platform};
 
-/// Rank-affecting metrics the project view still does not measure. (Total particle count and
-/// constraint count/depth *are* now measured; what remains are the particle sub-metrics whose cost
-/// VRChat estimates but the file layer here doesn't reproduce.)
-const PROJECT_NOT_EVALUATED: &[&str] = &[
-    "Mesh Particle Polygons",
-    "Particle Trails / Collision flags",
-];
+/// Rank-affecting metrics the project view still does not measure. Everything the file layer can
+/// reproduce — including mesh-particle polygons and the particle trail/collision flags — is now
+/// measured, so this list is empty; an individual metric still *adds* a note when its inputs were
+/// incomplete (a lower bound), via [`Counts::into_report`].
+const PROJECT_NOT_EVALUATED: &[&str] = &[];
 
 /// Maps each asset GUID to the file it describes (`.meta` minus the `.meta` suffix).
 type GuidIndex = HashMap<String, PathBuf>;
@@ -102,7 +100,7 @@ pub fn analyze_project(path: &Path) -> Result<Vec<PerfReport>> {
         let texture_memory = resolve_texture_memory(&file, &guids, &mut resolver);
         let bones = bone_count(&file);
         let dynamics = resolve_physbone_dynamics(&file);
-        let particles = resolve_particles(&file);
+        let particles = resolve_particles(&file, &guids, &mut resolver.triangles);
         let constraints = resolve_constraints(&file);
         let source = format!("{} ({avatar})", relative(&project.root, file_path));
         reports.push(counts.into_report(
@@ -433,13 +431,24 @@ fn collider_count(body: &Yaml) -> u64 {
     })
 }
 
-/// The estimated total live-particle count across the avatar's particle systems.
+/// The estimated total live-particle count across the avatar's particle systems, plus the
+/// mesh-particle polygon cost and the trail/collision flag tallies.
 struct Particles {
     /// Σ over `ParticleSystem`s of `min(maxParticles, ceil(rate × lifetime))`.
     total: u64,
     /// Particle systems whose emission/init modules couldn't be parsed (no `InitialModule`, etc.) —
     /// they contribute nothing, so `total` is a lower bound.
     unparsed: usize,
+    /// Σ over mesh-mode particle renderers of `mesh triangles × the sibling system's live-particle
+    /// count` — the active polygons VRChat budgets for mesh particles.
+    mesh_particle_triangles: u64,
+    /// Particle systems with a `TrailModule.enabled: 1`.
+    trail_systems: u64,
+    /// Particle systems with a `CollisionModule.enabled: 1`.
+    collision_systems: u64,
+    /// Mesh-mode particle renderers whose mesh reference didn't resolve to a readable FBX — their
+    /// polygons are omitted, so `mesh_particle_triangles` is a lower bound.
+    unresolved_mesh_particles: usize,
 }
 
 /// Estimate the avatar's total live-particle ceiling. For each `ParticleSystem` (class 198) this
@@ -451,21 +460,91 @@ struct Particles {
 /// approximates animated curves, bursts, and sub-emitters (which can spawn more) by their constant
 /// term — a close ballpark, not an exact ceiling. A system whose modules can't be read at all is
 /// **flagged** (counted in `unparsed`) rather than silently assumed to emit nothing.
-fn resolve_particles(file: &UnityFile) -> Particles {
+///
+/// It also tallies the **mesh-particle polygon cost** and the **trail/collision flags**. The
+/// `ParticleSystem` (class 198) and its `ParticleSystemRenderer` (class 199) sit on the same
+/// GameObject; they're paired by GameObject fileID. For each mesh-mode renderer
+/// (`m_RenderMode: 4`), the polygon cost is the triangles of its `m_Mesh` (resolved to a source FBX
+/// via the `.meta` index, like [`resolve_geometry`]) × the sibling system's live-particle count.
+/// `TrailModule`/`CollisionModule` `enabled: 1` increment the flag counters.
+fn resolve_particles(file: &UnityFile, guids: &GuidIndex, cache: &mut TriangleCache) -> Particles {
     let mut total = 0u64;
     let mut unparsed = 0usize;
+    let mut trail_systems = 0u64;
+    let mut collision_systems = 0u64;
+    // GameObject fileID → that system's estimated live-particle count (for the renderer pairing).
+    let mut particles_on_gameobject: HashMap<i64, u64> = HashMap::new();
 
     for doc in &file.documents {
         if doc.class_id != 198 {
             continue; // not a ParticleSystem.
         }
-        match estimate_particles(&doc.body) {
+        let estimate = estimate_particles(&doc.body);
+        match estimate {
             Some(n) => total += n,
             None => unparsed += 1,
         }
+        if let Some(go) = field_i64(&doc.body["m_GameObject"], "fileID") {
+            // Mesh-particle cost uses the system's live-particle count; 0 when unparseable.
+            particles_on_gameobject.insert(go, estimate.unwrap_or(0));
+        }
+        if module_enabled(&doc.body["TrailModule"]) {
+            trail_systems += 1;
+        }
+        if module_enabled(&doc.body["CollisionModule"]) {
+            collision_systems += 1;
+        }
     }
 
-    Particles { total, unparsed }
+    // Mesh-particle polygons: pair each mesh-mode ParticleSystemRenderer (199) with its sibling
+    // system (198) by GameObject, resolve the renderer's mesh to an FBX, and weight by particles.
+    let mut mesh_particle_triangles = 0u64;
+    let mut unresolved_mesh_particles = 0usize;
+    for doc in &file.documents {
+        if doc.class_id != 199 {
+            continue; // not a ParticleSystemRenderer.
+        }
+        // m_RenderMode is a bare scalar (4 = Mesh); only Mesh mode contributes polygons.
+        if doc.body["m_RenderMode"].as_i64() != Some(4) {
+            continue;
+        }
+        // The mesh: `m_Mesh`, falling back to the first non-null `m_Meshes` entry.
+        let mut mesh = AssetRef::parse(&doc.body["m_Mesh"]);
+        if !mesh.is_set()
+            && let Some(list) = doc.body["m_Meshes"].as_vec()
+            && let Some(found) = list.iter().map(AssetRef::parse).find(|m| m.is_set())
+        {
+            mesh = found;
+        }
+        if !mesh.is_set() {
+            continue; // no mesh assigned — nothing to count.
+        }
+        let particles = field_i64(&doc.body["m_GameObject"], "fileID")
+            .and_then(|go| particles_on_gameobject.get(&go).copied())
+            .unwrap_or(0);
+        match mesh.guid.as_deref().and_then(|g| guids.get(g)) {
+            Some(path) if is_fbx(path) => match fbx_triangles(path, cache) {
+                Some(tris) => mesh_particle_triangles += tris.saturating_mul(particles),
+                None => unresolved_mesh_particles += 1, // FBX failed to load/parse.
+            },
+            _ => unresolved_mesh_particles += 1, // unknown guid, or a non-FBX (baked/built-in) mesh.
+        }
+    }
+
+    Particles {
+        total,
+        unparsed,
+        mesh_particle_triangles,
+        trail_systems,
+        collision_systems,
+        unresolved_mesh_particles,
+    }
+}
+
+/// `true` if a particle sub-module (e.g. `TrailModule`/`CollisionModule`) is present with
+/// `enabled: 1`.
+fn module_enabled(module: &Yaml) -> bool {
+    !module.is_badvalue() && field_i64(module, "enabled") == Some(1)
 }
 
 /// The live-particle ceiling of one `ParticleSystem` body, or `None` if its modules are unreadable.
@@ -897,6 +976,15 @@ impl Counts {
             MetricStat::new(Metric::Contacts, self.contacts),
             MetricStat::new(Metric::ParticleSystems, self.particle_systems),
             MetricStat::new(Metric::TotalParticles, particles.total),
+            MetricStat::new(
+                Metric::MeshParticlePolygons,
+                particles.mesh_particle_triangles,
+            ),
+            MetricStat::new(Metric::ParticleTrailsEnabled, particles.trail_systems),
+            MetricStat::new(
+                Metric::ParticleCollisionEnabled,
+                particles.collision_systems,
+            ),
             MetricStat::new(Metric::Constraints, constraints.count),
             MetricStat::new(Metric::Lights, self.lights),
             MetricStat::new(Metric::AudioSources, self.audio_sources),
@@ -942,6 +1030,13 @@ impl Counts {
             not_evaluated.push(format!(
                 "Total Particles of {} system(s) (unparseable particle module)",
                 particles.unparsed
+            ));
+        }
+        // Mesh-particle polygons are a lower bound when a mesh-mode renderer's mesh didn't resolve.
+        if particles.unresolved_mesh_particles > 0 {
+            not_evaluated.push(format!(
+                "Mesh Particle Polygons of {} renderer(s) (built-in or non-FBX source)",
+                particles.unresolved_mesh_particles
             ));
         }
         // Constraint depth couldn't be resolved (no usable source refs) — count is still ranked.
@@ -1066,7 +1161,7 @@ MonoBehaviour:
         };
         let bones = bone_count(&file);
         let dynamics = resolve_physbone_dynamics(&file);
-        let particles = resolve_particles(&file);
+        let particles = resolve_particles(&file, &GuidIndex::new(), &mut TriangleCache::new());
         let constraints = resolve_constraints(&file);
         Counts::of(&file).into_report(
             "Avatar.prefab (Avatar)".into(),
@@ -1257,10 +1352,16 @@ ParticleSystem:
       scalar: 5
 ";
 
+    /// Resolve particles with no project context (empty guid index + fresh cache) — used by the
+    /// tests that exercise only the live-particle estimate and the flag tallies.
+    fn particles_of(file: &UnityFile) -> Particles {
+        resolve_particles(file, &GuidIndex::new(), &mut TriangleCache::new())
+    }
+
     #[test]
     fn total_particles_uses_min_of_cap_and_rate_times_lifetime() {
         let file = UnityFile::parse(PARTICLES).unwrap();
-        let p = resolve_particles(&file);
+        let p = particles_of(&file);
         assert_eq!(p.total, 230, "30 (rate-limited) + 200 (cap-limited)");
         assert_eq!(p.unparsed, 1, "the system with no InitialModule is flagged");
     }
@@ -1282,7 +1383,143 @@ ParticleSystem:
       scalar: 6
 ";
         let file = UnityFile::parse(yaml).unwrap();
-        assert_eq!(resolve_particles(&file).total, 20);
+        assert_eq!(particles_of(&file).total, 20);
+    }
+
+    #[test]
+    fn mesh_particle_polygons_weight_triangles_by_particle_count() {
+        // A system on GO 100 emitting 20 live particles, paired with a mesh-mode renderer whose
+        // mesh resolves (via the guid index) to an FBX cached at 12 triangles. Cost = 12 × 20 = 240.
+        let yaml = "\
+--- !u!198 &1
+ParticleSystem:
+  m_GameObject: {fileID: 100}
+  InitialModule:
+    maxNumParticles: 1000
+    startLifetime:
+      scalar: 2
+  EmissionModule:
+    rateOverTime:
+      scalar: 10
+--- !u!199 &2
+ParticleSystemRenderer:
+  m_GameObject: {fileID: 100}
+  m_RenderMode: 4
+  m_Mesh: {fileID: 4300000, guid: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, type: 3}
+";
+        let file = UnityFile::parse(yaml).unwrap();
+        // Seed the triangle cache + a one-entry guid index pointing the mesh guid at an FBX path.
+        let fbx = PathBuf::from("/Assets/particle.fbx");
+        let mut guids = GuidIndex::new();
+        guids.insert("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(), fbx.clone());
+        let mut cache = TriangleCache::new();
+        cache.insert(fbx, Some(12));
+
+        let p = resolve_particles(&file, &guids, &mut cache);
+        assert_eq!(p.total, 20, "10/s × 2s, under the cap");
+        assert_eq!(
+            p.mesh_particle_triangles, 240,
+            "12 triangles × 20 live particles"
+        );
+        assert_eq!(p.unresolved_mesh_particles, 0);
+    }
+
+    #[test]
+    fn trail_and_collision_modules_increment_the_flag_counters() {
+        let yaml = "\
+--- !u!198 &1
+ParticleSystem:
+  m_GameObject: {fileID: 100}
+  InitialModule:
+    maxNumParticles: 1000
+    startLifetime:
+      scalar: 1
+  EmissionModule:
+    rateOverTime:
+      scalar: 5
+  TrailModule:
+    enabled: 1
+  CollisionModule:
+    enabled: 1
+--- !u!198 &2
+ParticleSystem:
+  m_GameObject: {fileID: 101}
+  InitialModule:
+    maxNumParticles: 1000
+    startLifetime:
+      scalar: 1
+  EmissionModule:
+    rateOverTime:
+      scalar: 5
+  TrailModule:
+    enabled: 0
+";
+        let file = UnityFile::parse(yaml).unwrap();
+        let p = particles_of(&file);
+        assert_eq!(p.trail_systems, 1, "only the system with enabled: 1");
+        assert_eq!(p.collision_systems, 1);
+    }
+
+    #[test]
+    fn unresolved_mesh_particle_is_flagged_not_counted() {
+        // A mesh-mode renderer whose mesh guid isn't in the (empty) index: flagged, adds nothing.
+        let yaml = "\
+--- !u!114 &1
+MonoBehaviour:
+  m_Name: Avatar
+  ViewPosition: {x: 0, y: 1.2, z: 0.1}
+  baseAnimationLayers:
+  - type: 4
+    isDefault: 0
+--- !u!198 &2
+ParticleSystem:
+  m_GameObject: {fileID: 100}
+  InitialModule:
+    maxNumParticles: 1000
+    startLifetime:
+      scalar: 2
+  EmissionModule:
+    rateOverTime:
+      scalar: 10
+--- !u!199 &3
+ParticleSystemRenderer:
+  m_GameObject: {fileID: 100}
+  m_RenderMode: 4
+  m_Mesh: {fileID: 4300000, guid: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb, type: 3}
+";
+        let file = UnityFile::parse(yaml).unwrap();
+        let p = particles_of(&file);
+        assert_eq!(p.mesh_particle_triangles, 0, "mesh didn't resolve");
+        assert_eq!(p.unresolved_mesh_particles, 1);
+
+        // It also surfaces a not_evaluated note via into_report.
+        let geometry = Geometry {
+            triangles: 0,
+            unresolved_meshes: 0,
+        };
+        let texture_memory = TextureMemory {
+            pc_bytes: 0,
+            android_bytes: 0,
+            unresolved: 0,
+        };
+        let dynamics = resolve_physbone_dynamics(&file);
+        let constraints = resolve_constraints(&file);
+        let r = Counts::of(&file).into_report(
+            "A.prefab (Avatar)".into(),
+            &geometry,
+            &texture_memory,
+            0,
+            &dynamics,
+            &p,
+            &constraints,
+        );
+        assert!(
+            r.not_evaluated
+                .iter()
+                .any(|m| m.contains("Mesh Particle Polygons")),
+            "unresolved mesh particle flagged: {:?}",
+            r.not_evaluated
+        );
     }
 
     // A 3-deep constraint chain: constraint C1 (on GO 1000, transform 10) is driven by C2 (on GO
@@ -1387,7 +1624,7 @@ PositionConstraint:
             unresolved: 0,
         };
         let dynamics = resolve_physbone_dynamics(&file);
-        let particles = resolve_particles(&file);
+        let particles = resolve_particles(&file, &GuidIndex::new(), &mut TriangleCache::new());
         let constraints = resolve_constraints(&file);
         let r = Counts::of(&file).into_report(
             "A.prefab (Avatar)".into(),

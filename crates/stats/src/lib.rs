@@ -119,9 +119,7 @@ impl Limits {
     }
 }
 
-/// A performance metric this crate can measure and rank. (VRChat tracks a few more — mesh-particle
-/// active polygons, particle trail/collision flags — that we still surface via
-/// [`PerfReport::not_evaluated`] rather than rank.)
+/// A performance metric this crate can measure and rank.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub enum Metric {
     Triangles,
@@ -137,6 +135,9 @@ pub enum Metric {
     Contacts,
     ParticleSystems,
     TotalParticles,
+    MeshParticlePolygons,
+    ParticleTrailsEnabled,
+    ParticleCollisionEnabled,
     Constraints,
     ConstraintDepth,
     Lights,
@@ -167,6 +168,9 @@ impl Metric {
             Contacts => "Contacts",
             ParticleSystems => "Particle Systems",
             TotalParticles => "Total Particles",
+            MeshParticlePolygons => "Mesh Particle Polygons",
+            ParticleTrailsEnabled => "Particle Trails",
+            ParticleCollisionEnabled => "Particle Collision",
             Constraints => "Constraints",
             ConstraintDepth => "Constraint Depth",
             Lights => "Lights",
@@ -206,6 +210,18 @@ impl Metric {
             Contacts => (lim(8, 16, 24, 32), Some(lim(2, 4, 8, 16))),
             ParticleSystems => (lim(0, 4, 8, 16), Some(lim(0, 0, 0, 2))),
             TotalParticles => (lim(0, 300, 1_000, 2_500), Some(lim(0, 0, 0, 200))),
+            // Active polygons contributed by mesh-mode particle renderers (mesh triangles ×
+            // live-particle count). VRChat folds this into the particle budget; the exact per-tier
+            // bounds aren't published as a standalone table, so these mirror a triangle-style ramp.
+            // thresholds approximate — confirm against VRChat's published budget (PLAN risk 3: rules-as-data)
+            MeshParticlePolygons => (
+                lim(0, 2_000, 20_000, 50_000),
+                Some(lim(0, 0, 2_000, 20_000)),
+            ),
+            // Trail / collision sub-modules are flags: any system with one enabled costs a tier,
+            // ranked like Lights' `0/0/0/1` row.
+            ParticleTrailsEnabled => (lim(0, 0, 0, 1), Some(lim(0, 0, 0, 1))),
+            ParticleCollisionEnabled => (lim(0, 0, 0, 1), Some(lim(0, 0, 0, 1))),
             Constraints => (lim(100, 250, 300, 350), Some(lim(30, 60, 120, 150))),
             ConstraintDepth => (lim(20, 50, 80, 100), Some(lim(5, 15, 35, 50))),
             Lights => (lim(0, 0, 0, 1), None),
