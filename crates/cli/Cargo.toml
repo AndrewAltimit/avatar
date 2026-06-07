@@ -13,8 +13,14 @@ anyhow.workspace = true
 clap.workspace = true
 serde = { workspace = true }
 serde_json.workspace = true
+# Linear algebra for the render command's scene glue (placement/camera). Confined to render_scene.rs.
+glam.workspace = true
 avatar-fbx = { path = "../fbx" }
 avatar-armature = { path = "../armature" }
+avatar-gltf = { path = "../gltf" }
+avatar-mesh = { path = "../mesh" }
+avatar-pose = { path = "../pose" }
+avatar-render = { path = "../render" }
 avatar-lint = { path = "../lint" }
 avatar-stats = { path = "../stats" }
 avatar-unitypackage = { path = "../unitypackage" }

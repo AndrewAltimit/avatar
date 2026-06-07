@@ -15,6 +15,7 @@ members = [
     "crates/lint",
     "crates/stats",
     "crates/anim-gen",
+    "crates/render",
     "crates/osc",
     "crates/osc-gestures",
     "crates/cli",

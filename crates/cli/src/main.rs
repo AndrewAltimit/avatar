@@ -21,6 +21,8 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
+mod render_scene;
+
 use anyhow::{Context, Result, bail};
 use avatar_anim_gen::{AnimationClip, BlendTree, Emitter, FloatCurve, IdGen, Keyframe};
 use avatar_armature::{RepairPlan, apply_plan, plan_repairs};
@@ -60,6 +62,33 @@ enum Command {
     /// Inspect, extract, and cross-check `.unitypackage` archives (avatars, worlds/maps).
     #[command(subcommand)]
     Unitypackage(UnitypackageCommand),
+    /// Render an avatar (and/or a world scene) to a PNG with an offscreen GPU pipeline.
+    Render(RenderArgs),
+}
+
+#[derive(Args, Debug)]
+struct RenderArgs {
+    /// Avatar to render: an `.fbx`, `.gltf`, or `.glb` file (rest/bind pose).
+    #[arg(long)]
+    avatar: Option<PathBuf>,
+    /// World/map to render: a `.unity` scene file, or a Unity project dir (its first scene is used).
+    #[arg(long)]
+    world: Option<PathBuf>,
+    /// Output PNG path.
+    #[arg(short, long, default_value = "render.png")]
+    output: PathBuf,
+    /// Image width in pixels.
+    #[arg(long, default_value_t = 960)]
+    width: u32,
+    /// Image height in pixels.
+    #[arg(long, default_value_t = 720)]
+    height: u32,
+    /// Camera orbit yaw around the scene, in degrees.
+    #[arg(long, default_value_t = 35.0)]
+    yaw: f32,
+    /// Camera orbit pitch above the scene, in degrees.
+    #[arg(long, default_value_t = 18.0)]
+    pitch: f32,
 }
 
 #[derive(Subcommand, Debug)]
@@ -373,7 +402,44 @@ fn run() -> Result<ExitCode> {
             up_extract(&args).map(|()| ExitCode::SUCCESS)
         }
         Command::Unitypackage(UnitypackageCommand::Testbed(args)) => up_testbed(&args),
+        Command::Render(args) => render(&args).map(|()| ExitCode::SUCCESS),
     }
+}
+
+/// Render an avatar and/or world scene to a PNG via the offscreen GPU pipeline.
+fn render(args: &RenderArgs) -> Result<()> {
+    if args.avatar.is_none() && args.world.is_none() {
+        bail!("nothing to render: pass --avatar <model> and/or --world <scene|project>");
+    }
+    let mut meshes = Vec::new();
+    if let Some(world) = &args.world {
+        let placed = render_scene::load_world(world)?;
+        println!(
+            "world: {} mesh instance(s) from {}",
+            placed.len(),
+            world.display()
+        );
+        meshes.extend(placed);
+    }
+    if let Some(avatar) = &args.avatar {
+        let av = render_scene::load_avatar(avatar)?;
+        println!("avatar: {} mesh(es) from {}", av.len(), avatar.display());
+        meshes.extend(av);
+    }
+
+    let scene =
+        render_scene::scene_from_meshes(meshes, args.width, args.height, args.yaw, args.pitch)?;
+    let tris: usize = scene.meshes.iter().map(|m| m.indices.len() / 3).sum();
+    println!(
+        "rendering {} mesh(es), {tris} triangles at {}x{} ...",
+        scene.meshes.len(),
+        args.width,
+        args.height
+    );
+    let rgba = avatar_render::render_to_rgba(&scene, args.width, args.height)?;
+    avatar_render::save_png(&args.output, args.width, args.height, &rgba)?;
+    println!("wrote {}", args.output.display());
+    Ok(())
 }
 
 /// Report the VRChat performance ranking of an FBX file (geometry side) or every avatar in a Unity
