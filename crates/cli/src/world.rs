@@ -530,7 +530,13 @@ pub fn load(path: &Path, extra: Mat4, tex: &mut TextureSet) -> Result<WorldLoad>
             continue;
         }
         let world = world_matrix(tfid, &nodes, &mut tf_cache);
-        let asset = fbx_cache.get(guid).unwrap().as_ref().unwrap();
+        // `load_asset` returned true, so the cache holds a `Some` for this guid; still skip rather
+        // than panic if that ever fails to hold (e.g. future cache eviction).
+        let Some(Some(asset)) = fbx_cache.get(guid) else {
+            eprintln!("warning: FBX asset for mesh guid {guid} unexpectedly missing; skipping");
+            skipped_unresolved += 1;
+            continue;
+        };
         let mats = mats_by_go.get(go);
         // Unity bakes the model import scale into the imported mesh's vertices, so a shared sub-mesh
         // assigned to a plain GameObject is already scaled. We apply it here to the raw FBX geometry.
@@ -587,7 +593,13 @@ pub fn load(path: &Path, extra: Mat4, tex: &mut TextureSet) -> Result<WorldLoad>
             .as_deref()
             .map(read_material_remap)
             .unwrap_or_default();
-        let asset = fbx_cache.get(guid).unwrap().as_ref().unwrap();
+        // `load_asset` returned true, so the cache holds a `Some` for this guid; still skip rather
+        // than panic if that ever fails to hold.
+        let Some(Some(asset)) = fbx_cache.get(guid) else {
+            eprintln!("warning: FBX asset for prefab guid {guid} unexpectedly missing; skipping");
+            skipped_unresolved += 1;
+            continue;
+        };
         let parent_world = p
             .transform_parent
             .map(|pid| world_matrix(pid, &nodes, &mut tf_cache))

@@ -258,15 +258,17 @@ fn jpeg_info(b: &[u8]) -> Option<ImageInfo> {
         return None;
     }
     let mut i = 2;
-    while i + 9 < b.len() {
-        if b[i] != 0xFF {
+    // Need bytes `i..i+9` for the SOF read below; the upper bound is rechecked every iteration so a
+    // crafted segment length can't walk us off the end (the index math is all checked/`get`).
+    while i + 9 <= b.len() {
+        if b.get(i) != Some(&0xFF) {
             i += 1;
             continue;
         }
         let marker = b[i + 1];
         let is_sof = (0xC0..=0xCF).contains(&marker) && !matches!(marker, 0xC4 | 0xC8 | 0xCC);
         if is_sof {
-            // [FF marker][len:2][precision:1][height:2][width:2]
+            // [FF marker][len:2][precision:1][height:2][width:2] — `i+8 < b.len()` here.
             let height = u16::from_be_bytes([b[i + 5], b[i + 6]]) as u64;
             let width = u16::from_be_bytes([b[i + 7], b[i + 8]]) as u64;
             return Some(ImageInfo {
@@ -275,12 +277,16 @@ fn jpeg_info(b: &[u8]) -> Option<ImageInfo> {
                 has_alpha: false,
             });
         }
-        // Skip this segment using its big-endian length.
+        // Skip this segment using its big-endian length. Both the length read and the index advance
+        // use checked arithmetic so a bogus length can't overflow `usize` and wrap back in-bounds.
         let len = u16::from_be_bytes([b[i + 2], b[i + 3]]) as usize;
         if len < 2 {
             return None;
         }
-        i += 2 + len;
+        match i.checked_add(2).and_then(|n| n.checked_add(len)) {
+            Some(next) => i = next,
+            None => return None,
+        }
     }
     None
 }
@@ -311,6 +317,46 @@ mod tests {
 
         let rgb = png_info(&png(256, 256, 2)).unwrap();
         assert!(!rgb.has_alpha, "colour type 2 is RGB, no alpha");
+    }
+
+    #[test]
+    fn jpeg_with_bogus_segment_length_does_not_panic() {
+        // SOI, then an APP0 marker (FFE0) with a wildly oversized length. The advance must not
+        // overflow/panic; we just want `None` (no SOF found) rather than an out-of-bounds index.
+        let bogus = vec![0xFF, 0xD8, 0xFF, 0xE0, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00];
+        assert_eq!(
+            jpeg_info(&bogus),
+            None,
+            "oversized length walks past the end"
+        );
+
+        // A length of 0 (< 2) is rejected rather than looping forever.
+        let zero_len = vec![0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+        assert_eq!(jpeg_info(&zero_len), None);
+
+        // Truncated right at a would-be SOF header: bounds recheck keeps us from reading past end.
+        let truncated = vec![0xFF, 0xD8, 0xFF, 0xC0, 0x00, 0x11];
+        assert_eq!(jpeg_info(&truncated), None);
+
+        // A non-JPEG / empty input is simply rejected.
+        assert_eq!(jpeg_info(&[]), None);
+        assert_eq!(jpeg_info(&[0xFF, 0xD8]), None);
+    }
+
+    impl PartialEq for ImageInfo {
+        fn eq(&self, o: &Self) -> bool {
+            self.width == o.width && self.height == o.height && self.has_alpha == o.has_alpha
+        }
+    }
+
+    impl std::fmt::Debug for ImageInfo {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.debug_struct("ImageInfo")
+                .field("width", &self.width)
+                .field("height", &self.height)
+                .field("has_alpha", &self.has_alpha)
+                .finish()
+        }
     }
 
     #[test]

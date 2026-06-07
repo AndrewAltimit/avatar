@@ -54,6 +54,27 @@ pub struct UnityFile {
 
 impl UnityFile {
     /// Parse a Unity YAML file from text. Fails if any document body is not valid YAML.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use avatar_unity_yaml::UnityFile;
+    ///
+    /// let text = "\
+    /// %YAML 1.1
+    /// %TAG !u! tag:unity3d.com,2011:
+    /// --- !u!114 &11400000
+    /// MonoBehaviour:
+    ///   m_Name: Parameters
+    /// ";
+    /// let file = UnityFile::parse(text)?;
+    /// let doc = &file.documents[0];
+    /// assert_eq!(doc.class_id, 114);
+    /// assert_eq!(doc.file_id, 11400000);
+    /// assert!(doc.is_monobehaviour());
+    /// assert_eq!(doc.name(), Some("Parameters"));
+    /// # anyhow::Ok(())
+    /// ```
     pub fn parse(text: &str) -> Result<Self> {
         Self::parse_inner(text, true)
     }

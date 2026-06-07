@@ -51,7 +51,11 @@ fn bone_centroid(meshes: &[RawMesh], bone_id: i64) -> Option<Vec3> {
         // control-point index -> a representative emitted-vertex position.
         let mut cp_pos: std::collections::HashMap<u32, [f32; 3]> = std::collections::HashMap::new();
         for (k, &cp) in m.control_point_of_vertex.iter().enumerate() {
-            cp_pos.entry(cp).or_insert(m.positions[k]);
+            // `control_point_of_vertex` is parallel to `positions`; guard against a malformed mesh
+            // where it isn't, rather than panicking on an out-of-range index.
+            if let Some(&p) = m.positions.get(k) {
+                cp_pos.entry(cp).or_insert(p);
+            }
         }
         let mut sum = Vec3::ZERO;
         let mut wsum = 0.0f32;
@@ -225,7 +229,8 @@ pub fn load_avatar_in_world(
     for m in &mut meshes {
         m.transform = place * m.transform;
     }
-    let bounds = mesh_bounds(&meshes).expect("non-empty after placement");
+    let bounds = mesh_bounds(&meshes)
+        .ok_or_else(|| anyhow::anyhow!("no geometry remained after placement"))?;
     Ok((meshes, bounds))
 }
 
@@ -273,7 +278,7 @@ pub fn scene_from_meshes(
     };
     let (min, max) = focus
         .or_else(|| scene.world_bounds())
-        .expect("non-empty meshes have bounds");
+        .ok_or_else(|| anyhow::anyhow!("scene has no finite geometry bounds to frame"))?;
     scene.camera = Camera::frame_bounds(min, max, width as f32 / height as f32, yaw_deg, pitch_deg);
     Ok(scene)
 }

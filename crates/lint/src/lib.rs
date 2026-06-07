@@ -306,7 +306,9 @@ fn check_duplicate_parameters(
                 code: "VRC011",
                 message: format!("Duplicate expression parameter name: '{}'", p.name),
                 file: Some(file.to_string()),
-                hint: None,
+                hint: Some(
+                    "Remove the duplicate entry — only the first is synced and the budget counts both.".into(),
+                ),
             });
         }
     }
@@ -460,7 +462,9 @@ fn check_expression_ref(
                 "Avatar's {label} reference resolves to '{path}', which is not a recognized {label} asset"
             ),
             file: Some(file.to_string()),
-            hint: None,
+            hint: Some(format!(
+                "Point the Avatar Descriptor's {label} slot at an actual {label} asset (the current target is a different asset type)."
+            )),
         }),
         Some(_) => {}
     }
@@ -728,7 +732,9 @@ fn check_controller(file: &str, c: &AnimatorController, out: &mut Vec<Diagnostic
                 code: "VRC043",
                 message: format!("Duplicate animator parameter name: '{}'", p.name),
                 file: Some(file.to_string()),
-                hint: None,
+                hint: Some(
+                    "Rename or delete the duplicate parameter in the Animator Controller (Unity keeps only one).".into(),
+                ),
             });
         }
     }
@@ -785,4 +791,82 @@ fn relative(root: &Path, path: &Path) -> String {
 /// Discover a project (re-exported for callers that want project info without linting).
 pub fn discover(path: &Path) -> Result<UnityProject> {
     UnityProject::discover(path).context("discovering Unity project")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use avatar_vrc_descriptor::{ExpressionParameter, ExpressionParameters, ValueType};
+
+    /// A synced expression parameter of the given name/type, with the other fields at sensible
+    /// defaults (the lint rules only read `name`, `value_type`, and `synced`).
+    fn param(name: &str, value_type: ValueType) -> ExpressionParameter {
+        ExpressionParameter {
+            name: name.into(),
+            value_type,
+            default_value: 0.0,
+            saved: false,
+            synced: true,
+        }
+    }
+
+    /// One synced `Bool` expression parameter, declared twice — the input the duplicate-parameter
+    /// rule (VRC011) flags.
+    fn duplicated_params() -> ExpressionParameters {
+        let one = param("Toggle", ValueType::Bool);
+        ExpressionParameters {
+            asset_name: None,
+            script_guid: None,
+            parameters: vec![one.clone(), one],
+        }
+    }
+
+    /// The over-budget rule (VRC010), exercised through the real `check_parameter_budget`, attaches
+    /// an actionable remediation hint mentioning the 256-bit budget.
+    #[test]
+    fn budget_rule_populates_hint() {
+        // Enough synced Float parameters (8 bits each) to blow past the 256-bit budget.
+        let count = (SYNC_BUDGET_BITS / 8) + 4;
+        let parameters = (0..count)
+            .map(|i| param(&format!("Float{i}"), ValueType::Float))
+            .collect();
+        let params = ExpressionParameters {
+            asset_name: None,
+            script_guid: None,
+            parameters,
+        };
+
+        let mut out = Vec::new();
+        check_parameter_budget("Params.asset", &params, &mut out);
+
+        let d = out
+            .iter()
+            .find(|d| d.code == "VRC010")
+            .expect("over-budget params should produce a VRC010 diagnostic");
+        let hint = d
+            .hint
+            .as_deref()
+            .expect("VRC010 should carry a remediation hint");
+        assert!(
+            hint.contains("256"),
+            "hint should mention the 256-bit budget: {hint}"
+        );
+    }
+
+    /// The duplicate-parameter rule (VRC011) — previously hint-less — now carries a remediation
+    /// hint, so it renders an indented `hint:` line in the CLI's human report.
+    #[test]
+    fn duplicate_param_rule_populates_hint() {
+        let mut out = Vec::new();
+        check_duplicate_parameters("Params.asset", &duplicated_params(), &mut out);
+
+        let d = out
+            .iter()
+            .find(|d| d.code == "VRC011")
+            .expect("duplicated params should produce a VRC011 diagnostic");
+        assert!(
+            d.hint.is_some(),
+            "VRC011 should now carry a remediation hint"
+        );
+    }
 }

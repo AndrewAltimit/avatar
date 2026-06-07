@@ -108,12 +108,29 @@ pub fn split_by_material(
         let mut positions: Vec<[f32; 3]> = Vec::new();
         let mut uvs: Vec<[f32; 2]> = Vec::new();
         let mut indices: Vec<u32> = Vec::new();
-        for t in 0..n_tri {
+        'tri: for t in 0..n_tri {
             if m.triangle_material(t) != slot {
                 continue;
             }
-            for k in 0..3 {
+            // Validate all three corner indices up front so a degenerate triangle (an index past
+            // the position/UV arrays — possible on a malformed/corrupt mesh) is skipped whole,
+            // instead of panicking or emitting a half-written triangle.
+            let mut corners = [0u32; 3];
+            for (k, corner) in corners.iter_mut().enumerate() {
                 let vi = m.indices[t * 3 + k];
+                let vu = vi as usize;
+                if vu >= m.positions.len() || m.uvs.as_ref().is_some_and(|u| vu >= u.len()) {
+                    eprintln!(
+                        "warning: skipping triangle {t}: vertex index {vi} out of range \
+                         (positions={}, uvs={:?})",
+                        m.positions.len(),
+                        m.uvs.as_ref().map(|u| u.len())
+                    );
+                    continue 'tri;
+                }
+                *corner = vi;
+            }
+            for vi in corners {
                 let nv = *remap.entry(vi).or_insert_with(|| {
                     positions.push(m.positions[vi as usize]);
                     if let Some(u) = &m.uvs {
@@ -283,6 +300,41 @@ mod tests {
             "unsplit mesh keeps its index buffer"
         );
         assert_eq!(out[0].positions.len(), 4);
+    }
+
+    #[test]
+    fn split_skips_triangles_with_out_of_range_indices() {
+        // Two material slots, two triangles — but slot 1's triangle references vertex index 99,
+        // which doesn't exist. That triangle must be skipped, not panic; slot 0 still renders.
+        let mut m = two_material_quad();
+        m.indices = vec![0, 1, 2, 99, 2, 3];
+        let out = split_by_material(&m, Mat4::IDENTITY, |_| SlotStyle {
+            texture: None,
+            color: [1.0, 1.0, 1.0, 1.0],
+        });
+        assert_eq!(out.len(), 1, "only the valid-index slot produces a mesh");
+        assert_eq!(out[0].indices.len(), 3, "the good triangle survives");
+        assert!(
+            out[0]
+                .indices
+                .iter()
+                .all(|&i| (i as usize) < out[0].positions.len())
+        );
+    }
+
+    #[test]
+    fn split_skips_triangle_when_uv_index_out_of_range() {
+        // Positions cover the index, but the UV array is short — the triangle must still be skipped
+        // rather than panicking on the UV lookup.
+        let mut m = two_material_quad();
+        m.uvs = Some(vec![[0.0, 0.0], [1.0, 0.0]]); // only 2 UVs for 4 positions
+        let out = split_by_material(&m, Mat4::IDENTITY, |_| SlotStyle {
+            texture: None,
+            color: [1.0, 1.0, 1.0, 1.0],
+        });
+        // Slot 0's triangle (0,1,2) needs UV index 2, which is missing → skipped.
+        // Slot 1's triangle (0,2,3) also needs missing UVs → skipped. Result: no meshes.
+        assert!(out.iter().all(|rm| rm.uvs.len() == rm.positions.len()));
     }
 
     #[test]

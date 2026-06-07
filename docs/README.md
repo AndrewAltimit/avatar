@@ -15,6 +15,9 @@ Documentation for the [avatar](../README.md) monorepo. Start with the root
   requirements; the table `avatar-armature` infers and validates against.
 - [`reference/sdk3-lint-rules.md`](reference/sdk3-lint-rules.md) — every `avatar lint` rule
   (`VRC001`–`VRC044`), how assets are identified, and the valueType/budget encodings.
+- [`reference/unity-asset.md`](reference/unity-asset.md) — `avatar-unity-asset`: typed
+  AnimatorController (`.controller`) reading — parameters, states, Write Defaults, blend trees — the
+  reader the controller lint rules consume. (Mirrors the style of the other `reference/*.md` docs.)
 - [`reference/armature-repair.md`](reference/armature-repair.md) — what `avatar armature fix`
   repairs, why renaming is safe and scale/orientation are only flagged, and the FBX writer's
   characteristics.

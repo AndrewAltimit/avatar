@@ -14,19 +14,26 @@ via [`avatar-osc`](../osc/README.md) — so any headset gets the same fractional
 
 ## Key API
 
-- **`AnalogSource`** — where input comes from: per-hand `trigger`/`grip` floats (`AnalogState`).
-  Deliberately **glam-free and minimal** (no 6-DoF pose) so this crate and the `avatar` CLI stay out
-  of the `glam` graph. On-device, an adapter from an OpenXR / `avatar-input` controller implements it.
-  - `DemoSource` — a deterministic triangle-wave source (no hardware) for demos/tests.
-  - `ScriptedSource` — replay precise frames, for tests.
-- **`GestureConfig` / `HandMapping`** — the **pure** mapping: trigger → (`Gesture`, weight) per hand,
-  with a deadzone (removes resting jitter, then rescales `(deadzone, 1]` → `(0, 1]`) and an optional
-  grip gesture. Default: trigger → Fist, grip ignored.
-- **`GestureFrame::updates_since`** — change detection: emits only the `Gesture*` int(s) and
-  `Gesture*Weight` float(s) that moved, so a steady hand stops re-sending.
+- **`AnalogSource`** (`fn poll(&mut self) -> AnalogState`) — where input comes from. The input types
+  are deliberately **glam-free and minimal** (no 6-DoF pose) so this crate and the `avatar` CLI stay
+  out of the `glam` graph:
+  - `AnalogState { left, right }` of `HandInput { trigger, grip }` (floats, clamped to `0..=1`).
+  - `DemoSource::new(period_ticks)` — a deterministic triangle-wave source (no hardware) for
+    demos/tests.
+  - `ScriptedSource::new(frames)` — replay precise `AnalogState` frames, for tests.
+  - On-device, an adapter from an OpenXR / `avatar-input` controller implements `AnalogSource`.
+- **`GestureConfig` / `HandMapping`** — the **pure** mapping: `HandMapping::map(HandInput) ->
+  HandGesture` resolves a trigger → (`Gesture` int 0–7, analog weight) per hand, with a deadzone
+  (removes resting jitter, then rescales `(deadzone, 1]` → `(0, 1]`) and an optional `grip_gesture`.
+  Default: trigger → `Gesture::Fist`, grip ignored. `GestureConfig::resolve(&AnalogState) ->
+  GestureFrame` applies both hands.
+- **`Gesture`** — the eight VRChat gestures (`Neutral`…`ThumbsUp`); `Gesture::as_int()` is the
+  0–7 value VRChat expects. **`HandGesture { gesture: i32, weight: f32 }`** is one resolved hand.
+- **`GestureFrame::updates_since(prev)`** — change detection: emits only the `Gesture*` int(s) and
+  `Gesture*Weight` float(s) that moved (`Vec<ParamUpdate>`), so a steady hand stops re-sending.
 - **`ParamSink`** — the send target (implemented for `avatar_osc::ParamClient`; tests use a recorder).
-- **`GestureDaemon`** — the loop: `tick` (poll → map → emit changed params), `run` (forever), and
-  `run_for` (bounded, for demos/tests).
+- **`GestureDaemon::new(source)`** (or `with_config`) — the loop: `tick` (poll → map → emit changed
+  params), `run` (forever), and `run_for` (bounded, for demos/tests).
 
 ```rust
 use avatar_osc_gestures::{DemoSource, GestureDaemon};

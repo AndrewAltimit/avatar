@@ -24,6 +24,19 @@ pub struct GltfDocument {
 impl GltfDocument {
     /// Load from `.gltf`/`.glb` bytes (embedded or external buffers must be resolvable from bytes;
     /// use [`GltfDocument::import`] for files with sidecar buffers).
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use avatar_gltf::GltfDocument;
+    ///
+    /// let bytes = std::fs::read("avatar.glb")?;
+    /// let doc = GltfDocument::from_slice(&bytes)?;
+    /// let meshes = doc.meshes(); // Vec<avatar_mesh::RawMesh>
+    /// let skeleton = doc.skeleton();
+    /// # let _ = (meshes, skeleton);
+    /// # anyhow::Ok(())
+    /// ```
     pub fn from_slice(bytes: &[u8]) -> Result<Self> {
         let (doc, buffers, _images) =
             gltf::import_slice(bytes).context("parsing glTF from bytes")?;
