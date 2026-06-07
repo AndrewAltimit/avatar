@@ -76,73 +76,81 @@ impl UnityFile {
     /// # anyhow::Ok(())
     /// ```
     pub fn parse(text: &str) -> Result<Self> {
-        Self::parse_inner(text, true)
+        let mut documents = Vec::new();
+        for (header, body_text) in split_documents(text) {
+            // Strict: a body `yaml-rust2` rejects aborts the whole file with context.
+            if let Some(doc) = parse_one(header, &body_text)? {
+                documents.push(doc);
+            }
+        }
+        Ok(UnityFile { documents })
     }
 
     /// Parse a Unity YAML file, **skipping** any document whose body fails to parse instead of
     /// failing the whole file. Unity occasionally serializes scalars (e.g. embedded scripts or
     /// odd quoting in large scenes) that `yaml-rust2` rejects; when a caller only needs a subset
     /// of object types (e.g. Transforms/MeshFilters for rendering), this keeps the rest usable.
+    ///
+    /// Infallible by construction: the per-document parse error is simply dropped, so there is no
+    /// panic path (the previous `.expect(...)` is gone).
     pub fn parse_lossy(text: &str) -> Self {
-        Self::parse_inner(text, false).expect("lossy parse never errors")
-    }
-
-    fn parse_inner(text: &str, strict: bool) -> Result<Self> {
         let mut documents = Vec::new();
-
-        for raw in split_documents(text) {
-            let (header, body_text) = raw;
-            let Some((class_id, file_id, stripped)) = parse_header(header) else {
-                continue;
-            };
-
-            // A stripped header often has an empty body; skip parsing if so.
-            let trimmed = body_text.trim();
-            if trimmed.is_empty() {
-                documents.push(UnityDocument {
-                    class_id,
-                    file_id,
-                    stripped,
-                    type_name: String::new(),
-                    body: Yaml::Null,
-                });
-                continue;
+        for (header, body_text) in split_documents(text) {
+            // Lossy: an unparseable document yields `Err`, which we drop and continue.
+            if let Ok(Some(doc)) = parse_one(header, &body_text) {
+                documents.push(doc);
             }
-
-            let docs = match YamlLoader::load_from_str(&body_text) {
-                Ok(docs) => docs,
-                Err(e) if strict => {
-                    return Err(e)
-                        .with_context(|| format!("parsing Unity document (class {class_id})"));
-                }
-                // Lossy: drop the unparseable document and continue.
-                Err(_) => continue,
-            };
-            let Some(doc) = docs.into_iter().next() else {
-                continue;
-            };
-
-            let (type_name, body) = match doc.as_hash().and_then(|h| h.front()) {
-                Some((k, v)) => (k.as_str().unwrap_or_default().to_string(), v.clone()),
-                None => (String::new(), doc),
-            };
-
-            documents.push(UnityDocument {
-                class_id,
-                file_id,
-                stripped,
-                type_name,
-                body,
-            });
         }
-
-        Ok(UnityFile { documents })
+        UnityFile { documents }
     }
 
     /// Iterate documents that are MonoBehaviours.
     pub fn monobehaviours(&self) -> impl Iterator<Item = &UnityDocument> {
         self.documents.iter().filter(|d| d.is_monobehaviour())
     }
+}
+
+/// Parse one `(header, body)` pair into a [`UnityDocument`]. Returns:
+/// - `Ok(Some(doc))` for a recognised document (including stripped/empty bodies),
+/// - `Ok(None)` to skip (the line wasn't a `--- !u!` header, or the body parsed to nothing),
+/// - `Err(_)` if `yaml-rust2` rejects the body.
+///
+/// [`UnityFile::parse`] propagates the `Err`; [`UnityFile::parse_lossy`] drops it. Pulling the
+/// fallible work into this helper is what lets the lossy path be infallible by construction.
+fn parse_one(header: &str, body_text: &str) -> Result<Option<UnityDocument>> {
+    let Some((class_id, file_id, stripped)) = parse_header(header) else {
+        return Ok(None);
+    };
+
+    // A stripped header often has an empty body; skip parsing if so.
+    if body_text.trim().is_empty() {
+        return Ok(Some(UnityDocument {
+            class_id,
+            file_id,
+            stripped,
+            type_name: String::new(),
+            body: Yaml::Null,
+        }));
+    }
+
+    let docs = YamlLoader::load_from_str(body_text)
+        .with_context(|| format!("parsing Unity document (class {class_id})"))?;
+    let Some(doc) = docs.into_iter().next() else {
+        return Ok(None);
+    };
+
+    let (type_name, body) = match doc.as_hash().and_then(|h| h.front()) {
+        Some((k, v)) => (k.as_str().unwrap_or_default().to_string(), v.clone()),
+        None => (String::new(), doc),
+    };
+
+    Ok(Some(UnityDocument {
+        class_id,
+        file_id,
+        stripped,
+        type_name,
+        body,
+    }))
 }
 
 /// Read the `guid` from a Unity `.meta` file's text, if present.
@@ -281,6 +289,22 @@ Transform:
         assert!(ids.contains(&300), "Transform after the bad doc kept");
         assert!(!ids.contains(&200), "unparseable doc dropped");
         assert_eq!(file.documents.iter().filter(|d| d.class_id == 4).count(), 2);
+    }
+
+    #[test]
+    fn parse_lossy_does_not_panic_on_garbage() {
+        // Inputs that previously risked the `.expect(...)` panic: pure garbage, headers with
+        // wildly malformed bodies, and empty text. None must panic; all return a `UnityFile`.
+        for text in [
+            "",
+            "not yaml at all\n\t\0 \x07 ::: ][}{",
+            "--- !u!114 &200\n\tMonoBehaviour:\n  : : : broken\n   - - mixed\n\tbad indent: [",
+            "--- !u!1 &1\n--- garbage --- !u! &&&\n\u{feff}",
+        ] {
+            let file = UnityFile::parse_lossy(text);
+            // documents.len() is always defined; just touch it so the call isn't optimized away.
+            let _ = file.documents.len();
+        }
     }
 
     #[test]

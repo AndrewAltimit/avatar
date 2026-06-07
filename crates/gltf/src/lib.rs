@@ -103,6 +103,12 @@ impl GltfDocument {
         let reader = prim.reader(|b| self.buffers.get(b.index()).map(|d| d.0.as_slice()));
         let positions: Vec<[f32; 3]> = reader.read_positions()?.collect();
         let vcount = positions.len();
+        // The whole interchange model — indices and the control-point map — is `u32`, so a
+        // primitive with more than `u32::MAX` vertices can't be represented; reject it (returning
+        // `None` degrades to "skip this primitive") rather than wrapping `vcount as u32`.
+        if vcount > u32::MAX as usize {
+            return None;
+        }
         let indices: Vec<u32> = match reader.read_indices() {
             Some(r) => r.into_u32().collect(),
             None => (0..vcount as u32).collect(),
