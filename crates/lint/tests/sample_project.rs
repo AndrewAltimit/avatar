@@ -40,4 +40,30 @@ fn lints_sample_project() {
 
     // No budget error: only 4 synced (int 8 + 3 bool 1 + dup bool 1) = well under 256.
     assert!(!codes.contains(&"VRC010"), "unexpected VRC010: {codes:?}");
+
+    // VRC022: the DeadControl drives nothing (no parameter, sub-parameters, or sub-menu).
+    let empty: Vec<_> = report
+        .diagnostics
+        .iter()
+        .filter(|d| d.code == "VRC022")
+        .collect();
+    assert_eq!(empty.len(), 1, "expected one VRC022: {codes:?}");
+    assert!(empty[0].message.contains("DeadControl"));
+    assert!(empty[0].hint.is_some());
+
+    // VRC012 (project-wide unused expression params): DupName and LocalOnlyFloat are referenced by
+    // no menu control or controller anywhere; VRCEmote (default-layer) and the menu-wired
+    // Toggle1/Toggle2 are excluded. (DupName is declared twice but reported once.)
+    let unused: Vec<_> = report
+        .diagnostics
+        .iter()
+        .filter(|d| d.code == "VRC012")
+        .collect();
+    let unused_names: Vec<&str> = unused.iter().map(|d| d.message.as_str()).collect();
+    assert_eq!(unused.len(), 2, "expected two VRC012: {unused_names:?}");
+    assert!(unused.iter().any(|d| d.message.contains("DupName")));
+    assert!(unused.iter().any(|d| d.message.contains("LocalOnlyFloat")));
+    assert!(!unused.iter().any(|d| d.message.contains("VRCEmote")));
+    assert!(!unused.iter().any(|d| d.message.contains("Toggle1")));
+    assert!(unused.iter().all(|d| d.hint.is_some()));
 }

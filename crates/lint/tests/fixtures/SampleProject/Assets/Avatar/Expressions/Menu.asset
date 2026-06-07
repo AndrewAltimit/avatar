@@ -85,3 +85,11 @@ MonoBehaviour:
     subMenu: {fileID: 0}
     subParameters: []
     labels: []
+  - name: DeadControl
+    type: 101
+    parameter:
+      name: ''
+    value: 1
+    subMenu: {fileID: 0}
+    subParameters: []
+    labels: []
