@@ -21,6 +21,12 @@ use rosc::{OscPacket, OscType};
 
 use crate::{Controller, Pose6dof, TrackerSource, TrackerState};
 
+/// Upper bound on the number of indexed trackers we'll keep state for. The index comes straight
+/// from an untrusted OSC address (`/tracking/tracker/<n>`); without a cap a single hostile packet
+/// with a huge `n` would `resize` the vec to that many entries and OOM/panic. Real rigs use a
+/// handful of trackers, so 256 is far above any legitimate count.
+const MAX_TRACKERS: usize = 256;
+
 /// A live OSC backend: binds a UDP socket and drains pending datagrams on each [`poll`].
 ///
 /// [`poll`]: TrackerSource::poll
@@ -94,6 +100,7 @@ pub fn apply_message(state: &mut TrackerState, addr: &str, args: &[OscType]) {
         _ => {
             if let Some(rest) = addr.strip_prefix("/tracking/tracker/")
                 && let Ok(idx) = rest.parse::<usize>()
+                && idx < MAX_TRACKERS
                 && let Some(p) = read_pose(args)
             {
                 if state.trackers.len() <= idx {
@@ -202,6 +209,39 @@ mod tests {
         apply_message(&mut state, "/tracking/tracker/2", &args);
         assert_eq!(state.trackers.len(), 3, "vec grew to hold index 2");
         assert_eq!(state.trackers[2].position, Vec3::new(0.0, 0.9, 0.0));
+    }
+
+    #[test]
+    fn huge_tracker_index_is_rejected_without_oom() {
+        // A hostile packet with an enormous index must not trigger an unbounded `resize`.
+        let mut state = TrackerState::default();
+        let pose = vec![
+            OscType::Float(0.0),
+            OscType::Float(0.0),
+            OscType::Float(0.0),
+            OscType::Float(0.0),
+            OscType::Float(0.0),
+            OscType::Float(0.0),
+            OscType::Float(1.0),
+        ];
+        for addr in [
+            format!("/tracking/tracker/{}", u32::MAX),
+            format!("/tracking/tracker/{}", usize::MAX),
+            format!("/tracking/tracker/{MAX_TRACKERS}"), // exactly the cap (out of range)
+        ] {
+            apply_message(&mut state, &addr, &pose);
+            assert!(
+                state.trackers.len() <= MAX_TRACKERS,
+                "index {addr} must not grow trackers past the cap"
+            );
+        }
+        // The last in-range index is still accepted.
+        apply_message(
+            &mut state,
+            &format!("/tracking/tracker/{}", MAX_TRACKERS - 1),
+            &pose,
+        );
+        assert_eq!(state.trackers.len(), MAX_TRACKERS);
     }
 
     #[test]

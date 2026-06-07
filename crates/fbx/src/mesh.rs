@@ -501,3 +501,42 @@ fn chunk3(flat: &[f32]) -> Vec<[f32; 3]> {
 fn chunk2(flat: &[f32]) -> Vec<[f32; 2]> {
     flat.chunks_exact(2).map(|c| [c[0], c[1]]).collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn triangulate_ignores_out_of_range_control_point_indices() {
+        // `PolygonVertexIndex` points at control points that don't exist in `Vertices` (a tiny
+        // 1-point buffer). The hostile indices must be skipped, not panic or wrap into a bad slice.
+        let vertices = vec![0.0, 0.0, 0.0]; // a single control point (indices 1..=3 are invalid)
+        // A quad referencing control points 0,1,2,3 — only 0 is in range; the polygon ends at !3.
+        let pvi = vec![0, 1, 2, !3];
+        let tri = triangulate(&vertices, &pvi);
+        // No panic; only the in-range control point could ever be emitted, so the (degenerate)
+        // triangle soup contains no out-of-bounds reads.
+        assert!(tri.positions.iter().all(|p| *p == [0.0, 0.0, 0.0]));
+        assert_eq!(tri.positions.len(), tri.control_point_of_vertex.len());
+    }
+
+    #[test]
+    fn triangulate_handles_huge_index_without_wrapping() {
+        // A control-point index of i32::MAX must not wrap `usize` and slip past the bounds check.
+        let vertices = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0];
+        let pvi = vec![0, 1, i32::MAX, !2]; // last entry closes the polygon at control point 2
+        let tri = triangulate(&vertices, &pvi);
+        // The i32::MAX vertex is dropped; in-range ones (0,1,2) survive.
+        assert!(tri.control_point_of_vertex.iter().all(|&c| c <= 2));
+        assert_eq!(tri.positions.len(), tri.control_point_of_vertex.len());
+    }
+
+    #[test]
+    fn chunkers_drop_a_trailing_partial_group() {
+        // A malformed flat array whose length isn't a multiple of the component count must not
+        // panic; `chunks_exact` simply ignores the remainder.
+        assert_eq!(chunk3(&[1.0, 2.0, 3.0, 4.0]), vec![[1.0, 2.0, 3.0]]);
+        assert_eq!(chunk2(&[1.0, 2.0, 3.0]), vec![[1.0, 2.0]]);
+        assert_eq!(chunk3(&[1.0]), Vec::<[f32; 3]>::new());
+    }
+}
