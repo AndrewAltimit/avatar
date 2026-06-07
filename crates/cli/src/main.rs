@@ -91,6 +91,19 @@ struct RenderArgs {
     /// Camera orbit pitch above the scene, in degrees.
     #[arg(long, default_value_t = 18.0)]
     pitch: f32,
+    /// What the camera frames on. `avatar` (the default when an avatar is dropped into a world)
+    /// fills the shot with the avatar, the map visible around it; `world` frames the whole scene.
+    #[arg(long, value_enum)]
+    frame: Option<FrameTarget>,
+}
+
+/// Camera framing target for `avatar render`.
+#[derive(clap::ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
+enum FrameTarget {
+    /// Frame on the avatar, with the surrounding map visible.
+    Avatar,
+    /// Frame on the entire scene's bounds.
+    World,
 }
 
 #[derive(Subcommand, Debug)]
@@ -415,6 +428,9 @@ fn render(args: &RenderArgs) -> Result<()> {
     }
     let mut meshes = Vec::new();
     let mut textures = texture::TextureSet::new();
+    // Where to drop the avatar inside the world, and the bounds to frame on if framing on it.
+    let mut spawn = None;
+    let mut avatar_bounds = None;
     if let Some(world) = &args.world {
         let wl = render_scene::load_world(world, &mut textures)?;
         println!(
@@ -425,11 +441,35 @@ fn render(args: &RenderArgs) -> Result<()> {
             wl.skipped_builtin,
             wl.skipped_unresolved
         );
+        spawn = wl.spawn;
         meshes.extend(wl.meshes);
     }
     if let Some(avatar) = &args.avatar {
-        let av = render_scene::load_avatar(avatar, &mut textures)?;
-        println!("avatar: {} mesh(es) from {}", av.len(), avatar.display());
+        // With a world, drop the avatar at its spawn point at human scale; otherwise render it alone.
+        let av = match spawn {
+            Some(p) if args.world.is_some() => {
+                let (av, bounds) = render_scene::load_avatar_in_world(avatar, p, &mut textures)?;
+                println!(
+                    "avatar: {} mesh(es) from {}, dropped at world spawn ({:.1}, {:.1}, {:.1})",
+                    av.len(),
+                    avatar.display(),
+                    p.x,
+                    p.y,
+                    p.z
+                );
+                avatar_bounds = Some(bounds);
+                av
+            }
+            _ => {
+                if args.world.is_some() {
+                    println!("note: world declares no spawn point; rendering avatar at the origin");
+                }
+                let av = render_scene::load_avatar(avatar, &mut textures)?;
+                println!("avatar: {} mesh(es) from {}", av.len(), avatar.display());
+                avatar_bounds = render_scene::mesh_bounds(&av);
+                av
+            }
+        };
         meshes.extend(av);
     }
 
@@ -437,6 +477,20 @@ fn render(args: &RenderArgs) -> Result<()> {
     if !textures.is_empty() {
         println!("textures: {} decoded", textures.len());
     }
+    // Default to framing on the avatar when one is present; `--frame world` overrides.
+    let frame = args.frame.unwrap_or(if avatar_bounds.is_some() {
+        FrameTarget::Avatar
+    } else {
+        FrameTarget::World
+    });
+    let focus = match frame {
+        // Pull back to show the map around a world-placed avatar; frame a standalone avatar tightly
+        // (with no world, the scene bounds already equal the avatar's).
+        FrameTarget::Avatar if args.world.is_some() => {
+            avatar_bounds.map(|b| render_scene::expand_bounds(b, 2.4))
+        }
+        _ => None,
+    };
     let scene = render_scene::scene_from_meshes(
         meshes,
         textures,
@@ -444,6 +498,7 @@ fn render(args: &RenderArgs) -> Result<()> {
         args.height,
         args.yaw,
         args.pitch,
+        focus,
     )?;
     let tris: usize = scene.meshes.iter().map(|m| m.indices.len() / 3).sum();
     println!(

@@ -184,6 +184,51 @@ pub fn load_avatar(path: &Path, tex: &mut TextureSet) -> Result<Vec<RenderMesh>>
     load_avatar_placed(path, Mat4::IDENTITY, tex)
 }
 
+/// Standing height (metres) an avatar is normalised to when dropped into a world, so a model
+/// authored in any unit system (FBX cm, MMD metres × 8, …) stands at human scale beside the map.
+const AVATAR_HEIGHT_M: f32 = 1.6;
+
+/// World-space axis-aligned bounds of a placed mesh list (each vertex through its `transform`).
+pub fn mesh_bounds(meshes: &[RenderMesh]) -> Option<(Vec3, Vec3)> {
+    let mut min = Vec3::splat(f32::INFINITY);
+    let mut max = Vec3::splat(f32::NEG_INFINITY);
+    for m in meshes {
+        for p in &m.positions {
+            let w = m.transform.transform_point3(Vec3::from(*p));
+            min = min.min(w);
+            max = max.max(w);
+        }
+    }
+    min.is_finite().then_some((min, max))
+}
+
+/// Load an avatar and drop it into a world at `spawn` (a renderer-space point — see
+/// [`crate::world::WorldLoad::spawn`]), the way VRChat materialises a player there. The avatar is
+/// normalised to [`AVATAR_HEIGHT_M`] regardless of its authored units and stood with its feet on the
+/// spawn point. Returns the placed meshes plus their world-space bounds, so the caller can frame the
+/// camera on the avatar rather than on the whole map.
+pub fn load_avatar_in_world(
+    path: &Path,
+    spawn: Vec3,
+    tex: &mut TextureSet,
+) -> Result<(Vec<RenderMesh>, (Vec3, Vec3))> {
+    // Upright-local geometry at the origin; re-placed once we know its size.
+    let mut meshes = load_avatar_placed(path, Mat4::IDENTITY, tex)?;
+    let (min, max) =
+        mesh_bounds(&meshes).ok_or_else(|| anyhow::anyhow!("avatar has no geometry"))?;
+    let scale = AVATAR_HEIGHT_M / (max.y - min.y).max(1e-4);
+    let foot = Vec3::new((min.x + max.x) * 0.5, min.y, (min.z + max.z) * 0.5);
+    // feet-centre → spawn, uniformly scaled to human height.
+    let place = Mat4::from_translation(spawn)
+        * Mat4::from_scale(Vec3::splat(scale))
+        * Mat4::from_translation(-foot);
+    for m in &mut meshes {
+        m.transform = place * m.transform;
+    }
+    let bounds = mesh_bounds(&meshes).expect("non-empty after placement");
+    Ok((meshes, bounds))
+}
+
 /// Unity is left-handed (X right, Y up, Z forward); the renderer is right-handed. Negating Z
 /// converts world geometry (and a co-placed avatar) into the renderer's space.
 pub fn unity_to_renderer() -> Mat4 {
@@ -195,7 +240,11 @@ pub fn load_world(path: &Path, tex: &mut TextureSet) -> Result<crate::world::Wor
     crate::world::load(path, unity_to_renderer(), tex)
 }
 
-/// Assemble a [`Scene`] from meshes + the resolved texture pool, auto-framing the camera to bounds.
+/// Assemble a [`Scene`] from meshes + the resolved texture pool, auto-framing the camera.
+///
+/// `focus`, when given, is the bounding box the camera frames on (e.g. an avatar dropped into a
+/// world, so it fills the shot with the map visible around it); otherwise the camera frames every
+/// mesh in the scene.
 pub fn scene_from_meshes(
     meshes: Vec<RenderMesh>,
     textures: Vec<Texture>,
@@ -203,6 +252,7 @@ pub fn scene_from_meshes(
     height: u32,
     yaw_deg: f32,
     pitch_deg: f32,
+    focus: Option<(Vec3, Vec3)>,
 ) -> Result<Scene> {
     if meshes.is_empty() {
         bail!("nothing to render (no meshes)");
@@ -221,7 +271,17 @@ pub fn scene_from_meshes(
         light: Light::default(),
         background: [0.10, 0.11, 0.13, 1.0],
     };
-    let (min, max) = scene.world_bounds().expect("non-empty meshes have bounds");
+    let (min, max) = focus
+        .or_else(|| scene.world_bounds())
+        .expect("non-empty meshes have bounds");
     scene.camera = Camera::frame_bounds(min, max, width as f32 / height as f32, yaw_deg, pitch_deg);
     Ok(scene)
+}
+
+/// Grow a bounding box about its centre by `factor` — used to pull the camera back from a focused
+/// avatar so the surrounding map is visible in the frame.
+pub fn expand_bounds((min, max): (Vec3, Vec3), factor: f32) -> (Vec3, Vec3) {
+    let center = (min + max) * 0.5;
+    let half = (max - min) * 0.5 * factor;
+    (center - half, center + half)
 }
