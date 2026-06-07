@@ -121,6 +121,23 @@ pub struct BodyIkTargets {
 
 /// Map a tracking frame to arm IK targets: each hand target is the controller position; the pole
 /// (elbow hint) sits below the controller in its own frame, so elbows bend down-and-out naturally.
+///
+/// # Example
+///
+/// ```
+/// use avatar_input::{TrackerState, body_ik_targets};
+/// use glam::Vec3;
+///
+/// let mut state = TrackerState::default();
+/// state.left.pose.position = Vec3::new(-0.3, 1.0, 0.2);
+/// state.hmd.position = Vec3::new(0.0, 1.6, 0.0);
+///
+/// let targets = body_ik_targets(&state);
+/// assert_eq!(targets.left_hand.position, Vec3::new(-0.3, 1.0, 0.2));
+/// assert_eq!(targets.head, Vec3::new(0.0, 1.6, 0.0));
+/// // Identity controller orientation → the elbow pole drops 0.3 straight down from the hand.
+/// assert_eq!(targets.left_hand.pole, Vec3::new(-0.3, 0.7, 0.2));
+/// ```
 pub fn body_ik_targets(state: &TrackerState) -> BodyIkTargets {
     let arm_pole =
         |c: &Controller| c.pose.position + c.pose.orientation * Vec3::new(0.0, -0.3, 0.0);

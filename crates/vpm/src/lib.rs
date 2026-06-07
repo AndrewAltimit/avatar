@@ -36,6 +36,19 @@ pub struct UnityProject {
 impl UnityProject {
     /// Discover a project by walking up from `start` looking for `Packages/vpm-manifest.json`.
     /// Falls back to treating `start` as the root if it directly contains an `Assets` directory.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use avatar_vpm::UnityProject;
+    /// use std::path::Path;
+    ///
+    /// let project = UnityProject::discover(Path::new("./MyAvatarProject"))?;
+    /// if project.has_avatar_sdk() {
+    ///     println!("avatars SDK {:?}", project.package_version(avatar_vpm::AVATAR_SDK));
+    /// }
+    /// # anyhow::Ok(())
+    /// ```
     pub fn discover(start: &Path) -> Result<Self> {
         let start = start
             .canonicalize()

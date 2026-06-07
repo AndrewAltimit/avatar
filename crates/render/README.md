@@ -18,8 +18,17 @@ The caller hands it world-space meshes. In this repo that caller is the `avatar 
 
 ## Key API
 
-- `Scene { meshes, camera, light, background }`, `RenderMesh { positions, normals, indices, color,
-  transform }` (empty `normals` ⇒ smooth normals are computed), `Camera`, `Light`.
+- `Scene { meshes, camera, light, background, textures }`, `RenderMesh { positions, normals, uvs,
+  indices, color, texture, transform }` (empty `normals` ⇒ smooth normals are computed), `Camera`,
+  `Light`.
+- `RenderMesh::new(positions, indices)` (mid-grey, computed normals, untextured), then
+  `with_color(rgba)` / `with_transform(mat4)`.
+- **Texturing** is a pool-by-index design: `Scene.textures: Vec<Texture>` is the texture pool
+  (`Texture { width, height, rgba }`, RGBA8 row-major top-to-bottom — the renderer only ever uploads
+  decoded RGBA8, decoding lives in the cli), and a mesh opts in by setting `RenderMesh.texture =
+  Some(i)` plus per-vertex `uvs`. An **untextured** mesh (`texture: None`, empty `uvs`) is drawn with
+  just its `color` tint — internally bound to a 1×1 white texel so one shader path serves both; the
+  textured path is `texture × tint` with a 0.5 alpha cutout (foliage/hair cards).
 - `Camera::frame_bounds(min, max, aspect, yaw, pitch)` — orbit-frame an AABB to a 3/4 view.
 - `Scene::world_bounds()` — AABB over all placed meshes.
 - `render_to_rgba(&scene, w, h) -> Result<Vec<u8>>` — returns `Err` if no GPU adapter is available.
@@ -29,7 +38,7 @@ The caller hands it world-space meshes. In this repo that caller is the `avatar 
 use avatar_render::{Scene, RenderMesh, Camera, Light};
 # use glam::Vec3;
 let mesh = RenderMesh::new(positions, indices);
-let mut scene = Scene { meshes: vec![mesh], camera: /* … */
+let mut scene = Scene { meshes: vec![mesh], textures: vec![], camera: /* … */
 #   Camera { eye: Vec3::ONE, target: Vec3::ZERO, up: Vec3::Y, fov_y_deg: 45.0, znear: 0.1, zfar: 100.0 },
     light: Light::default(), background: [0.1, 0.11, 0.13, 1.0] };
 let (min, max) = scene.world_bounds().unwrap();

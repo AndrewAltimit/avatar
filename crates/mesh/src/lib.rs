@@ -19,6 +19,29 @@ use serde::Serialize;
 /// weights. Without it, weights cannot be reattached after fan-triangulation.
 ///
 /// [`control_point_of_vertex`]: RawMesh::control_point_of_vertex
+///
+/// # Example
+///
+/// ```
+/// use avatar_mesh::RawMesh;
+///
+/// // A static (unskinned) quad, two triangles, no material info.
+/// let mesh = RawMesh {
+///     model_id: 0,
+///     positions: vec![[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 1.0, 0.0], [0.0, 1.0, 0.0]],
+///     normals: None,
+///     uvs: None,
+///     indices: vec![0, 1, 2, 0, 2, 3],
+///     control_point_of_vertex: vec![0, 1, 2, 3],
+///     skin: None,
+///     materials: Vec::new(),
+///     material_of_triangle: Vec::new(),
+/// };
+/// assert_eq!(mesh.vertex_count(), 4);
+/// assert!(!mesh.is_skinned());
+/// // Every mesh has at least slot 0, so the slot count floors at 1.
+/// assert_eq!(mesh.material_slot_count(), 1);
+/// ```
 #[derive(Debug, Clone, Serialize)]
 pub struct RawMesh {
     /// FBX object id (or glTF mesh index) of the mesh node this came from.
