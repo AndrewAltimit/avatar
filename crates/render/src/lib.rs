@@ -20,6 +20,11 @@ use glam::{Mat4, Vec3};
 
 mod gpu;
 
+#[cfg(feature = "viewer")]
+mod viewer;
+#[cfg(feature = "viewer")]
+pub use viewer::view;
+
 /// An RGBA8 texture image (row-major, top-to-bottom, 4 bytes/pixel), referenced by index from a
 /// [`RenderMesh`] via [`Scene::textures`].
 #[derive(Debug, Clone)]

@@ -15,3 +15,10 @@ wgpu = "29"
 pollster = "0.4"
 bytemuck = { version = "1", features = ["derive"] }
 png = "0.18"
+# Interactive windowed viewer (feature `viewer`); the offscreen PNG path needs none of this.
+winit = { version = "0.30", optional = true }
+
+[features]
+# `avatar view` — opens a native orbit/walk window. Off by default so headless/CI builds and the
+# offscreen render need no windowing/display dependencies.
+viewer = ["dep:winit"]

@@ -25,6 +25,9 @@ interface. Each subcommand has a `--json` flag for machine-readable output.
 | `avatar osc change <avtr-id>` | Ask VRChat to load a different avatar. |
 | `avatar osc query <config.json>` | Parse an avatar's OSCQuery config JSON and list its parameters (offline; `--json` available). |
 | `avatar osc gestures` | Run the analog-gesture daemon ("Vive advanced controls on any hardware"): controller trigger → `Gesture*`/`Gesture*Weight`. No on-device input backend headless yet, so it drives a synthetic demo sweep (`--hz`/`--period`/`--seconds`). |
+| `avatar unitypackage info\|list\|extract\|testbed <pkg>` | Inspect a `.unitypackage` (contents, detected SDK, avatar/world), list its assets, extract it into a Unity `Assets/` tree, or cross-check an avatar package against a world package for co-import conflicts. |
+| `avatar render [--avatar X] [--world Y] -o out.png` | Offscreen GPU preview → PNG. With both, the avatar is dropped at the world's player-spawn point at human scale; `--frame avatar\|world`, `--width/--height/--yaw/--pitch`. |
+| `avatar view [--avatar X] [--world Y]` | Open an interactive window onto the same scene: drag = orbit, wheel = zoom, WASD/Space/Shift = walk, R = reset, Esc = quit. Needs a display (cli `viewer` feature, on by default). |
 
 ```sh
 cargo run -p avatar-cli -- armature fix model.fbx            # dry run
@@ -35,6 +38,9 @@ cargo run -p avatar-cli -- anim-gen blendtree --parameter GestureLeftWeight \
 cargo run -p avatar-cli -- osc send VRCEmote 3                # wave, on a running VRChat
 cargo run -p avatar-cli -- osc query ~/.../OSC/usr_…/Avatars/avtr_….json
 cargo run -p avatar-cli -- osc gestures --seconds 10         # analog-gesture demo sweep
+cargo run -p avatar-cli -- unitypackage extract avatar.unitypackage -o avatar-proj
+cargo run -p avatar-cli -- render --avatar avatar.fbx --world world/Assets/Scene.unity -o in-world.png
+cargo run -p avatar-cli -- view   --avatar avatar.fbx --world world/Assets/Scene.unity  # interactive
 ```
 
 ## Exit codes

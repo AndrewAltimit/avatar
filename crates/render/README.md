@@ -1,7 +1,8 @@
 # avatar-render
 
-Offscreen GPU renderer — geometry in, PNG out, headless. Package `avatar-render` ·
-lib `avatar_render`. Part of the [avatar](../../README.md) monorepo.
+Offscreen GPU renderer — geometry in, PNG out, headless; **plus** an optional interactive window
+(feature `viewer`). Package `avatar-render` · lib `avatar_render`. Part of the
+[avatar](../../README.md) monorepo.
 
 ## What it does
 
@@ -44,7 +45,18 @@ avatar_render::save_png("out.png".as_ref(), 960, 720, &rgba)?;
   into one vertex/index buffer drawn in a single call, with per-mesh colour as a vertex attribute.
 - 4× MSAA, a depth buffer, two-sided directional + ambient lighting (imported meshes have
   inconsistent winding, so faces are lit from both sides), right-handed `0..1`-depth camera.
-- Each call creates its own device — the preview is one-shot, not a render loop.
+- The offscreen path creates its own device per call — a one-shot preview, not a render loop.
+
+## Interactive viewer (feature `viewer`)
+
+`view(scene, title)` (behind the off-by-default `viewer` feature) opens a **winit** window onto the
+same `Scene`, drawn with the same geometry/shader pipeline but to a live swapchain surface that
+re-renders every frame from an orbit camera: **drag** to orbit, **wheel** to zoom, **WASD**
+(+Space/Shift) to walk the focus point, **R** to reset, **Esc** to quit. It opens at the framing the
+offscreen render would produce (`Orbit::from_camera(scene.camera)`). The feature adds `winit`; the
+offscreen PNG path pulls none of it. In this repo the caller is `avatar view`
+(`crates/cli/src/main.rs`). Still GPU-only — it knows nothing of FBX/Unity; the caller assembles the
+scene (e.g. an avatar dropped at a world's spawn point).
 
 ## Status
 

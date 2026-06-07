@@ -30,7 +30,7 @@ backend remains. See [`PLAN.md`](PLAN.md) for the roadmap and the [Status](#stat
 | [`docs/reference/anim-gen.md`](docs/reference/anim-gen.md) | `avatar-anim-gen`: `.anim` clip + analog-gesture blend-tree generation (Unity-YAML emitter, deterministic fileIDs). |
 | [`docs/reference/osc-runtime.md`](docs/reference/osc-runtime.md) | `avatar-osc`: VRChat OSC address space, codec, UDP client, OSCQuery avatar-config parsing. |
 | [`docs/reference/unitypackage.md`](docs/reference/unitypackage.md) | `avatar-unitypackage`: reading the `.unitypackage` format, extracting to a Unity project tree, the avatar-in-world co-import testbed. |
-| [`docs/reference/render.md`](docs/reference/render.md) | `avatar-render` / `avatar render`: offscreen wgpu preview pipeline, avatar rest-pose render (auto-upright), experimental world-scene render + limits. |
+| [`docs/reference/render.md`](docs/reference/render.md) | `avatar-render` / `avatar render` + `avatar view`: offscreen wgpu preview pipeline, avatar rest-pose render (auto-upright), world-scene render, avatar-dropped-at-spawn-in-world, interactive winit viewer (orbit/zoom/walk) + limits. |
 | [`docs/tutorial.md`](docs/tutorial.md) | End-to-end CLI walkthrough (FBX → armature → lint → stats). |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | No-external-contributions policy, then the internal dev reference: build/test/lint, conventions, adding a lint rule or crate. |
 
@@ -182,7 +182,14 @@ materials, and props (clocks/iPad/pens) textured at correct real-world sizes ins
 flat-lit (base-colour texture × tint, one Lambert light — no normal/metallic/emission maps, no blend
 transparency beyond the 0.5 cutout, no lightmaps/custom shaders), `image`-decodable formats only (no
 DDS/PSD/EXR → flat colour), no FBX pivots/pre-rotation/geometric-transform/`InheritType`, no prefab
-nesting. Headless smoke test gated on adapter availability. Behaviour: `docs/reference/render.md`.
+nesting. Headless smoke test gated on adapter availability. **Avatar-in-world (built):** with both
+`--avatar` and `--world`, the avatar is dropped at the world's **player-spawn point** (resolved from
+the `VRC_SceneDescriptor`/`VRCWorld` transform), normalised to **human height** (1.6 m, any source
+units) with its feet on the spawn, and the camera frames on it (`--frame avatar|world`). **Interactive
+viewer (built; `avatar view`):** the same assembled scene in a native **winit** window — orbit (drag) /
+zoom (wheel) / walk (WASD+Space/Shift) / reset (R), reusing the offscreen geometry+shader pipeline but
+drawing to a live surface (`avatar-render`'s off-by-default `viewer` feature, on by default in the
+cli; winit builds headlessly, needs a display only at runtime). Behaviour: `docs/reference/render.md`.
 
 **Asset generation — M4 (built; library + CLI):** `avatar-anim-gen` emits Unity-YAML `.anim` clips
 (`AnimationClip`, class 74 — blendshape-weight and GameObject-active curves) and FX-layer analog-
