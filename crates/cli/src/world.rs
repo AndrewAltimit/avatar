@@ -54,6 +54,9 @@ pub struct WorldLoad {
     pub placed_prefabs: usize,
     pub skipped_builtin: usize,
     pub skipped_unresolved: usize,
+    /// Where VRChat would materialise a player, in **renderer space** (already × `extra`), if the
+    /// scene declares one — the natural place to drop a test avatar. See [`find_spawn`].
+    pub spawn: Option<Vec3>,
 }
 
 fn ref_fileid(node: &Yaml, key: &str) -> Option<i64> {
@@ -637,13 +640,47 @@ pub fn load(path: &Path, extra: Mat4, tex: &mut TextureSet) -> Result<WorldLoad>
         );
     }
 
+    let spawn = find_spawn(&uf, &nodes, &transform_of_go, &mut tf_cache, extra);
+
     Ok(WorldLoad {
         meshes: out,
         placed,
         placed_prefabs,
         skipped_builtin,
         skipped_unresolved,
+        spawn,
     })
+}
+
+/// Find where VRChat would materialise a player, returned in **renderer space** (× `extra`).
+///
+/// Preferred source is the scene's `VRC_SceneDescriptor` (a MonoBehaviour with a `spawns` list of
+/// transform references) — its first spawn is the default. Failing that (e.g. the descriptor's body
+/// didn't survive lossy parsing), we fall back to the transform of the GameObject conventionally
+/// named `VRCWorld`, which the descriptor lives on. `None` if neither is present.
+fn find_spawn(
+    uf: &UnityFile,
+    nodes: &HashMap<i64, Node>,
+    transform_of_go: &HashMap<i64, i64>,
+    tf_cache: &mut HashMap<i64, Mat4>,
+    extra: Mat4,
+) -> Option<Vec3> {
+    let spawn_tfid = uf
+        .documents
+        .iter()
+        .filter(|d| d.class_id == 114)
+        .find_map(|d| d.body["spawns"].as_vec().and_then(|v| v.first()))
+        .and_then(|s| field_i64(s, "fileID"))
+        .filter(|id| nodes.contains_key(id))
+        .or_else(|| {
+            // Fallback: the GameObject named "VRCWorld" → its transform.
+            uf.documents
+                .iter()
+                .filter(|d| d.class_id == 1 && d.name() == Some("VRCWorld"))
+                .find_map(|d| transform_of_go.get(&d.file_id).copied())
+        })?;
+    let world = extra * world_matrix(spawn_tfid, nodes, tf_cache);
+    Some(world.w_axis.truncate())
 }
 
 /// A Unity `PrefabInstance` (class 1001), distilled to what we need to place an instanced model.

@@ -8,13 +8,13 @@ use wgpu::util::DeviceExt;
 
 use crate::Scene;
 
-const SAMPLES: u32 = 4;
+pub(crate) const SAMPLES: u32 = 4;
 const COLOR_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
-const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
+pub(crate) const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
-struct Vertex {
+pub(crate) struct Vertex {
     pos: [f32; 3],
     nrm: [f32; 3],
     col: [f32; 4],
@@ -23,25 +23,25 @@ struct Vertex {
 
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
-struct Globals {
-    view_proj: [[f32; 4]; 4],
+pub(crate) struct Globals {
+    pub(crate) view_proj: [[f32; 4]; 4],
     // xyz = light direction (normalized), w unused.
-    light_dir: [f32; 4],
+    pub(crate) light_dir: [f32; 4],
     // rgb = light colour, a = ambient fraction.
-    light_color: [f32; 4],
+    pub(crate) light_color: [f32; 4],
 }
 
 /// One contiguous span of the index buffer that shares a texture (or `None` = the flat-colour /
 /// white default), drawn in a single call with that texture's bind group bound.
-struct Batch {
-    texture: Option<usize>,
-    range: std::ops::Range<u32>,
+pub(crate) struct Batch {
+    pub(crate) texture: Option<usize>,
+    pub(crate) range: std::ops::Range<u32>,
 }
 
 /// Flatten the scene into a single world-space vertex buffer (transforms baked on CPU) plus an
 /// index buffer grouped into per-texture [`Batch`]es, so each texture is bound once and drawn over
 /// its own index range. Untextured meshes share one `None` batch (the white default texture).
-fn build_geometry(scene: &Scene) -> (Vec<Vertex>, Vec<u32>, Vec<Batch>) {
+pub(crate) fn build_geometry(scene: &Scene) -> (Vec<Vertex>, Vec<u32>, Vec<Batch>) {
     let mut vertices = Vec::new();
     // texture-key (-1 = none) -> the index list drawing into `vertices` for that texture.
     let mut buckets: std::collections::BTreeMap<i64, Vec<u32>> = std::collections::BTreeMap::new();
@@ -101,7 +101,7 @@ fn build_geometry(scene: &Scene) -> (Vec<Vertex>, Vec<u32>, Vec<Batch>) {
 
 /// Upload one RGBA8 texture and return a view. A zero-sized or mismatched buffer falls back to a
 /// 1×1 magenta texel so a bad asset is visible rather than a validation error.
-fn upload_texture(
+pub(crate) fn upload_texture(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
     t: &crate::Texture,
@@ -485,7 +485,7 @@ pub async fn render(scene: &Scene, width: u32, height: u32) -> Result<Vec<u8>> {
     Ok(rgba)
 }
 
-const SHADER: &str = r#"
+pub(crate) const SHADER: &str = r#"
 struct Globals {
     view_proj: mat4x4<f32>,
     light_dir: vec4<f32>,

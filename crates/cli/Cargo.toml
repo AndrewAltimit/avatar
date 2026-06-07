@@ -34,6 +34,13 @@ avatar-osc-gestures = { path = "../osc-gestures" }
 # the format set lean; these cover Unity project + FBX-embedded textures in practice.
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "tga", "bmp", "gif"] }
 
+[features]
+# On by default so `avatar view` (the interactive window) works out of the box. winit builds fine
+# headlessly — it only needs a display at runtime — so CI builds stay green. Disable with
+# `--no-default-features` for a pure-offscreen build with no windowing deps.
+default = ["viewer"]
+viewer = ["avatar-render/viewer"]
+
 [dev-dependencies]
 # Used only to synthesize binary FBX fixtures in-memory for the CLI exit-code tests.
 fbxcel = { version = "0.9", features = ["tree", "writer"] }

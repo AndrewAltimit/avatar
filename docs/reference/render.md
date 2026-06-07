@@ -101,10 +101,36 @@ cabin's remapped materials, the props' `_MainTex`).
 - **No prefab nesting or per-platform import overrides**, and only the first material per renderer is
   read for colour.
 
+## Dropping an avatar into a world — `avatar render --avatar X --world Y`
+
+With both an avatar and a world, the avatar is placed where VRChat would **materialise a player**:
+the world loader resolves the scene's player spawn (the `VRC_SceneDescriptor`'s first `spawns[]`
+transform, falling back to the `VRCWorld` GameObject's transform) and returns it in renderer space
+(`WorldLoad::spawn`). `render_scene::load_avatar_in_world` then normalises the avatar to **human
+height** (1.6 m — regardless of its authored units, since ripped/MMD FBXs vary wildly) and stands its
+feet on the spawn point. Without spawn placement the avatar would sit at the world origin at its own
+scale and be lost beside the map.
+
+The camera defaults to **framing on the avatar** (its bounds grown ~2.4× so the map shows around it);
+`--frame world` frames the whole scene instead, `--frame avatar` forces avatar-framing. A standalone
+avatar (no world) is framed tightly as before. Validated: the SDK2 avatar stands at the Cozy Cabin's
+real spawn point, on the porch, at correct scale.
+
+## Interactive viewer — `avatar view --avatar X --world Y`
+
+`avatar view` opens a native window onto the same assembled scene (built by the shared
+`assemble_scene`) instead of writing a PNG: **drag** to orbit, **wheel** to zoom, **WASD**
+(+Space/Shift) to walk the focus point through the cabin, **R** to reset, **Esc** to quit. It reuses
+the offscreen geometry/shader pipeline (`crates/render/src/viewer.rs`, feature `viewer`) but draws to
+a live swapchain surface re-rendered every frame from an orbit camera, opening at the same framing
+the PNG would produce. The CLI's `viewer` feature is on by default (winit builds headlessly; it only
+needs a display at runtime); `--no-default-features` drops it for a pure-offscreen binary.
+
 ## Verifying
 
 The output is a PNG you can open. The avatar path renders the real SDK2 avatar upright, undistorted,
 and **textured** from its embedded materials. The world path assembles real Unity scenes at correct
 scale **and texture** (validated against the Cozy Cabin world) — geometrically faithful, shaded with
 base-colour textures (flat-lit, not shader-accurate) per the limitations above. Combined
-`--avatar --world` composes both into one frame at consistent scale.
+`--avatar --world` drops the avatar at the world's player-spawn point at human scale and frames on
+it; `avatar view` shows the same scene in an interactive orbit/walk window.
