@@ -350,6 +350,9 @@ struct StatsArgs {
     /// Emit a machine-readable JSON report instead of human-readable text.
     #[arg(long)]
     json: bool,
+    /// Write the report to this file instead of stdout (honors `--json`).
+    #[arg(short, long)]
+    output: Option<PathBuf>,
 }
 
 #[derive(Args, Debug)]
@@ -362,6 +365,9 @@ struct LintArgs {
     /// Exit non-zero if any warnings are found, not just errors (useful for gating CI).
     #[arg(long)]
     deny_warnings: bool,
+    /// Write the report to this file instead of stdout (honors `--json`).
+    #[arg(short, long)]
+    output: Option<PathBuf>,
 }
 
 #[derive(Subcommand, Debug)]
@@ -597,72 +603,95 @@ fn stats(args: &StatsArgs) -> Result<()> {
 
     if is_fbx {
         let report = avatar_stats::analyze_fbx(&args.path)?;
-        if args.json {
-            println!("{}", serde_json::to_string_pretty(&report)?);
+        let text = if args.json {
+            serde_json::to_string_pretty(&report)?
         } else {
-            print_perf_report(&report);
-        }
-        return Ok(());
+            format_perf_report(&report)
+        };
+        return emit_report(args.output.as_deref(), &text);
     }
 
     let reports = avatar_stats::analyze_project(&args.path)?;
     if args.json {
-        println!("{}", serde_json::to_string_pretty(&reports)?);
-        return Ok(());
+        let text = serde_json::to_string_pretty(&reports)?;
+        return emit_report(args.output.as_deref(), &text);
     }
+    let mut out = String::new();
     if reports.is_empty() {
-        println!("No avatars found (no VRC Avatar Descriptor in any prefab/scene under Assets/).");
+        out.push_str(
+            "No avatars found (no VRC Avatar Descriptor in any prefab/scene under Assets/).",
+        );
     }
     for (i, report) in reports.iter().enumerate() {
         if i > 0 {
-            println!();
+            out.push('\n');
         }
-        print_perf_report(report);
+        out.push_str(&format_perf_report(report));
     }
-    Ok(())
+    emit_report(args.output.as_deref(), &out)
 }
 
-fn print_perf_report(report: &avatar_stats::PerfReport) {
+/// Render a performance report to a human-readable string (the body of `avatar stats`).
+fn format_perf_report(report: &avatar_stats::PerfReport) -> String {
     use avatar_stats::Platform;
+    use std::fmt::Write;
 
+    let mut out = String::new();
     let kind = match report.kind {
         "fbx" => "FBX geometry",
         _ => "avatar components",
     };
-    println!("Performance: {}  [{kind}]\n", report.source);
+    let _ = writeln!(out, "Performance: {}  [{kind}]\n", report.source);
 
-    let row = |name: &str, value: &str, pc: &str, android: &str| {
-        println!("  {name:<30} {value:>15}  {pc:<11} {android:<11}");
-    };
-    row("Metric", "Value", "PC", "Android");
-    println!("  {:-<30} {:->15}  {:-<11} {:-<11}", "", "", "", "");
+    // A single metric row; a free macro (not a closure) so the separator `writeln!`s below can also
+    // borrow `out` without a double-mutable-borrow conflict.
+    macro_rules! row {
+        ($name:expr, $value:expr, $pc:expr, $android:expr) => {
+            let _ = writeln!(
+                out,
+                "  {:<30} {:>15}  {:<11} {:<11}",
+                $name, $value, $pc, $android
+            );
+        };
+    }
+    row!("Metric", "Value", "PC", "Android");
+    let _ = writeln!(out, "  {:-<30} {:->15}  {:-<11} {:-<11}", "", "", "", "");
     let mut shows_dual = false;
     for s in &report.stats {
         shows_dual |= s.value != s.android_value;
-        row(
+        row!(
             s.name,
             &metric_value(s),
             rank_label(s.pc),
-            rank_label(s.android),
+            rank_label(s.android)
         );
     }
-    println!("  {:-<30} {:->15}  {:-<11} {:-<11}", "", "", "", "");
-    row(
+    let _ = writeln!(out, "  {:-<30} {:->15}  {:-<11} {:-<11}", "", "", "", "");
+    row!(
         "Overall",
         "",
         report.overall(Platform::Pc).label(),
-        report.overall(Platform::Android).label(),
+        report.overall(Platform::Android).label()
     );
 
     if shows_dual {
-        println!(
+        let _ = write!(
+            out,
             "\n  (Texture Memory value shown as PC/Android — textures recompress differently per platform.)"
         );
     }
     if !report.not_evaluated.is_empty() {
-        println!("\n  Not evaluated for this source (could lower the real rank):");
-        println!("    {}", report.not_evaluated.join(", "));
+        let _ = write!(
+            out,
+            "\n  Not evaluated for this source (could lower the real rank):\n    {}",
+            report.not_evaluated.join(", ")
+        );
     }
+    // Trim the trailing newline left by the last `row` so `emit_report` controls final spacing.
+    while out.ends_with('\n') {
+        out.pop();
+    }
+    out
 }
 
 /// A rank label, or a dash for a metric not ranked on that platform.
@@ -690,18 +719,31 @@ fn metric_value(stat: &avatar_stats::MetricStat) -> String {
 fn lint(args: &LintArgs) -> Result<ExitCode> {
     let report = avatar_lint::run(&args.path)?;
 
-    if args.json {
-        println!("{}", serde_json::to_string_pretty(&report)?);
-        return Ok(lint_exit_code(&report, args.deny_warnings));
-    }
+    let text = if args.json {
+        serde_json::to_string_pretty(&report)?
+    } else {
+        format_lint_report(&report)
+    };
+    emit_report(args.output.as_deref(), &text)?;
 
-    println!("Lint: {}", report.project_root);
-    println!(
+    Ok(lint_exit_code(&report, args.deny_warnings))
+}
+
+/// Render a lint report to a human-readable string (the body of `avatar lint`), including each
+/// diagnostic's optional indented `hint:` line.
+fn format_lint_report(report: &avatar_lint::LintReport) -> String {
+    use std::fmt::Write;
+
+    let mut out = String::new();
+    let _ = writeln!(out, "Lint: {}", report.project_root);
+    let _ = writeln!(
+        out,
         "  Unity {}, avatar SDK {}",
         report.unity_version.as_deref().unwrap_or("(unknown)"),
         report.avatar_sdk_version.as_deref().unwrap_or("(absent)")
     );
-    println!(
+    let _ = writeln!(
+        out,
         "  {} parameter asset(s), {} menu asset(s), {} descriptor(s), {} controller(s), {} package(s)",
         report.parameter_assets,
         report.menu_assets,
@@ -711,32 +753,37 @@ fn lint(args: &LintArgs) -> Result<ExitCode> {
     );
 
     if report.diagnostics.is_empty() {
-        println!("\n  No issues found.");
+        let _ = write!(out, "\n  No issues found.");
     } else {
-        println!();
+        out.push('\n');
         for d in &report.diagnostics {
             let tag = match d.severity {
                 avatar_lint::Severity::Error => "[X]",
                 avatar_lint::Severity::Warn => "[!]",
                 avatar_lint::Severity::Info => "[i]",
             };
-            println!("  {tag} {} {}", d.code, d.message);
+            let _ = writeln!(out, "  {tag} {} {}", d.code, d.message);
             if let Some(file) = &d.file {
-                println!("        in {file}");
+                let _ = writeln!(out, "        in {file}");
             }
             if let Some(hint) = &d.hint {
-                println!("        hint: {hint}");
+                let _ = writeln!(out, "        hint: {hint}");
             }
+        }
+        // Drop the trailing newline from the last diagnostic line.
+        while out.ends_with('\n') {
+            out.pop();
         }
     }
 
-    println!(
-        "\n  => {} error(s), {} warning(s)",
+    let _ = write!(
+        out,
+        "\n\n  => {} error(s), {} warning(s)",
         report.error_count(),
         report.warn_count()
     );
 
-    Ok(lint_exit_code(&report, args.deny_warnings))
+    out
 }
 
 /// Failure when the report has errors, or — with `--deny-warnings` — any warnings.
@@ -844,6 +891,21 @@ fn parse_blendshape_spec(spec: &str) -> Result<(String, String, f32)> {
         .parse()
         .with_context(|| format!("value '{value_str}' in blendshape '{spec}' is not a number"))?;
     Ok((path.to_string(), shape.to_string(), value))
+}
+
+/// Emit a fully-rendered report to a file (when `output` is set) or stdout (otherwise). The text
+/// is the complete report — human or `--json` — already formatted by the caller; a trailing newline
+/// is added so a redirected file ends cleanly. Used by `lint` and `stats` for their `-o/--output`.
+fn emit_report(output: Option<&Path>, text: &str) -> Result<()> {
+    match output {
+        Some(path) => {
+            std::fs::write(path, format!("{text}\n"))
+                .with_context(|| format!("writing report to {}", path.display()))?;
+            eprintln!("wrote {}", path.display());
+        }
+        None => println!("{text}"),
+    }
+    Ok(())
 }
 
 /// Write generated text to `output` (a file) or, when `None`, stdout.
