@@ -1,0 +1,17 @@
+[package]
+name = "avatar-render"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "avatar_render"
+
+[dependencies]
+anyhow.workspace = true
+glam.workspace = true
+# GPU-side only (this crate owns the draw). wgpu 29 = the validated offscreen Vulkan path.
+wgpu = "29"
+pollster = "0.4"
+bytemuck = { version = "1", features = ["derive"] }
+png = "0.18"

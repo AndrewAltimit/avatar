@@ -53,8 +53,20 @@ pub struct UnityFile {
 }
 
 impl UnityFile {
-    /// Parse a Unity YAML file from text.
+    /// Parse a Unity YAML file from text. Fails if any document body is not valid YAML.
     pub fn parse(text: &str) -> Result<Self> {
+        Self::parse_inner(text, true)
+    }
+
+    /// Parse a Unity YAML file, **skipping** any document whose body fails to parse instead of
+    /// failing the whole file. Unity occasionally serializes scalars (e.g. embedded scripts or
+    /// odd quoting in large scenes) that `yaml-rust2` rejects; when a caller only needs a subset
+    /// of object types (e.g. Transforms/MeshFilters for rendering), this keeps the rest usable.
+    pub fn parse_lossy(text: &str) -> Self {
+        Self::parse_inner(text, false).expect("lossy parse never errors")
+    }
+
+    fn parse_inner(text: &str, strict: bool) -> Result<Self> {
         let mut documents = Vec::new();
 
         for raw in split_documents(text) {
@@ -76,8 +88,15 @@ impl UnityFile {
                 continue;
             }
 
-            let docs = YamlLoader::load_from_str(&body_text)
-                .with_context(|| format!("parsing Unity document (class {class_id})"))?;
+            let docs = match YamlLoader::load_from_str(&body_text) {
+                Ok(docs) => docs,
+                Err(e) if strict => {
+                    return Err(e)
+                        .with_context(|| format!("parsing Unity document (class {class_id})"));
+                }
+                // Lossy: drop the unparseable document and continue.
+                Err(_) => continue,
+            };
             let Some(doc) = docs.into_iter().next() else {
                 continue;
             };
@@ -212,6 +231,36 @@ MonoBehaviour:
     defaultValue: 0
     networkSynced: 1
 ";
+
+    // A second doc whose body has a quoted scalar with indentation yaml-rust2 rejects, between two
+    // well-formed Transform docs — mirrors what large Unity scenes contain.
+    const WITH_BAD_DOC: &str = "\
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!4 &100
+Transform:
+  m_GameObject: {fileID: 1}
+--- !u!114 &200
+MonoBehaviour:
+  m_Name: Bad
+  data: \"unterminated quote
+--- !u!4 &300
+Transform:
+  m_GameObject: {fileID: 3}
+";
+
+    #[test]
+    fn parse_strict_fails_on_bad_doc_but_lossy_skips_it() {
+        assert!(UnityFile::parse(WITH_BAD_DOC).is_err());
+
+        let file = UnityFile::parse_lossy(WITH_BAD_DOC);
+        let ids: Vec<i64> = file.documents.iter().map(|d| d.file_id).collect();
+        // Both Transforms survive; the unparseable MonoBehaviour is dropped.
+        assert!(ids.contains(&100), "first Transform kept");
+        assert!(ids.contains(&300), "Transform after the bad doc kept");
+        assert!(!ids.contains(&200), "unparseable doc dropped");
+        assert_eq!(file.documents.iter().filter(|d| d.class_id == 4).count(), 2);
+    }
 
     #[test]
     fn parses_header_and_body() {

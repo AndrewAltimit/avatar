@@ -13,13 +13,26 @@ anyhow.workspace = true
 clap.workspace = true
 serde = { workspace = true }
 serde_json.workspace = true
+# Linear algebra for the render command's scene glue (placement/camera). Confined to render_scene.rs.
+glam.workspace = true
+# Unity YAML reader, used by the render command's world-scene parser.
+avatar-unity-yaml = { path = "../unity-yaml" }
+yaml-rust2.workspace = true
 avatar-fbx = { path = "../fbx" }
 avatar-armature = { path = "../armature" }
+avatar-gltf = { path = "../gltf" }
+avatar-mesh = { path = "../mesh" }
+avatar-pose = { path = "../pose" }
+avatar-render = { path = "../render" }
 avatar-lint = { path = "../lint" }
 avatar-stats = { path = "../stats" }
+avatar-unitypackage = { path = "../unitypackage" }
 avatar-anim-gen = { path = "../anim-gen" }
 avatar-osc = { path = "../osc" }
 avatar-osc-gestures = { path = "../osc-gestures" }
+# Decode texture images (PNG/JPEG/TGA/BMP/GIF) for the render command. Default features off to keep
+# the format set lean; these cover Unity project + FBX-embedded textures in practice.
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "tga", "bmp", "gif"] }
 
 [dev-dependencies]
 # Used only to synthesize binary FBX fixtures in-memory for the CLI exit-code tests.

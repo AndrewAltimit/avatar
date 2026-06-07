@@ -119,6 +119,9 @@ impl GltfDocument {
             indices,
             control_point_of_vertex,
             skin: skin_data,
+            // glTF material/texture import is not wired into the preview yet.
+            materials: Vec::new(),
+            material_of_triangle: Vec::new(),
         })
     }
 

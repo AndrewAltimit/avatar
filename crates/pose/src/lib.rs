@@ -430,6 +430,8 @@ mod tests {
                     },
                 ],
             }),
+            materials: Vec::new(),
+            material_of_triangle: Vec::new(),
         };
         // bone_ids parallel: [Bone0=30 root, Bone1=31 child of 0].
         let posed = PosedSkeleton::from_parts(

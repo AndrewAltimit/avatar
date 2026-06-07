@@ -44,11 +44,13 @@ format and subsystem references.
 | [`avatar-input`](crates/input/README.md) | Backend-agnostic VR tracker input (`TrackerState`/`TrackerSource`): mock + OSC backends, OpenXR planned |
 | [`avatar-unity-yaml`](crates/unity-yaml/README.md) | Reader for Unity's YAML format (`.asset`/`.prefab`/`.unity`/`.meta`) |
 | [`avatar-unity-asset`](crates/unity-asset/README.md) | Typed Unity asset graphs over the YAML reader (AnimatorController today) |
+| [`avatar-unitypackage`](crates/unitypackage/README.md) | Read Unity's `.unitypackage` (gzip+tar): summarize, extract into a Unity project tree, and cross-check an avatar against a world/map for co-import GUID/path conflicts. Wired to `avatar unitypackage` |
 | [`avatar-vpm`](crates/vpm/README.md) | Discover a Unity/VPM project: manifest packages, editor version, asset paths |
 | [`avatar-vrc-descriptor`](crates/vrc-descriptor/README.md) | Typed extraction of the VRChat Avatar Descriptor, Expression Parameters & Menus + SDK3 rule constants |
 | [`avatar-lint`](crates/lint/README.md) | Diagnostics engine: SDK3 compliance rules over a project (params, menus, descriptor refs, visemes) |
 | [`avatar-stats`](crates/stats/README.md) | Offline VRChat **performance ranking** (Excellent→Very Poor) from an FBX (geometry) or a project's avatars (components), against PC + Android limits |
 | [`avatar-anim-gen`](crates/anim-gen/README.md) | **Generate** Unity `.anim` clips + FX-layer analog-gesture blend trees as Unity YAML (deterministic fileIDs) — the M4 asset-generation layer, wired to `avatar anim-gen` |
+| [`avatar-render`](crates/render/README.md) | Offscreen **GPU preview**: render an avatar (and, experimentally, a Unity world scene) to a PNG via wgpu, headless. Wired to `avatar render` |
 | [`avatar-osc`](crates/osc/README.md) | VRChat **OSC runtime**: `/avatar/parameters`, `/input`, `/avatar/change` codec + UDP client and OSCQuery avatar-config parsing — the M5 runtime foundation, wired to `avatar osc` |
 | [`avatar-osc-gestures`](crates/osc-gestures/README.md) | The **analog-gesture daemon** ("Vive advanced controls on any hardware"): controller trigger → `Gesture*`/`Gesture*Weight` over OSC, with deadzone + change detection. Wired to `avatar osc gestures` |
 | [`avatar-cli`](crates/cli/README.md) | The `avatar` binary tying the above together |
@@ -75,6 +77,10 @@ cargo run -p avatar-cli -- anim-gen clip --name Smile --blendshape Body:Smile:10
 cargo run -p avatar-cli -- osc send VRCEmote 3                         # drive a running VRChat over OSC
 cargo run -p avatar-cli -- osc query path/to/avatar-osc-config.json    # list an avatar's OSC parameters
 cargo run -p avatar-cli -- osc gestures --seconds 10                   # analog-gesture daemon (demo sweep)
+cargo run -p avatar-cli -- unitypackage info avatar.unitypackage       # summarize a .unitypackage (SDK, avatar/world)
+cargo run -p avatar-cli -- unitypackage extract avatar.unitypackage -o proj   # unpack into a Unity Assets/ tree
+cargo run -p avatar-cli -- unitypackage testbed avatar.unitypackage world.unitypackage  # co-import conflict check
+cargo run -p avatar-cli -- render --avatar avatar.fbx -o preview.png    # offscreen GPU render of the avatar
 ```
 
 `avatar lint` exits non-zero when the report contains errors (or, with `--deny-warnings`, any
@@ -107,6 +113,8 @@ transform, not a metadata relabel (see
 | [`docs/reference/rig-runtime.md`](docs/reference/rig-runtime.md) | Runtime rig layer: skin/bind extraction, posing, IK, tracker input. |
 | [`docs/reference/anim-gen.md`](docs/reference/anim-gen.md) | `avatar-anim-gen`: `.anim` clip + analog-gesture blend-tree generation. |
 | [`docs/reference/osc-runtime.md`](docs/reference/osc-runtime.md) | `avatar-osc`: the OSC address space, codec, and OSCQuery config parsing. |
+| [`docs/reference/unitypackage.md`](docs/reference/unitypackage.md) | `avatar-unitypackage`: the `.unitypackage` format, extraction, and the avatar-in-world testbed. |
+| [`docs/reference/render.md`](docs/reference/render.md) | `avatar-render` / `avatar render`: the offscreen wgpu preview, avatar rest-pose render, and experimental world rendering. |
 
 **Per-crate READMEs** (purpose · key API · status):
 [`fbx`](crates/fbx/README.md) ·
@@ -117,6 +125,8 @@ transform, not a metadata relabel (see
 [`input`](crates/input/README.md) ·
 [`unity-yaml`](crates/unity-yaml/README.md) ·
 [`unity-asset`](crates/unity-asset/README.md) ·
+[`unitypackage`](crates/unitypackage/README.md) ·
+[`render`](crates/render/README.md) ·
 [`vpm`](crates/vpm/README.md) ·
 [`vrc-descriptor`](crates/vrc-descriptor/README.md) ·
 [`lint`](crates/lint/README.md) ·
