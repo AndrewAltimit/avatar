@@ -200,6 +200,7 @@ name = "avatar-anim-gen"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "avatar-unity-asset",
  "avatar-unity-yaml",
  "serde",
  "serde_json",
