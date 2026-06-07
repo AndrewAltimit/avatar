@@ -29,6 +29,7 @@ backend remains. See [`PLAN.md`](PLAN.md) for the roadmap and the [Status](#stat
 | [`docs/reference/performance-stats.md`](docs/reference/performance-stats.md) | `avatar stats`: performance-rank metrics (incl. particles & constraints), component recognition, PC/Android threshold tables. |
 | [`docs/reference/anim-gen.md`](docs/reference/anim-gen.md) | `avatar-anim-gen`: `.anim` clip + analog-gesture blend-tree generation (Unity-YAML emitter, deterministic fileIDs). |
 | [`docs/reference/osc-runtime.md`](docs/reference/osc-runtime.md) | `avatar-osc`: VRChat OSC address space, codec, UDP client, OSCQuery avatar-config parsing. |
+| [`docs/reference/unitypackage.md`](docs/reference/unitypackage.md) | `avatar-unitypackage`: reading the `.unitypackage` format, extracting to a Unity project tree, the avatar-in-world co-import testbed. |
 | [`docs/tutorial.md`](docs/tutorial.md) | End-to-end CLI walkthrough (FBX → armature → lint → stats). |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | No-external-contributions policy, then the internal dev reference: build/test/lint, conventions, adding a lint rule or crate. |
 
@@ -41,6 +42,7 @@ backend remains. See [`PLAN.md`](PLAN.md) for the roadmap and the [Status](#stat
 [`input`](crates/input/README.md) ·
 [`unity-yaml`](crates/unity-yaml/README.md) ·
 [`unity-asset`](crates/unity-asset/README.md) ·
+[`unitypackage`](crates/unitypackage/README.md) ·
 [`vpm`](crates/vpm/README.md) ·
 [`vrc-descriptor`](crates/vrc-descriptor/README.md) ·
 [`lint`](crates/lint/README.md) ·
@@ -168,6 +170,20 @@ params re-sent) + `GestureDaemon` loop (`tick`/`run`/`run_for`) over a `ParamSin
 `ParamClient`). On-device input is OpenXR (an `AnalogSource` adapter, pending); headless uses a
 deterministic `DemoSource` triangle sweep. Driven by `avatar osc gestures` (`--hz`/`--period`/
 `--seconds`). Behaviour: `docs/reference/osc-runtime.md`.
+
+**`.unitypackage` tooling + avatar-in-world testbed (built; library + CLI):** `avatar-unitypackage`
+reads Unity's `.unitypackage` distribution format (a gzip+tar of `<guid>/{pathname,asset,asset.meta}`
+members; just `flate2` + `tar`, deliberately out of the lint/cli dep graph's heavier crates). It
+**summarizes** a package (counts, size-by-extension, and traits: `vrc_sdk` — read from the plugin
+DLLs `VRCSDK2.dll`/`VRCSDK3*.dll` and VPM package paths, *not* the date-based `VRCSDK/version.txt` —
+plus `looks_like_avatar`/`looks_like_world`), **extracts** it into a normal Unity `Assets/` tree
+(asset bytes + `.meta` sidecars) so the existing `avatar lint`/`stats` and FBX/armature tools consume
+it unchanged, and **cross-checks** two packages for co-import conflicts (`overlap`: GUID collisions —
+flagged `identical` when bytes match — and path collisions). Extraction refuses non-project paths
+(absolute POSIX, Windows drive `C:/…`, UNC, `..`); old SDK exports leak absolute editor-DLL paths.
+Driven by `avatar unitypackage info|list|extract|testbed` (testbed has `--strict` for gating).
+Validated against a real SDK2 avatar package and the Cozy Cabin world (PC/Quest) exports. Behaviour:
+`docs/reference/unitypackage.md`.
 
 M3 resolves the project's biggest risk — native binary FBX **write-back**. `avatar-fbx`'s
 `FbxDocument` retains `fbxcel` 0.9's mutable tree (enable the `writer` feature) and serializes via

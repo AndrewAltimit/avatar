@@ -17,6 +17,7 @@ avatar-fbx = { path = "../fbx" }
 avatar-armature = { path = "../armature" }
 avatar-lint = { path = "../lint" }
 avatar-stats = { path = "../stats" }
+avatar-unitypackage = { path = "../unitypackage" }
 avatar-anim-gen = { path = "../anim-gen" }
 avatar-osc = { path = "../osc" }
 avatar-osc-gestures = { path = "../osc-gestures" }
