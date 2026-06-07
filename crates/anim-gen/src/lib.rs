@@ -13,6 +13,9 @@
 //! - [`blendtree`] — [`BlendTree`] → a `--- !u!206` 1D blend tree (plus, optionally, the owning
 //!   `AnimatorState`/`AnimatorStateMachine`) that blends `GestureLeftWeight`/`GestureRightWeight`
 //!   across child clips so any gesture reaches any fraction — the analog-gesture headline feature.
+//! - [`controller`] — [`AnimatorController`] → a `--- !u!91` FX `AnimatorController` wrapping a
+//!   blend-tree fragment in one layer ([`fx_blend_tree`]), for callers who want a complete
+//!   standalone `.controller` rather than a fragment to paste into an existing one.
 //!
 //! # fileID strategy
 //!
@@ -27,10 +30,14 @@
 
 pub mod blendtree;
 pub mod clip;
+pub mod controller;
 pub mod yaml_emit;
 
 pub use blendtree::{BlendTree, ChildMotion};
 pub use clip::{AnimationClip, ClipSettings, FloatCurve, Keyframe};
+pub use controller::{
+    AnimatorController, AnimatorLayer, AnimatorParameter, ParamType, fx_blend_tree,
+};
 pub use yaml_emit::{Emitter, ObjectRef};
 
 /// A deterministic allocator of Unity local `fileID`s for one generated file.
