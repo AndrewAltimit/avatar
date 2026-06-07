@@ -416,8 +416,9 @@ fn render(args: &RenderArgs) -> Result<()> {
     if let Some(world) = &args.world {
         let wl = render_scene::load_world(world)?;
         println!(
-            "world: {} prop(s) placed from {} ({} built-in / {} unresolved mesh refs skipped)",
+            "world: {} prop(s) + {} prefab instance(s) placed from {} ({} built-in / {} unresolved mesh refs skipped)",
             wl.placed,
+            wl.placed_prefabs,
             world.display(),
             wl.skipped_builtin,
             wl.skipped_unresolved
