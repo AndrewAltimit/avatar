@@ -15,6 +15,9 @@ serde = { workspace = true }
 serde_json.workspace = true
 # Linear algebra for the render command's scene glue (placement/camera). Confined to render_scene.rs.
 glam.workspace = true
+# Unity YAML reader, used by the render command's world-scene parser.
+avatar-unity-yaml = { path = "../unity-yaml" }
+yaml-rust2.workspace = true
 avatar-fbx = { path = "../fbx" }
 avatar-armature = { path = "../armature" }
 avatar-gltf = { path = "../gltf" }

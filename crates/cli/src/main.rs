@@ -22,6 +22,7 @@ use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
 mod render_scene;
+mod world;
 
 use anyhow::{Context, Result, bail};
 use avatar_anim_gen::{AnimationClip, BlendTree, Emitter, FloatCurve, IdGen, Keyframe};
@@ -413,13 +414,15 @@ fn render(args: &RenderArgs) -> Result<()> {
     }
     let mut meshes = Vec::new();
     if let Some(world) = &args.world {
-        let placed = render_scene::load_world(world)?;
+        let wl = render_scene::load_world(world)?;
         println!(
-            "world: {} mesh instance(s) from {}",
-            placed.len(),
-            world.display()
+            "world: {} prop(s) placed from {} ({} built-in / {} unresolved mesh refs skipped)",
+            wl.placed,
+            world.display(),
+            wl.skipped_builtin,
+            wl.skipped_unresolved
         );
-        meshes.extend(placed);
+        meshes.extend(wl.meshes);
     }
     if let Some(avatar) = &args.avatar {
         let av = render_scene::load_avatar(avatar)?;

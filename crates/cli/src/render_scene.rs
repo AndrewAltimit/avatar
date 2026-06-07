@@ -187,9 +187,15 @@ pub fn load_avatar(path: &Path) -> Result<Vec<RenderMesh>> {
     load_avatar_placed(path, Mat4::IDENTITY)
 }
 
-/// Load a world/map scene into placed render meshes. (Implemented in the world-scene step.)
-pub fn load_world(_path: &Path) -> Result<Vec<RenderMesh>> {
-    bail!("world rendering is not implemented yet; use --avatar for now")
+/// Unity is left-handed (X right, Y up, Z forward); the renderer is right-handed. Negating Z
+/// converts world geometry (and a co-placed avatar) into the renderer's space.
+pub fn unity_to_renderer() -> Mat4 {
+    Mat4::from_scale(Vec3::new(1.0, 1.0, -1.0))
+}
+
+/// Load a world/map scene (a `.unity` file or a project dir) into placed render meshes.
+pub fn load_world(path: &Path) -> Result<crate::world::WorldLoad> {
+    crate::world::load(path, unity_to_renderer())
 }
 
 /// Assemble a [`Scene`] from meshes, auto-framing the camera to the geometry's bounds.

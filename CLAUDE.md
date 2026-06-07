@@ -30,6 +30,7 @@ backend remains. See [`PLAN.md`](PLAN.md) for the roadmap and the [Status](#stat
 | [`docs/reference/anim-gen.md`](docs/reference/anim-gen.md) | `avatar-anim-gen`: `.anim` clip + analog-gesture blend-tree generation (Unity-YAML emitter, deterministic fileIDs). |
 | [`docs/reference/osc-runtime.md`](docs/reference/osc-runtime.md) | `avatar-osc`: VRChat OSC address space, codec, UDP client, OSCQuery avatar-config parsing. |
 | [`docs/reference/unitypackage.md`](docs/reference/unitypackage.md) | `avatar-unitypackage`: reading the `.unitypackage` format, extracting to a Unity project tree, the avatar-in-world co-import testbed. |
+| [`docs/reference/render.md`](docs/reference/render.md) | `avatar-render` / `avatar render`: offscreen wgpu preview pipeline, avatar rest-pose render (auto-upright), experimental world-scene render + limits. |
 | [`docs/tutorial.md`](docs/tutorial.md) | End-to-end CLI walkthrough (FBX → armature → lint → stats). |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | No-external-contributions policy, then the internal dev reference: build/test/lint, conventions, adding a lint rule or crate. |
 
@@ -48,6 +49,7 @@ backend remains. See [`PLAN.md`](PLAN.md) for the roadmap and the [Status](#stat
 [`lint`](crates/lint/README.md) ·
 [`stats`](crates/stats/README.md) ·
 [`anim-gen`](crates/anim-gen/README.md) ·
+[`render`](crates/render/README.md) ·
 [`osc`](crates/osc/README.md) ·
 [`osc-gestures`](crates/osc-gestures/README.md) ·
 [`cli`](crates/cli/README.md).
@@ -136,10 +138,33 @@ Legaia VR spectator (PRD §9), renderer-agnostic. New crates: `avatar-mesh` (POD
 interchange, no `glam`), `avatar-fbx::meshes()` + `avatar-gltf` (FBX/glTF → `RawMesh` + skin/bind),
 `avatar-pose` (`PosedSkeleton` → world matrices, GPU bone-matrix palette, CPU skinning, `pose::ik`
 two-bone IK), and `avatar-input` (`TrackerState`/`TrackerSource`; `MockSource` + `osc` feature
-backend; OpenXR planned). `glam` (f32) is confined to pose/input/gltf — never the lint/cli graph.
+backend; OpenXR planned). `glam` (f32) lives in pose/input/gltf/**render** — and, since the
+`avatar render` command is built on the renderer, in the cli's `render_scene`/`world` modules too
+(the older "never the cli graph" rule is relaxed for the renderer; it stays out of lint/descriptor).
 Bind comes from `TransformLink`/inverse-bind (never recomposed from `Lcl`+`PreRotation`); the
 load→pose→skin pipeline is validated by a renderer-free **rest-pose reproduction** invariant.
 Behaviour: `docs/reference/rig-runtime.md`.
+
+**In-engine preview — `avatar-render` + `avatar render` (built; offscreen avatar, experimental
+world):** `avatar-render` (lib `avatar_render`; `wgpu` 29 + `glam`/`bytemuck`/`png`, GPU-only — knows
+nothing of FBX/Unity) is a headless **offscreen** pipeline: a `Scene` of world-space `RenderMesh`es +
+`Camera` + `Light` → RGBA8 → PNG, no window (render-to-texture + readback; works over SSH/CI on any
+GPU adapter — validated on NVIDIA GB10 via Vulkan). One merged buffer + one draw, 4× MSAA + depth,
+two-sided Lambert (imported winding is inconsistent), RH `0..1` camera, auto-framing. CLI `avatar
+render --avatar <fbx|gltf|glb> [--world <scene|project>] -o out.png` with `--width/--height/--yaw/
+--pitch`; importer glue in `crates/cli/src/{render_scene,world}.rs`. **Avatar render (validated,
+correct):** uses **raw control points** as bind geometry — deliberately NOT the FBX skin-bind
+matrices, since ripped/MMD→FBX avatars ship inconsistent per-cluster `Transform`s that make LBS
+collapse into spikes; **auto-uprights** by aligning the hips→head axis (measured from cluster
+centroids in control-point space — reliable weights, not the broken bind matrices) to +Y. Renders the
+real SDK2 avatar standing/undistorted. **World render (experimental, best-effort):** parses a
+`.unity` scene (lossy Unity-YAML parse added to `avatar-unity-yaml` — `UnityFile::parse_lossy` skips
+MonoBehaviour bodies yaml-rust2 rejects), walks the `Transform`/`MeshFilter` graph, resolves `m_Mesh`
+guid→FBX via a `.meta` index, places submeshes (Unity LH→RH via Z-negate). **Limits:** no prefab-
+instance expansion, no materials/textures, and **no Unity import-pipeline emulation** (per-FBX scale/
+axis), so heterogeneous-scale props and skydomes dominate and a co-placed avatar can be dwarfed — a
+faithful world render needs the importer math (future work). Headless smoke test gated on adapter
+availability. Behaviour: `docs/reference/render.md`.
 
 **Asset generation — M4 (built; library + CLI):** `avatar-anim-gen` emits Unity-YAML `.anim` clips
 (`AnimationClip`, class 74 — blendshape-weight and GameObject-active curves) and FX-layer analog-

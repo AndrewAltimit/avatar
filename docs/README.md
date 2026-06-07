@@ -30,6 +30,9 @@ Documentation for the [avatar](../README.md) monorepo. Start with the root
 - [`reference/unitypackage.md`](reference/unitypackage.md) — `avatar-unitypackage`: reading the
   `.unitypackage` format, extracting it into a Unity project tree, and the avatar-in-world testbed
   (co-import GUID/path conflict cross-check).
+- [`reference/render.md`](reference/render.md) — `avatar-render` / `avatar render`: the offscreen
+  wgpu preview pipeline, avatar rest-pose rendering (auto-upright), and experimental world-scene
+  rendering with its limitations.
 
 ## Planned directories
 

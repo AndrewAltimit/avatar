@@ -159,12 +159,14 @@ dependencies = [
  "avatar-pose",
  "avatar-render",
  "avatar-stats",
+ "avatar-unity-yaml",
  "avatar-unitypackage",
  "clap",
  "fbxcel",
  "glam",
  "serde",
  "serde_json",
+ "yaml-rust2",
 ]
 
 [[package]]
