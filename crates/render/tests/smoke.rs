@@ -31,6 +31,7 @@ fn renders_a_cube_to_pixels() {
     let bg = [0.05f32, 0.06, 0.08, 1.0];
     let mut scene = Scene {
         meshes: vec![cube()],
+        textures: Vec::new(),
         camera: Camera {
             eye: Vec3::splat(5.0),
             target: Vec3::ZERO,

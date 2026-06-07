@@ -8,7 +8,7 @@
 use std::collections::HashMap;
 
 use anyhow::Result;
-use avatar_mesh::{IDENTITY_16, RawMesh, SkinCluster, SkinData};
+use avatar_mesh::{IDENTITY_16, MeshMaterial, RawMesh, SkinCluster, SkinData, TextureRef};
 use fbxcel::low::v7400::AttributeValue;
 use fbxcel::tree::v7400::{NodeHandle, NodeId, Tree};
 
@@ -50,6 +50,11 @@ pub(crate) fn extract_meshes(tree: &Tree, scene: &FbxScene) -> Result<Vec<RawMes
         let model_id = scene.parent_of(geom.id).unwrap_or(geom.id);
         let skin = extract_skin(tree, scene, &id_to_node, geom.id);
 
+        // Materials are connected to the mesh's Model (slot order = connection order); the
+        // per-polygon `LayerElementMaterial` indexes into that slot list.
+        let materials = collect_materials(tree, scene, &id_to_node, model_id);
+        let material_of_triangle = material_of_triangle(&geom_node, &tri, materials.len());
+
         meshes.push(RawMesh {
             model_id,
             positions: tri.positions,
@@ -58,6 +63,8 @@ pub(crate) fn extract_meshes(tree: &Tree, scene: &FbxScene) -> Result<Vec<RawMes
             indices: tri.indices,
             control_point_of_vertex: tri.control_point_of_vertex,
             skin,
+            materials,
+            material_of_triangle,
         });
     }
     Ok(meshes)
@@ -76,7 +83,7 @@ fn object_node_index(root: &NodeHandle) -> HashMap<i64, NodeId> {
     map
 }
 
-/// Result of triangulating one geometry: emitted vertices plus the two index maps a skinner needs.
+/// Result of triangulating one geometry: emitted vertices plus the index maps a skinner needs.
 struct Triangulated {
     positions: Vec<[f32; 3]>,
     indices: Vec<u32>,
@@ -85,6 +92,9 @@ struct Triangulated {
     /// Source polygon-vertex position (index into `PolygonVertexIndex`) per emitted vertex —
     /// internal, used to resolve `ByPolygonVertex` layer elements.
     polygon_vertex_of_vertex: Vec<u32>,
+    /// Source polygon index per emitted **triangle** (one entry per 3 of `indices`) — used to
+    /// resolve the per-polygon `LayerElementMaterial`.
+    polygon_of_triangle: Vec<u32>,
 }
 
 /// Fan-triangulate FBX polygons. `PolygonVertexIndex` is a flat list of control-point indices; a
@@ -96,9 +106,11 @@ fn triangulate(vertices: &[f64], pvi: &[i32]) -> Triangulated {
     let mut indices = Vec::new();
     let mut cp_of_vertex = Vec::new();
     let mut pv_of_vertex = Vec::new();
+    let mut poly_of_tri = Vec::new();
 
     // (control-point index, polygon-vertex position) for the polygon being accumulated.
     let mut poly: Vec<(u32, u32)> = Vec::new();
+    let mut poly_index: u32 = 0;
     for (pv_pos, &raw) in pvi.iter().enumerate() {
         let (cp, end) = if raw < 0 {
             ((!raw) as u32, true)
@@ -108,6 +120,7 @@ fn triangulate(vertices: &[f64], pvi: &[i32]) -> Triangulated {
         poly.push((cp, pv_pos as u32));
         if end {
             for i in 1..poly.len().saturating_sub(1) {
+                let before = indices.len();
                 for &(c, pv) in &[poly[0], poly[i], poly[i + 1]] {
                     // Control-point indices come straight from the (untrusted) file. Use checked
                     // arithmetic so a hostile index can never wrap `usize` and slip past the
@@ -126,8 +139,13 @@ fn triangulate(vertices: &[f64], pvi: &[i32]) -> Triangulated {
                         indices.push(positions.len() as u32 - 1);
                     }
                 }
+                // A whole triangle (3 indices) was emitted → record which polygon it came from.
+                if indices.len() == before + 3 {
+                    poly_of_tri.push(poly_index);
+                }
             }
             poly.clear();
+            poly_index += 1;
         }
     }
 
@@ -136,6 +154,7 @@ fn triangulate(vertices: &[f64], pvi: &[i32]) -> Triangulated {
         indices,
         control_point_of_vertex: cp_of_vertex,
         polygon_vertex_of_vertex: pv_of_vertex,
+        polygon_of_triangle: poly_of_tri,
     }
 }
 
@@ -240,6 +259,204 @@ fn extract_skin(
         }
     }
     (!clusters.is_empty()).then_some(SkinData { clusters })
+}
+
+// --- materials & textures ---------------------------------------------------------------------
+
+/// Per-triangle material **slot** (index into the mesh's material list), resolved from the
+/// geometry's `LayerElementMaterial`. Returns an empty vec when there is nothing to disambiguate
+/// (no layer, or a single material used everywhere) — the consumer then treats every triangle as
+/// slot 0.
+fn material_of_triangle(geom: &NodeHandle, tri: &Triangulated, n_materials: usize) -> Vec<u32> {
+    let Some(elem) = child_named(geom, "LayerElementMaterial") else {
+        return Vec::new();
+    };
+    let Some(materials) = node_i32_array(&elem, "Materials") else {
+        return Vec::new();
+    };
+    let mapping = node_str(&elem, "MappingInformationType").unwrap_or_default();
+    let n_tri = tri.polygon_of_triangle.len();
+    match mapping.as_str() {
+        // One index for the whole mesh. Only meaningful (non-empty) when it isn't slot 0.
+        "AllSame" | "AllSameForAll" => {
+            let slot = materials.first().copied().unwrap_or(0).max(0) as u32;
+            if slot == 0 {
+                Vec::new()
+            } else {
+                vec![slot; n_tri]
+            }
+        }
+        // One index per polygon → expand to per triangle. Skip when there's nothing to split into.
+        "ByPolygon" => {
+            if n_materials <= 1 {
+                return Vec::new();
+            }
+            tri.polygon_of_triangle
+                .iter()
+                .map(|&p| materials.get(p as usize).copied().unwrap_or(0).max(0) as u32)
+                .collect()
+        }
+        _ => Vec::new(),
+    }
+}
+
+/// Collect the materials connected to a mesh `Model`, in slot order (the order their `OO`
+/// connections appear — which is what `LayerElementMaterial` indexes into).
+fn collect_materials(
+    tree: &Tree,
+    scene: &FbxScene,
+    id_to_node: &HashMap<i64, NodeId>,
+    model_id: i64,
+) -> Vec<MeshMaterial> {
+    scene
+        .children_of(model_id)
+        .into_iter()
+        .filter(|&c| scene.object(c).map(|o| o.node_name.as_str()) == Some("Material"))
+        .map(|mat_id| read_material(tree, scene, id_to_node, mat_id))
+        .collect()
+}
+
+/// Read one `Material` object: its name, diffuse colour, and (resolved) diffuse texture reference.
+fn read_material(
+    tree: &Tree,
+    scene: &FbxScene,
+    id_to_node: &HashMap<i64, NodeId>,
+    mat_id: i64,
+) -> MeshMaterial {
+    let name = scene
+        .object(mat_id)
+        .map(|o| o.name.clone())
+        .unwrap_or_default();
+    let diffuse_color = id_to_node.get(&mat_id).and_then(|nid| {
+        let node = nid.to_handle(tree);
+        // Prefer the standard `DiffuseColor`; fall back to `Diffuse` (older/3ds Max exports).
+        prop_color(&node, "DiffuseColor").or_else(|| prop_color(&node, "Diffuse"))
+    });
+    let texture = find_diffuse_texture(tree, scene, id_to_node, mat_id);
+    MeshMaterial {
+        name,
+        diffuse_color,
+        texture,
+    }
+}
+
+/// Find a material's diffuse/base-colour texture: the `Texture` object connected to it (preferring
+/// a connection whose destination property names the diffuse/base colour), then read that texture's
+/// file path(s) and any embedded image bytes.
+fn find_diffuse_texture(
+    tree: &Tree,
+    scene: &FbxScene,
+    id_to_node: &HashMap<i64, NodeId>,
+    mat_id: i64,
+) -> Option<TextureRef> {
+    // Connections into the material whose child is a `Texture`. An `OP` connection carries the
+    // destination property (e.g. "DiffuseColor", "Maps|DiffuseColor"); `OO` ones carry none.
+    let is_texture = |id: i64| scene.object(id).map(|o| o.node_name.as_str()) == Some("Texture");
+    let prop_is_diffuse = |p: &Option<String>| {
+        p.as_deref().is_some_and(|p| {
+            let p = p.to_ascii_lowercase();
+            p.contains("diffuse") || p.contains("basecolor") || p.contains("base_color")
+        })
+    };
+    let candidates: Vec<&crate::Connection> = scene
+        .connections
+        .iter()
+        .filter(|c| c.parent == mat_id && is_texture(c.child))
+        .collect();
+    // Prefer an explicit diffuse/base-colour binding; else take the first texture on the material.
+    let tex_id = candidates
+        .iter()
+        .find(|c| prop_is_diffuse(&c.property))
+        .or_else(|| candidates.first())
+        .map(|c| c.child)?;
+
+    read_texture(tree, scene, id_to_node, tex_id)
+}
+
+/// Read a `Texture` object's file references and embedded image bytes (the latter via a connected
+/// `Video`/`Media` object's `Content` blob, or directly on the texture for older exports).
+fn read_texture(
+    tree: &Tree,
+    scene: &FbxScene,
+    id_to_node: &HashMap<i64, NodeId>,
+    tex_id: i64,
+) -> Option<TextureRef> {
+    let tex = id_to_node.get(&tex_id)?.to_handle(tree);
+    let mut tref = TextureRef {
+        relative: node_str(&tex, "RelativeFilename").filter(|s| !s.is_empty()),
+        absolute: node_str(&tex, "FileName").filter(|s| !s.is_empty()),
+        embedded: node_binary(&tex, "Content").filter(|b| !b.is_empty()),
+    };
+
+    // Embedded bytes (and a better relative path) usually live on a connected `Video`/`Media`.
+    if tref.embedded.is_none() || tref.relative.is_none() {
+        // Either direction of OO connection between the texture and a Video.
+        let video_id = scene
+            .connections
+            .iter()
+            .filter(|c| c.kind == "OO")
+            .find_map(|c| {
+                let other = if c.parent == tex_id {
+                    c.child
+                } else if c.child == tex_id {
+                    c.parent
+                } else {
+                    return None;
+                };
+                let nm = scene.object(other).map(|o| o.node_name.as_str());
+                matches!(nm, Some("Video") | Some("Media")).then_some(other)
+            });
+        if let Some(vid) = video_id.and_then(|v| id_to_node.get(&v)) {
+            let vnode = vid.to_handle(tree);
+            if tref.embedded.is_none() {
+                tref.embedded = node_binary(&vnode, "Content").filter(|b| !b.is_empty());
+            }
+            if tref.relative.is_none() {
+                tref.relative = node_str(&vnode, "RelativeFilename").filter(|s| !s.is_empty());
+            }
+            if tref.absolute.is_none() {
+                tref.absolute = node_str(&vnode, "Filename")
+                    .or_else(|| node_str(&vnode, "FileName"))
+                    .filter(|s| !s.is_empty());
+            }
+        }
+    }
+
+    (tref.relative.is_some() || tref.absolute.is_some() || tref.embedded.is_some()).then_some(tref)
+}
+
+/// Read a `Properties70` colour property (`[name, "Color"/"ColorRGB", label, flags, r, g, b]`).
+fn prop_color(obj: &NodeHandle, key: &str) -> Option<[f32; 4]> {
+    let props = child_named(obj, "Properties70")?;
+    for p in props.children().filter(|n| n.name() == "P") {
+        let attrs = p.attributes();
+        if attrs.first().and_then(as_str) == Some(key) {
+            let r = attrs.get(4).and_then(attr_f64)? as f32;
+            let g = attrs.get(5).and_then(attr_f64)? as f32;
+            let b = attrs.get(6).and_then(attr_f64)? as f32;
+            return Some([r, g, b, 1.0]);
+        }
+    }
+    None
+}
+
+/// Coerce a numeric attribute to `f64` (colours are usually `F64`, occasionally `F32`).
+fn attr_f64(v: &AttributeValue) -> Option<f64> {
+    match v {
+        AttributeValue::F64(n) => Some(*n),
+        AttributeValue::F32(n) => Some(*n as f64),
+        AttributeValue::I32(n) => Some(*n as f64),
+        AttributeValue::I64(n) => Some(*n as f64),
+        _ => None,
+    }
+}
+
+/// Read a named child node's first attribute as raw bytes (an FBX `Content` blob).
+fn node_binary(node: &NodeHandle, name: &str) -> Option<Vec<u8>> {
+    match first_attr(node, name)? {
+        AttributeValue::Binary(b) => Some(b.clone()),
+        _ => None,
+    }
 }
 
 // --- small array/string readers over fbxcel nodes ---------------------------------------------

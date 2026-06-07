@@ -36,6 +36,15 @@ pub struct RawMesh {
     pub control_point_of_vertex: Vec<u32>,
     /// Skin binding, if the mesh is skinned. `None` for a static mesh.
     pub skin: Option<SkinData>,
+    /// Materials assigned to this mesh, in the slot order the file references them
+    /// (`material_of_triangle` indexes into this list). Empty if no material info was found.
+    pub materials: Vec<MeshMaterial>,
+    /// For each triangle (one entry per 3 entries of `indices`), the material **slot** it uses —
+    /// an index into [`materials`]. Empty when the layout was a single material / not understood
+    /// (treat as slot 0).
+    ///
+    /// [`materials`]: RawMesh::materials
+    pub material_of_triangle: Vec<u32>,
 }
 
 impl RawMesh {
@@ -57,6 +66,53 @@ impl RawMesh {
     pub fn is_skinned(&self) -> bool {
         self.skin.is_some()
     }
+
+    /// Number of material slots: the larger of the materials list and any referenced slot, with a
+    /// floor of 1 (every mesh has at least slot 0). Useful when splitting a mesh by material.
+    pub fn material_slot_count(&self) -> usize {
+        let max_ref = self
+            .material_of_triangle
+            .iter()
+            .copied()
+            .max()
+            .map_or(0, |m| m as usize + 1);
+        self.materials.len().max(max_ref).max(1)
+    }
+
+    /// The material slot for triangle `tri` (0 when no per-triangle info is present).
+    pub fn triangle_material(&self, tri: usize) -> usize {
+        self.material_of_triangle
+            .get(tri)
+            .map_or(0, |&s| s as usize)
+    }
+}
+
+/// One material assigned to a mesh — the renderer-relevant subset of an FBX/glTF material.
+///
+/// Plain data, no format coupling: importers (`avatar-fbx`, later `avatar-gltf`) fill it, and the
+/// preview layer resolves [`TextureRef`] paths/bytes into pixels at its own boundary.
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct MeshMaterial {
+    /// The material's name (for diagnostics / matching).
+    pub name: String,
+    /// Diffuse / base colour tint (linear-ish RGBA as stored), if the file carried one.
+    pub diffuse_color: Option<[f32; 4]>,
+    /// Diffuse / base-colour texture, if the material referenced one.
+    pub texture: Option<TextureRef>,
+}
+
+/// A reference to a material's texture image, *unresolved*. An FBX texture may be an external file
+/// (relative to the FBX and/or an absolute authoring path) and/or embedded as raw bytes in the file.
+/// The consumer decides how to fetch the pixels (decode `embedded`, else resolve a path on disk).
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct TextureRef {
+    /// `RelativeFilename` as stored — relative to the model file's directory.
+    pub relative: Option<String>,
+    /// `FileName` as stored — usually an absolute authoring-machine path.
+    pub absolute: Option<String>,
+    /// Raw image bytes embedded in the file (an FBX `Video`/`Media` `Content` blob), if present.
+    #[serde(skip)]
+    pub embedded: Option<Vec<u8>>,
 }
 
 /// Skin binding for one mesh: the set of bone clusters that influence its control points.
@@ -97,3 +153,40 @@ pub const IDENTITY_16: [f64; 16] = [
     0.0, 0.0, 1.0, 0.0, //
     0.0, 0.0, 0.0, 1.0, //
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn mesh_with(materials: usize, mat_of_tri: Vec<u32>) -> RawMesh {
+        RawMesh {
+            model_id: 0,
+            positions: Vec::new(),
+            normals: None,
+            uvs: None,
+            indices: Vec::new(),
+            control_point_of_vertex: Vec::new(),
+            skin: None,
+            materials: vec![MeshMaterial::default(); materials],
+            material_of_triangle: mat_of_tri,
+        }
+    }
+
+    #[test]
+    fn slot_count_floors_at_one() {
+        assert_eq!(mesh_with(0, vec![]).material_slot_count(), 1);
+        assert_eq!(mesh_with(2, vec![]).material_slot_count(), 2);
+        // A referenced slot beyond the materials list still counts.
+        assert_eq!(mesh_with(1, vec![0, 3]).material_slot_count(), 4);
+    }
+
+    #[test]
+    fn triangle_material_defaults_to_zero() {
+        let m = mesh_with(2, vec![0, 1, 1]);
+        assert_eq!(m.triangle_material(0), 0);
+        assert_eq!(m.triangle_material(2), 1);
+        // No entry → slot 0.
+        assert_eq!(m.triangle_material(99), 0);
+        assert_eq!(mesh_with(1, vec![]).triangle_material(0), 0);
+    }
+}

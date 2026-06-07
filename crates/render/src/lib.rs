@@ -20,15 +20,28 @@ use glam::{Mat4, Vec3};
 
 mod gpu;
 
+/// An RGBA8 texture image (row-major, top-to-bottom, 4 bytes/pixel), referenced by index from a
+/// [`RenderMesh`] via [`Scene::textures`].
+#[derive(Debug, Clone)]
+pub struct Texture {
+    pub width: u32,
+    pub height: u32,
+    pub rgba: Vec<u8>,
+}
+
 /// A drawable mesh in its own local space, placed by `transform`.
 #[derive(Debug, Clone)]
 pub struct RenderMesh {
     pub positions: Vec<[f32; 3]>,
     /// Per-vertex normals; if empty, smooth normals are computed from the geometry.
     pub normals: Vec<[f32; 3]>,
+    /// Per-vertex texture coordinates, parallel to `positions`. Empty when untextured.
+    pub uvs: Vec<[f32; 2]>,
     pub indices: Vec<u32>,
-    /// Linear RGBA base colour, shaded by the light.
+    /// Linear RGBA base colour (the tint), modulated by any texture and shaded by the light.
     pub color: [f32; 4],
+    /// Index into [`Scene::textures`] of the base-colour texture, if this mesh is textured.
+    pub texture: Option<usize>,
     /// Local-to-world transform.
     pub transform: Mat4,
 }
@@ -39,8 +52,10 @@ impl RenderMesh {
         RenderMesh {
             positions,
             normals: Vec::new(),
+            uvs: Vec::new(),
             indices,
             color: [0.75, 0.75, 0.78, 1.0],
+            texture: None,
             transform: Mat4::IDENTITY,
         }
     }
@@ -133,6 +148,8 @@ impl Default for Light {
 #[derive(Debug, Clone)]
 pub struct Scene {
     pub meshes: Vec<RenderMesh>,
+    /// Texture pool; a [`RenderMesh::texture`] is an index into this. Empty for an untextured scene.
+    pub textures: Vec<Texture>,
     pub camera: Camera,
     pub light: Light,
     /// Linear RGBA clear colour.

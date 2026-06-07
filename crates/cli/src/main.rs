@@ -22,6 +22,7 @@ use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
 mod render_scene;
+mod texture;
 mod world;
 
 use anyhow::{Context, Result, bail};
@@ -413,8 +414,9 @@ fn render(args: &RenderArgs) -> Result<()> {
         bail!("nothing to render: pass --avatar <model> and/or --world <scene|project>");
     }
     let mut meshes = Vec::new();
+    let mut textures = texture::TextureSet::new();
     if let Some(world) = &args.world {
-        let wl = render_scene::load_world(world)?;
+        let wl = render_scene::load_world(world, &mut textures)?;
         println!(
             "world: {} prop(s) + {} prefab instance(s) placed from {} ({} built-in / {} unresolved mesh refs skipped)",
             wl.placed,
@@ -426,13 +428,23 @@ fn render(args: &RenderArgs) -> Result<()> {
         meshes.extend(wl.meshes);
     }
     if let Some(avatar) = &args.avatar {
-        let av = render_scene::load_avatar(avatar)?;
+        let av = render_scene::load_avatar(avatar, &mut textures)?;
         println!("avatar: {} mesh(es) from {}", av.len(), avatar.display());
         meshes.extend(av);
     }
 
-    let scene =
-        render_scene::scene_from_meshes(meshes, args.width, args.height, args.yaw, args.pitch)?;
+    let textures = textures.into_textures();
+    if !textures.is_empty() {
+        println!("textures: {} decoded", textures.len());
+    }
+    let scene = render_scene::scene_from_meshes(
+        meshes,
+        textures,
+        args.width,
+        args.height,
+        args.yaw,
+        args.pitch,
+    )?;
     let tris: usize = scene.meshes.iter().map(|m| m.indices.len() / 3).sum();
     println!(
         "rendering {} mesh(es), {tris} triangles at {}x{} ...",

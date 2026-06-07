@@ -779,4 +779,66 @@ mod tests {
         let d = doc();
         assert!(d.meshes().unwrap().is_empty());
     }
+
+    /// A two-triangle mesh with two materials (one per triangle, `ByPolygon`); the first material
+    /// carries a diffuse colour and a diffuse texture (relative filename), the second only a colour.
+    fn two_material_mesh_tree() -> Tree {
+        tree_v7400! {
+            Objects: {
+                Model: [10i64, "Mesh\u{0}\u{1}Model", "Mesh"] {},
+                Geometry: [20i64, "Mesh\u{0}\u{1}Geometry", "Mesh"] {
+                    Vertices: [vec![0.0f64, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0, 0.0]] {},
+                    // Two separate triangle polygons: (0,1,2) and (0,2,3).
+                    PolygonVertexIndex: [vec![0i32, 1, -3, 0, 2, -4]] {},
+                    LayerElementMaterial: [0i32] {
+                        MappingInformationType: ["ByPolygon"] {},
+                        ReferenceInformationType: ["IndexToDirect"] {},
+                        Materials: [vec![0i32, 1]] {},
+                    },
+                },
+                Material: [60i64, "Red\u{0}\u{1}Material", ""] {
+                    Properties70: {
+                        P: ["DiffuseColor", "Color", "", "A", 1.0f64, 0.0, 0.0] {},
+                    },
+                },
+                Material: [61i64, "Green\u{0}\u{1}Material", ""] {
+                    Properties70: {
+                        P: ["DiffuseColor", "Color", "", "A", 0.0f64, 1.0, 0.0] {},
+                    },
+                },
+                Texture: [70i64, "diffuse\u{0}\u{1}Texture", ""] {
+                    RelativeFilename: ["textures/red.png"] {},
+                },
+            },
+            Connections: {
+                C: ["OO", 20i64, 10i64] {},          // Geometry -> Model
+                C: ["OO", 60i64, 10i64] {},          // Material 0 -> Model (slot 0)
+                C: ["OO", 61i64, 10i64] {},          // Material 1 -> Model (slot 1)
+                C: ["OP", 70i64, 60i64, "DiffuseColor"] {}, // Texture -> Material 0 (diffuse)
+            },
+        }
+    }
+
+    #[test]
+    fn extracts_materials_textures_and_per_triangle_slots() {
+        let d = FbxDocument::from_bytes(&to_fbx_bytes(&two_material_mesh_tree())).unwrap();
+        let m = &d.meshes().unwrap()[0];
+
+        assert_eq!(m.materials.len(), 2, "two materials in OO-connection order");
+        assert_eq!(m.materials[0].name, "Red");
+        assert_eq!(m.materials[0].diffuse_color, Some([1.0, 0.0, 0.0, 1.0]));
+        assert_eq!(m.materials[1].diffuse_color, Some([0.0, 1.0, 0.0, 1.0]));
+
+        let tex = m.materials[0]
+            .texture
+            .as_ref()
+            .expect("slot 0 has a texture");
+        assert_eq!(tex.relative.as_deref(), Some("textures/red.png"));
+        assert!(m.materials[1].texture.is_none(), "slot 1 has no texture");
+
+        // ByPolygon: triangle 0 → material 0, triangle 1 → material 1.
+        assert_eq!(m.material_of_triangle, vec![0, 1]);
+        assert_eq!(m.triangle_material(0), 0);
+        assert_eq!(m.triangle_material(1), 1);
+    }
 }

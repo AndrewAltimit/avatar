@@ -14,11 +14,14 @@
 //! - **Directly-placed `MeshFilter`s** (class 33) keep using the **raw** mesh geometry at their
 //!   GameObject's transform — that is exactly what Unity does when a shared sub-mesh is assigned to a
 //!   plain GameObject (the source node's transform is *not* reapplied).
-//! - **Material base colour** (`_Color`) from each renderer's first material, when resolvable.
+//! - **Materials.** Each renderer's `m_Materials` slots are resolved to their `.mat`'s base colour
+//!   (`_Color`) and base **texture** (`_MainTex` → asset → decoded pixels); meshes are split per
+//!   material slot so each slot draws with its own texture/tint. Prefab-instanced models have no
+//!   scene-side material, so their FBX-embedded materials/textures are used instead.
 //!
 //! Unity-space (left-handed, Y-up) is converted to the renderer's right-handed space by the caller's
 //! `extra` transform (a Z-negate). Remaining fidelity gaps are documented in `docs/reference/render.md`
-//! (FBX pivots/pre-rotation, geometric transforms, per-platform import overrides, textures).
+//! (FBX pivots/pre-rotation, geometric transforms, per-platform import overrides).
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -28,6 +31,11 @@ use avatar_mesh::RawMesh;
 use avatar_render::RenderMesh;
 use avatar_unity_yaml::{UnityFile, Yaml, field_f64, field_i64, field_str};
 use glam::{EulerRot, Mat4, Quat, Vec3};
+
+use crate::texture::{SlotStyle, TextureSet, split_by_material};
+
+/// Tint for a textured slot with no `_Color`/diffuse colour — texture colours show unmodulated.
+const WHITE: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
 
 /// A transform node distilled from a Unity `Transform`.
 struct Node {
@@ -299,32 +307,83 @@ fn read_model_import_scale(fbx_path: &Path) -> (f32, bool) {
     (global, use_file)
 }
 
-/// Resolve the first material's base colour for a renderer GameObject, if any.
-fn material_color(color_by_go: &HashMap<i64, [f32; 4]>, go: i64, fallback: [f32; 4]) -> [f32; 4] {
-    color_by_go.get(&go).copied().unwrap_or(fallback)
+/// Read a model importer's **material remap** (`externalObjects`) from the FBX's `.meta`: FBX
+/// material *name* → the project `.mat` asset GUID Unity remapped it to. This is where the real
+/// textures of an imported model live (the FBX-embedded material is often a placeholder), so a
+/// prefab-instanced model is textured by resolving its materials through this map.
+fn read_material_remap(fbx_path: &Path) -> HashMap<String, String> {
+    let mut map = HashMap::new();
+    let meta = fbx_path.with_extension(
+        fbx_path
+            .extension()
+            .map(|e| format!("{}.meta", e.to_string_lossy()))
+            .unwrap_or_else(|| "meta".into()),
+    );
+    let Ok(text) = std::fs::read_to_string(&meta) else {
+        return map;
+    };
+    let Some(root) = avatar_unity_yaml::parse_meta(&text) else {
+        return map;
+    };
+    let Some(entries) = root["ModelImporter"]["externalObjects"].as_vec() else {
+        return map;
+    };
+    for e in entries {
+        let first = &e["first"];
+        // Only material remaps; a model can also remap AvatarMask/Texture entries.
+        if field_str(first, "type") != Some("UnityEngine:Material") {
+            continue;
+        }
+        if let (Some(name), Some(guid)) = (field_str(first, "name"), ref_guid(e, "second")) {
+            map.insert(name.to_string(), guid);
+        }
+    }
+    map
 }
 
-/// Parse a material `.mat` file's `_Color` (sRGB-ish tint), defaulting to white.
-fn parse_material_color(path: &Path) -> Option<[f32; 4]> {
-    let text = std::fs::read_to_string(path).ok()?;
-    material_color_from_text(&text)
+/// The renderer-relevant fields parsed from a Unity `.mat`: base colour tint and base texture GUID.
+#[derive(Default)]
+struct MatDef {
+    color: Option<[f32; 4]>,
+    main_tex: Option<String>,
 }
 
-/// Extract a Unity `Material`'s `_Color` from its YAML text. Split out for testing.
-fn material_color_from_text(text: &str) -> Option<[f32; 4]> {
+/// Parse a material `.mat` file's `_Color` and `_MainTex` texture GUID.
+fn parse_material_def(path: &Path) -> MatDef {
+    std::fs::read_to_string(path)
+        .ok()
+        .map(|t| material_def_from_text(&t))
+        .unwrap_or_default()
+}
+
+/// Extract a Unity `Material`'s `_Color` and `_MainTex` GUID from its YAML text. Split out for tests.
+fn material_def_from_text(text: &str) -> MatDef {
     let uf = UnityFile::parse_lossy(text);
-    let mat = uf.documents.iter().find(|d| d.type_name == "Material")?;
-    let colors = mat.body["m_SavedProperties"]["m_Colors"].as_vec()?;
-    for entry in colors {
-        // Each entry is a single-key map `{ _Color: {r,g,b,a} }`.
+    let Some(mat) = uf.documents.iter().find(|d| d.type_name == "Material") else {
+        return MatDef::default();
+    };
+    let saved = &mat.body["m_SavedProperties"];
+    // `m_Colors` / `m_TexEnvs` are sequences of single-key maps (`{ _Color: {...} }`).
+    let color = find_in_keyed_list(&saved["m_Colors"], "_Color").map(|v| {
+        [
+            field_f64(v, "r").unwrap_or(1.0) as f32,
+            field_f64(v, "g").unwrap_or(1.0) as f32,
+            field_f64(v, "b").unwrap_or(1.0) as f32,
+            field_f64(v, "a").unwrap_or(1.0) as f32,
+        ]
+    });
+    let main_tex = find_in_keyed_list(&saved["m_TexEnvs"], "_MainTex")
+        .and_then(|v| field_str(&v["m_Texture"], "guid").map(|s| s.to_string()));
+    MatDef { color, main_tex }
+}
+
+/// Find the value for `key` in a YAML sequence of single-key maps (Unity's `m_Colors`/`m_TexEnvs`).
+fn find_in_keyed_list<'a>(list: &'a Yaml, key: &str) -> Option<&'a Yaml> {
+    for entry in list.as_vec()? {
         if let Some(h) = entry.as_hash() {
             for (k, v) in h {
-                if k.as_str() == Some("_Color") {
-                    let r = field_f64(v, "r").unwrap_or(1.0) as f32;
-                    let g = field_f64(v, "g").unwrap_or(1.0) as f32;
-                    let b = field_f64(v, "b").unwrap_or(1.0) as f32;
-                    let a = field_f64(v, "a").unwrap_or(1.0) as f32;
-                    return Some([r, g, b, a]);
+                if k.as_str() == Some(key) {
+                    return Some(v);
                 }
             }
         }
@@ -332,12 +391,44 @@ fn material_color_from_text(text: &str) -> Option<[f32; 4]> {
     None
 }
 
+/// Resolve a scene material GUID to a render style (decoded `_MainTex` + `_Color` tint), cached.
+fn resolve_scene_material(
+    guid: &str,
+    guid_index: &HashMap<String, PathBuf>,
+    tex: &mut TextureSet,
+    cache: &mut HashMap<String, SlotStyle>,
+) -> SlotStyle {
+    if let Some(s) = cache.get(guid) {
+        return SlotStyle {
+            texture: s.texture,
+            color: s.color,
+        };
+    }
+    let def = guid_index
+        .get(guid)
+        .map(|p| parse_material_def(p))
+        .unwrap_or_default();
+    let texture = def
+        .main_tex
+        .as_deref()
+        .and_then(|tg| guid_index.get(tg))
+        .and_then(|p| tex.resolve_file(p));
+    let color = def.color.unwrap_or(if texture.is_some() {
+        WHITE
+    } else {
+        DEFAULT_COLOR
+    });
+    cache.insert(guid.to_string(), SlotStyle { texture, color });
+    SlotStyle { texture, color }
+}
+
 /// Default mesh colour when no material resolves.
 const DEFAULT_COLOR: [f32; 4] = [0.72, 0.72, 0.74, 1.0];
 
 /// Parse a `.unity` scene (or a project dir) into placed render meshes. `extra` is prepended to
 /// every world transform (e.g. the Unity→renderer handedness flip, shared with a co-placed avatar).
-pub fn load(path: &Path, extra: Mat4) -> Result<WorldLoad> {
+/// `tex` accumulates the decoded texture pool (shared with a co-placed avatar).
+pub fn load(path: &Path, extra: Mat4, tex: &mut TextureSet) -> Result<WorldLoad> {
     let (scene_path, root) = resolve_scene(path)?;
     let guid_index = build_guid_index(&root);
     let text = std::fs::read_to_string(&scene_path)
@@ -349,7 +440,7 @@ pub fn load(path: &Path, extra: Mat4) -> Result<WorldLoad> {
     let mut nodes: HashMap<i64, Node> = HashMap::new();
     let mut transform_of_go: HashMap<i64, i64> = HashMap::new();
     let mut filters: Vec<(i64, String)> = Vec::new(); // (gameobject fileID, mesh guid)
-    let mut renderer_mat: Vec<(i64, String)> = Vec::new(); // (gameobject fileID, material guid)
+    let mut mats_by_go: HashMap<i64, Vec<String>> = HashMap::new(); // go → material guid per slot
     let mut prefabs: Vec<PrefabInstance> = Vec::new();
 
     for d in &uf.documents {
@@ -376,13 +467,16 @@ pub fn load(path: &Path, extra: Mat4) -> Result<WorldLoad> {
                 }
             }
             23 => {
-                // First material of a MeshRenderer, for base-colour tinting.
+                // All material slots of a MeshRenderer (slot order matters: it aligns with the
+                // mesh's per-triangle material index). A built-in/empty slot stores an empty guid.
                 if let Some(go) = ref_fileid(&d.body, "m_GameObject")
                     && let Some(mats) = d.body["m_Materials"].as_vec()
-                    && let Some(first) = mats.first()
-                    && let Some(guid) = field_str(first, "guid")
                 {
-                    renderer_mat.push((go, guid.to_string()));
+                    let guids = mats
+                        .iter()
+                        .map(|m| field_str(m, "guid").unwrap_or("").to_string())
+                        .collect();
+                    mats_by_go.insert(go, guids);
                 }
             }
             1001 => {
@@ -394,18 +488,8 @@ pub fn load(path: &Path, extra: Mat4) -> Result<WorldLoad> {
         }
     }
 
-    // Resolve renderer material colours (cached per material guid).
-    let mut mat_color_cache: HashMap<String, [f32; 4]> = HashMap::new();
-    let mut color_by_go: HashMap<i64, [f32; 4]> = HashMap::new();
-    for (go, guid) in &renderer_mat {
-        let color = mat_color_cache.entry(guid.clone()).or_insert_with(|| {
-            guid_index
-                .get(guid)
-                .and_then(|p| parse_material_color(p))
-                .unwrap_or(DEFAULT_COLOR)
-        });
-        color_by_go.insert(*go, *color);
-    }
+    // Scene material styles (decoded `_MainTex` + `_Color`) are resolved lazily, cached per guid.
+    let mut mat_style_cache: HashMap<String, SlotStyle> = HashMap::new();
 
     let mut tf_cache: HashMap<i64, Mat4> = HashMap::new();
     let mut fbx_cache: HashMap<String, Option<FbxAsset>> = HashMap::new();
@@ -444,16 +528,38 @@ pub fn load(path: &Path, extra: Mat4) -> Result<WorldLoad> {
         }
         let world = world_matrix(tfid, &nodes, &mut tf_cache);
         let asset = fbx_cache.get(guid).unwrap().as_ref().unwrap();
-        let color = material_color(&color_by_go, *go, DEFAULT_COLOR);
+        let mats = mats_by_go.get(go);
         // Unity bakes the model import scale into the imported mesh's vertices, so a shared sub-mesh
         // assigned to a plain GameObject is already scaled. We apply it here to the raw FBX geometry.
         let place = extra * world * Mat4::from_scale(Vec3::splat(asset.import_scale));
-        if push_meshes(&mut out, asset, &place, None, color) {
+        let mut any = false;
+        for m in &asset.meshes {
+            if m.positions.is_empty() || m.indices.is_empty() {
+                continue;
+            }
+            // Scene-material per slot (Unity's remapped `.mat` is authoritative for a placed prop).
+            let style = |slot: usize| -> SlotStyle {
+                let guid = mats
+                    .and_then(|v| v.get(slot).or_else(|| v.last()))
+                    .filter(|g| !g.is_empty());
+                match guid {
+                    Some(g) => resolve_scene_material(g, &guid_index, tex, &mut mat_style_cache),
+                    None => SlotStyle {
+                        texture: None,
+                        color: DEFAULT_COLOR,
+                    },
+                }
+            };
+            out.extend(split_by_material(m, place, style));
+            any = true;
+        }
+        if any {
             placed += 1;
         }
     }
 
-    // 2) Prefab instances of an FBX model: re-instantiate every mesh with its node-world transform.
+    // 2) Prefab instances of an FBX model: re-instantiate every mesh with its node-world transform,
+    //    textured from the FBX's *embedded* materials (an instanced model has no scene-side material).
     for p in &prefabs {
         let Some(guid) = &p.source_guid else {
             continue;
@@ -466,6 +572,18 @@ pub fn load(path: &Path, extra: Mat4) -> Result<WorldLoad> {
             skipped_unresolved += 1;
             continue;
         }
+        let fbx_path = guid_index.get(guid).cloned();
+        let fbx_dir = fbx_path
+            .as_deref()
+            .and_then(|p| p.parent())
+            .unwrap_or_else(|| Path::new("."))
+            .to_path_buf();
+        // Unity remaps the model's materials (by name) to project `.mat` assets — that's where the
+        // real textures live; fall back to the FBX-embedded material when a name isn't remapped.
+        let remap = fbx_path
+            .as_deref()
+            .map(read_material_remap)
+            .unwrap_or_default();
         let asset = fbx_cache.get(guid).unwrap().as_ref().unwrap();
         let parent_world = p
             .transform_parent
@@ -478,7 +596,33 @@ pub fn load(path: &Path, extra: Mat4) -> Result<WorldLoad> {
             p.root_pos,
         );
         let place = extra * parent_world * root_local;
-        if push_meshes(&mut out, asset, &place, Some(()), DEFAULT_COLOR) {
+        let mut any = false;
+        for (i, m) in asset.meshes.iter().enumerate() {
+            if m.positions.is_empty() || m.indices.is_empty() {
+                continue;
+            }
+            let transform = place * asset.node_world[i];
+            let style = |slot: usize| -> SlotStyle {
+                let mat = m.materials.get(slot);
+                // 1) Unity material remap by name → project `.mat` (authoritative for textures).
+                if let Some(g) = mat.and_then(|mm| remap.get(&mm.name)) {
+                    return resolve_scene_material(g, &guid_index, tex, &mut mat_style_cache);
+                }
+                // 2) Fall back to the FBX-embedded material's texture/colour.
+                let texture = mat.and_then(|mm| tex.resolve_fbx_material(&fbx_dir, mm));
+                let color = mat
+                    .and_then(|mm| mm.diffuse_color)
+                    .unwrap_or(if texture.is_some() {
+                        WHITE
+                    } else {
+                        DEFAULT_COLOR
+                    });
+                SlotStyle { texture, color }
+            };
+            out.extend(split_by_material(m, transform, style));
+            any = true;
+        }
+        if any {
             placed_prefabs += 1;
         }
     }
@@ -500,38 +644,6 @@ pub fn load(path: &Path, extra: Mat4) -> Result<WorldLoad> {
         skipped_builtin,
         skipped_unresolved,
     })
-}
-
-/// Append an FBX asset's meshes to `out`. When `use_node_world` is `Some`, each mesh is placed by
-/// its FBX node-world transform (prefab assembly); otherwise raw at `place` (direct shared mesh).
-/// Returns true if any geometry was emitted.
-fn push_meshes(
-    out: &mut Vec<RenderMesh>,
-    asset: &FbxAsset,
-    place: &Mat4,
-    use_node_world: Option<()>,
-    color: [f32; 4],
-) -> bool {
-    let mut any = false;
-    for (i, m) in asset.meshes.iter().enumerate() {
-        if m.positions.is_empty() || m.indices.is_empty() {
-            continue;
-        }
-        let transform = if use_node_world.is_some() {
-            *place * asset.node_world[i]
-        } else {
-            *place
-        };
-        out.push(RenderMesh {
-            positions: m.positions.clone(),
-            normals: Vec::new(),
-            indices: m.indices.clone(),
-            color,
-            transform,
-        });
-        any = true;
-    }
-    any
 }
 
 /// A Unity `PrefabInstance` (class 1001), distilled to what we need to place an instanced model.
@@ -696,7 +808,7 @@ PrefabInstance:
     }
 
     #[test]
-    fn material_color_reads_color_tint() {
+    fn material_def_reads_color_tint() {
         let text = "\
 %YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
@@ -711,10 +823,37 @@ Material:
     - _Color: {r: 0.5, g: 0.25, b: 0.125, a: 1}
     - _EmissionColor: {r: 0, g: 0, b: 0, a: 1}
 ";
-        let c = material_color_from_text(text).expect("color");
+        let def = material_def_from_text(text);
+        let c = def.color.expect("color");
         assert!((c[0] - 0.5).abs() < 1e-4);
         assert!((c[1] - 0.25).abs() < 1e-4);
         assert!((c[2] - 0.125).abs() < 1e-4);
         assert!((c[3] - 1.0).abs() < 1e-4);
+        // `_MainTex` here points at fileID 0 (no texture), so no GUID is captured.
+        assert_eq!(def.main_tex, None);
+    }
+
+    #[test]
+    fn material_def_reads_main_tex_guid() {
+        let text = "\
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!21 &2100000
+Material:
+  m_Name: Bark
+  m_SavedProperties:
+    m_TexEnvs:
+    - _BumpMap:
+        m_Texture: {fileID: 0}
+    - _MainTex:
+        m_Texture: {fileID: 2800000, guid: abcdef0123456789abcdef0123456789, type: 3}
+    m_Colors:
+    - _Color: {r: 1, g: 1, b: 1, a: 1}
+";
+        let def = material_def_from_text(text);
+        assert_eq!(
+            def.main_tex.as_deref(),
+            Some("abcdef0123456789abcdef0123456789")
+        );
     }
 }

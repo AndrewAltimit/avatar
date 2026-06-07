@@ -145,33 +145,44 @@ Bind comes from `TransformLink`/inverse-bind (never recomposed from `Lcl`+`PreRo
 load→pose→skin pipeline is validated by a renderer-free **rest-pose reproduction** invariant.
 Behaviour: `docs/reference/rig-runtime.md`.
 
-**In-engine preview — `avatar-render` + `avatar render` (built; offscreen avatar, experimental
-world):** `avatar-render` (lib `avatar_render`; `wgpu` 29 + `glam`/`bytemuck`/`png`, GPU-only — knows
-nothing of FBX/Unity) is a headless **offscreen** pipeline: a `Scene` of world-space `RenderMesh`es +
-`Camera` + `Light` → RGBA8 → PNG, no window (render-to-texture + readback; works over SSH/CI on any
-GPU adapter — validated on NVIDIA GB10 via Vulkan). One merged buffer + one draw, 4× MSAA + depth,
-two-sided Lambert (imported winding is inconsistent), RH `0..1` camera, auto-framing. CLI `avatar
-render --avatar <fbx|gltf|glb> [--world <scene|project>] -o out.png` with `--width/--height/--yaw/
---pitch`; importer glue in `crates/cli/src/{render_scene,world}.rs`. **Avatar render (validated,
-correct):** uses **raw control points** as bind geometry — deliberately NOT the FBX skin-bind
-matrices, since ripped/MMD→FBX avatars ship inconsistent per-cluster `Transform`s that make LBS
-collapse into spikes; **auto-uprights** by aligning the hips→head axis (measured from cluster
-centroids in control-point space — reliable weights, not the broken bind matrices) to +Y. Renders the
-real SDK2 avatar standing/undistorted. **World render (built; geometrically faithful, untextured):**
-parses a `.unity` scene (lossy Unity-YAML parse added to `avatar-unity-yaml` — `UnityFile::parse_lossy`
-skips MonoBehaviour bodies yaml-rust2 rejects) and emulates enough of Unity's **FBX import pipeline** to
-place geometry correctly: reads `Transform`/`MeshFilter`/`MeshRenderer`/`PrefabInstance`, composes each
-scene transform up `m_Father`, composes **FBX node-world transforms** (each mesh by its `Model` node's
-`Lcl` T/R/S up the `OO` parent chain — assembles multi-mesh FBXs), applies the **import scale**
+**In-engine preview — `avatar-render` + `avatar render` (built; textured avatar + world):**
+`avatar-render` (lib `avatar_render`; `wgpu` 29 + `glam`/`bytemuck`/`png`, GPU-only — knows nothing of
+FBX/Unity) is a headless **offscreen** pipeline: a `Scene` of world-space `RenderMesh`es + a texture
+pool + `Camera` + `Light` → RGBA8 → PNG, no window (render-to-texture + readback; works over SSH/CI on
+any GPU adapter — validated on NVIDIA GB10 via Vulkan). One merged vertex buffer, **per-texture index
+batches** (one draw per texture), 4× MSAA + depth, two-sided Lambert (imported winding is
+inconsistent), RH `0..1` camera, auto-framing. **Textured:** each `RenderMesh` carries UVs + an
+optional index into `Scene.textures`; shader = texture × vertex tint with a **0.5 alpha cutout**
+(foliage/hair/decal cards) + V-flip; untextured meshes bind a 1×1 white texel. Image decode
+(PNG/JPEG/TGA/BMP/GIF via the `image` crate) lives in the **cli** (`texture.rs`: `TextureSet`
+interns/dedups by key; `split_by_material` makes each material slot its own single-texture mesh) — the
+renderer only uploads RGBA8. CLI `avatar render --avatar <fbx|gltf|glb> [--world <scene|project>] -o
+out.png` with `--width/--height/--yaw/--pitch`; importer glue in
+`crates/cli/src/{render_scene,world,texture}.rs`. **Avatar render (validated, correct):** uses **raw
+control points** as bind geometry — deliberately NOT the FBX skin-bind matrices, since ripped/MMD→FBX
+avatars ship inconsistent per-cluster `Transform`s that make LBS collapse into spikes; **auto-uprights**
+by aligning the hips→head axis (measured from cluster centroids in control-point space — reliable
+weights, not the broken bind matrices) to +Y; **textured** from FBX-embedded materials (per-slot
+diffuse texture/colour). Renders the real SDK2 avatar standing/undistorted/textured. **World render
+(built; geometrically faithful + textured):** parses a `.unity` scene (lossy Unity-YAML parse added to
+`avatar-unity-yaml` — `UnityFile::parse_lossy` skips MonoBehaviour bodies yaml-rust2 rejects) and
+emulates enough of Unity's **FBX import pipeline** to place geometry correctly: reads
+`Transform`/`MeshFilter`/`MeshRenderer`/`PrefabInstance`, composes each scene transform up `m_Father`,
+composes **FBX node-world transforms** (each mesh by its `Model` node's `Lcl` T/R/S up the `OO` parent
+chain — assembles multi-mesh FBXs), applies the **import scale**
 (`useFileScale`/`globalScale`×`UnitScaleFactor`/100, baked by Unity into the imported mesh — fixes
-cm-unit props rendering 100× big), **expands prefab instances** (`m_SourcePrefab`→FBX, every mesh at
-`world(m_TransformParent)·root_local·import_scale·node_world`; root scale = import scale, a prefab
-default never serialized — this is how the cabin shell renders), and tints by **material base colour**
-(`m_Materials[0]`→`.mat` `_Color`). Validated vs the Cozy Cabin world: cabin assembles at ~6 m with
-its trees, props (clocks/iPad/pens) at correct real-world sizes inside it. **Limits:** no textures
-(prefab-instanced meshes have no scene-side material → grey), no FBX pivots/pre-rotation/geometric-
-transform/`InheritType`, no prefab nesting. Headless smoke test gated on adapter availability.
-Behaviour: `docs/reference/render.md`.
+cm-unit props rendering 100× big), and **expands prefab instances** (`m_SourcePrefab`→FBX, every mesh
+at `world(m_TransformParent)·root_local·import_scale·node_world`; root scale = import scale, a prefab
+default never serialized — this is how the cabin shell renders). **Materials/textures:** direct props
+resolve each `m_Materials` slot → `.mat` `_Color` + `_MainTex` (decoded); prefab models (no scene-side
+material) resolve through the model importer's **material remap** (`.fbx.meta` `externalObjects`: FBX
+material *name* → `.mat`), falling back to the **FBX-embedded** material's texture/colour. Validated vs
+the Cozy Cabin world: cabin assembles at ~6 m with its trees (alpha-cut pine foliage), cabin remapped
+materials, and props (clocks/iPad/pens) textured at correct real-world sizes inside it. **Limits:**
+flat-lit (base-colour texture × tint, one Lambert light — no normal/metallic/emission maps, no blend
+transparency beyond the 0.5 cutout, no lightmaps/custom shaders), `image`-decodable formats only (no
+DDS/PSD/EXR → flat colour), no FBX pivots/pre-rotation/geometric-transform/`InheritType`, no prefab
+nesting. Headless smoke test gated on adapter availability. Behaviour: `docs/reference/render.md`.
 
 **Asset generation — M4 (built; library + CLI):** `avatar-anim-gen` emits Unity-YAML `.anim` clips
 (`AnimationClip`, class 74 — blendshape-weight and GameObject-active curves) and FX-layer analog-

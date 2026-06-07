@@ -6,8 +6,14 @@ use std::path::Path;
 use anyhow::{Result, bail};
 use avatar_armature::{HumanBone, Skeleton};
 use avatar_mesh::RawMesh;
-use avatar_render::{Camera, Light, RenderMesh, Scene};
+use avatar_render::{Camera, Light, RenderMesh, Scene, Texture};
 use glam::{Mat4, Quat, Vec3};
+
+use crate::texture::{SlotStyle, TextureSet, split_by_material};
+
+/// Tint used for a textured slot when the material declares no diffuse colour — lets the texture's
+/// own colours show through unmodulated.
+const WHITE: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
 
 /// A soft, distinguishable colour per submesh so body/hair/clothes don't merge into one blob.
 const PALETTE: &[[f32; 4]] = &[
@@ -92,44 +98,30 @@ fn auto_upright(scene: &avatar_fbx::FbxScene, meshes: &[RawMesh]) -> Mat4 {
     Mat4::from_quat(Quat::from_rotation_arc(up.normalize(), Vec3::Y))
 }
 
-/// Build a [`RenderMesh`] from world-space `positions` (normals are recomputed by the renderer,
-/// since skinning re-orients geometry and any source normals would be stale).
-fn render_mesh(
-    positions: Vec<[f32; 3]>,
-    indices: Vec<u32>,
-    color: [f32; 4],
-    place: Mat4,
-) -> RenderMesh {
-    RenderMesh {
-        positions,
-        normals: Vec::new(),
-        indices,
-        color,
-        transform: place,
-    }
-}
-
-/// Bind-pose positions for one mesh: the raw control points (the mesh's authored bind geometry).
-///
-/// We deliberately do **not** apply the FBX skin-bind matrices. In principle the rest pose is
-/// `Σ wᵦ·Tᵦ·v`, but ripped/converted avatars (notably MMD→FBX) routinely ship inconsistent per-
-/// cluster `Transform` matrices — e.g. one bone's bind rotates +Z-up while another's is flipped —
-/// so linear-blend skinning blends opposing rotations and the mesh collapses into spikes. The raw
-/// control points are always a clean, undeformed bind; orientation is recovered separately by
-/// [`auto_upright`], which measures the avatar's own hips→head axis in this same space.
-fn bind_pose_positions(m: &RawMesh) -> Vec<[f32; 3]> {
-    m.positions.clone()
-}
-
 /// Load an avatar (FBX or glTF/GLB) into render meshes at rest/bind pose, placed by `extra`
 /// (identity for a standalone avatar; a spawn transform when dropped into a world).
-pub fn load_avatar_placed(path: &Path, extra: Mat4) -> Result<Vec<RenderMesh>> {
+///
+/// Geometry is the raw control points — deliberately **not** the FBX skin-bind transforms. Ripped/
+/// converted avatars (notably MMD→FBX) routinely ship inconsistent per-cluster `Transform`s, so
+/// linear-blend skinning blends opposing rotations and the mesh collapses into spikes. Raw control
+/// points are always a clean, undeformed bind; orientation is recovered by [`auto_upright`], which
+/// measures the hips→head axis in this same space. Each mesh is split by material so its texture and
+/// diffuse tint (from the FBX-embedded materials) come through; meshes without materials fall back to
+/// a per-submesh palette colour so parts stay visually distinct.
+pub fn load_avatar_placed(
+    path: &Path,
+    extra: Mat4,
+    tex: &mut TextureSet,
+) -> Result<Vec<RenderMesh>> {
     let ext = path
         .extension()
         .and_then(|e| e.to_str())
         .unwrap_or("")
         .to_ascii_lowercase();
-    let out: Vec<RenderMesh> = match ext.as_str() {
+    let fbx_dir = path.parent().unwrap_or_else(|| Path::new("."));
+
+    // (mesh, world placement) pairs, importer-specific.
+    let (meshes, places): (Vec<RawMesh>, Vec<Mat4>) = match ext.as_str() {
         "fbx" => {
             let doc = avatar_fbx::FbxDocument::load(path)?;
             let scene = doc.scene();
@@ -141,41 +133,46 @@ pub fn load_avatar_placed(path: &Path, extra: Mat4) -> Result<Vec<RenderMesh>> {
             // static meshes get the file's declared up-axis correction.
             let skinned_place = extra * auto_upright(&scene, &meshes);
             let static_place = extra * up_axis_correction(scene.global_settings.up_axis);
-            meshes
+            let places = meshes
                 .iter()
-                .enumerate()
-                .filter(|(_, m)| !m.positions.is_empty() && !m.indices.is_empty())
-                .map(|(i, m)| {
-                    let place = if m.is_skinned() {
+                .map(|m| {
+                    if m.is_skinned() {
                         skinned_place
                     } else {
                         static_place
-                    };
-                    render_mesh(
-                        bind_pose_positions(m),
-                        m.indices.clone(),
-                        color_for(i),
-                        place,
-                    )
+                    }
                 })
-                .collect()
+                .collect();
+            (meshes, places)
         }
         // glTF is defined as Y-up; meshes come back in usable space.
         "gltf" | "glb" => {
-            let raw = avatar_gltf::GltfDocument::import(path)?.meshes();
-            if raw.is_empty() {
+            let meshes = avatar_gltf::GltfDocument::import(path)?.meshes();
+            if meshes.is_empty() {
                 bail!("no meshes found in {}", path.display());
             }
-            raw.iter()
-                .enumerate()
-                .filter(|(_, m)| !m.positions.is_empty() && !m.indices.is_empty())
-                .map(|(i, m)| {
-                    render_mesh(m.positions.clone(), m.indices.clone(), color_for(i), extra)
-                })
-                .collect()
+            let places = vec![extra; meshes.len()];
+            (meshes, places)
         }
         other => bail!("unsupported avatar format '.{other}' (expected .fbx, .gltf, or .glb)"),
     };
+
+    let mut out = Vec::new();
+    for (i, (m, place)) in meshes.iter().zip(places).enumerate() {
+        if m.positions.is_empty() || m.indices.is_empty() {
+            continue;
+        }
+        let fallback = color_for(i);
+        let style = |slot: usize| -> SlotStyle {
+            let mat = m.materials.get(slot);
+            let texture = mat.and_then(|mm| tex.resolve_fbx_material(fbx_dir, mm));
+            let color = mat
+                .and_then(|mm| mm.diffuse_color)
+                .unwrap_or(if texture.is_some() { WHITE } else { fallback });
+            SlotStyle { texture, color }
+        };
+        out.extend(split_by_material(m, place, style));
+    }
     if out.is_empty() {
         bail!("no renderable meshes in {}", path.display());
     }
@@ -183,8 +180,8 @@ pub fn load_avatar_placed(path: &Path, extra: Mat4) -> Result<Vec<RenderMesh>> {
 }
 
 /// Load an avatar at the origin (convenience for the standalone-avatar case).
-pub fn load_avatar(path: &Path) -> Result<Vec<RenderMesh>> {
-    load_avatar_placed(path, Mat4::IDENTITY)
+pub fn load_avatar(path: &Path, tex: &mut TextureSet) -> Result<Vec<RenderMesh>> {
+    load_avatar_placed(path, Mat4::IDENTITY, tex)
 }
 
 /// Unity is left-handed (X right, Y up, Z forward); the renderer is right-handed. Negating Z
@@ -194,13 +191,14 @@ pub fn unity_to_renderer() -> Mat4 {
 }
 
 /// Load a world/map scene (a `.unity` file or a project dir) into placed render meshes.
-pub fn load_world(path: &Path) -> Result<crate::world::WorldLoad> {
-    crate::world::load(path, unity_to_renderer())
+pub fn load_world(path: &Path, tex: &mut TextureSet) -> Result<crate::world::WorldLoad> {
+    crate::world::load(path, unity_to_renderer(), tex)
 }
 
-/// Assemble a [`Scene`] from meshes, auto-framing the camera to the geometry's bounds.
+/// Assemble a [`Scene`] from meshes + the resolved texture pool, auto-framing the camera to bounds.
 pub fn scene_from_meshes(
     meshes: Vec<RenderMesh>,
+    textures: Vec<Texture>,
     width: u32,
     height: u32,
     yaw_deg: f32,
@@ -211,6 +209,7 @@ pub fn scene_from_meshes(
     }
     let mut scene = Scene {
         meshes,
+        textures,
         camera: Camera {
             eye: Vec3::ONE,
             target: Vec3::ZERO,

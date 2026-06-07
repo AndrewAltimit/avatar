@@ -32,6 +32,7 @@ fn main() -> anyhow::Result<()> {
 
     let mut scene = Scene {
         meshes: vec![mesh, mesh2],
+        textures: Vec::new(),
         camera: Camera {
             eye: Vec3::ZERO,
             target: Vec3::ZERO,

@@ -11,8 +11,15 @@ mesh), a look-at `Camera`, a directional+ambient `Light`, a clear colour. Output
 PNG. No window/surface — it renders into a texture and reads it back, so it works over SSH and in CI
 wherever a GPU adapter (Vulkan/GL/Metal/DX) exists.
 
-- One merged vertex/index buffer (mesh transforms baked CPU-side), a single uniform (view-projection
-  + light), one draw call.
+- One merged vertex buffer (mesh transforms baked CPU-side) + a single uniform (view-projection +
+  light). The index buffer is grouped into per-texture **batches** (one draw per distinct texture),
+  so a textured scene still uploads one vertex buffer and binds each texture once.
+- **Textures.** A [`Scene`] carries a `textures` pool; each [`RenderMesh`] has UVs and an optional
+  index into it. Textured batches bind a `texture_2d` + sampler (group 1); untextured ones bind a
+  1×1 white texel so the shader path is uniform (base = texture × vertex tint). UVs are V-flipped
+  (FBX/glTF are bottom-left origin, wgpu samples top-left). **Alpha cutout** at 0.5 discards
+  transparent texels so foliage / hair / decal cards (transparent PNGs) don't render as opaque
+  squares; opaque textures are unaffected.
 - 4× MSAA + depth buffer; right-handed camera with `0..1` clip depth (`glam::Mat4::perspective_rh`).
 - **Two-sided** Lambert + ambient: imported meshes have inconsistent triangle winding, so both faces
   are lit rather than going black.
@@ -35,7 +42,11 @@ The avatar loader (`crates/cli/src/render_scene.rs`):
    *cluster centroids in control-point space* (weights + control points are reliable; the bind
    matrices are not), so a model authored lying down, sideways, or upside down comes out standing.
    Non-humanoid rigs fall back to the file's declared `UpAxis`.
-4. Auto-frames the camera (`--yaw`/`--pitch` orbit) to the geometry's bounds.
+4. **Textures** the avatar from its FBX-embedded materials: each mesh is split per material slot, and
+   each slot's diffuse texture (an embedded `Content` blob, or a file resolved relative to the FBX)
+   and diffuse colour are applied. Meshes without materials fall back to a per-submesh palette colour
+   so parts stay visually distinct.
+5. Auto-frames the camera (`--yaw`/`--pitch` orbit) to the geometry's bounds.
 
 This renders the avatar in its rest/bind pose. (Full *posed* skinning would need the bind matrices,
 which this class of asset can't be trusted to provide; see the note above.)
@@ -65,18 +76,25 @@ prefab-instanced models:
    scale, a prefab default that never appears in the scene). This is how the cabin shell renders.
 6. **Directly-placed MeshFilters** keep using the **raw** mesh geometry (× import scale) at their
    GameObject's transform — what Unity does when a shared sub-mesh is assigned to a plain GameObject.
-7. **Material base colour** (`_Color`) is resolved per renderer (`m_Materials[0]` → `.mat`), cached
-   per material GUID; meshes without a resolvable material fall back to neutral grey.
+7. **Materials + textures.** Each renderer's `m_Materials` slots are resolved (per material GUID) to
+   their `.mat`'s base colour (`_Color`) and base texture (`_MainTex` → asset → decoded pixels), and
+   the mesh is split per slot so each slot draws with its own texture/tint. **Prefab-instanced models**
+   (the cabin) have no scene-side material, so their materials are resolved instead through the model
+   importer's **material remap** (`World.fbx.meta`'s `externalObjects`: FBX material *name* → project
+   `.mat`), falling back to the FBX-embedded material's texture/colour. Unresolved materials fall back
+   to neutral grey.
 8. Converts Unity's left-handed Y-up space to the renderer's right-handed space (negating Z).
 
 **Validated against the Cozy Cabin world** (PC export): the cabin assembles at correct scale (~6 m)
-with its surrounding low-poly trees, and props (clocks, iPad, pens) render at correct real-world
-sizes inside it.
+with its surrounding low-poly trees, props (clocks, iPad, pens) at correct real-world sizes inside
+it, and the trees / cabin / props render **textured** (the alpha-cut foliage as proper pine, the
+cabin's remapped materials, the props' `_MainTex`).
 
 **Remaining limitations (still a static preview, not a pixel-accurate Unity render):**
-- **No textures** — meshes are shaded with their material's base `_Color` (or grey). Prefab-instanced
-  meshes (e.g. the cabin shell) have no per-mesh material in the scene at all, so they stay grey;
-  texturing them would need FBX-embedded-material extraction + the importer's material remap.
+- **Shading is flat-lit, not shader-accurate.** A single base-colour texture × tint under one
+  Lambert light — no normal/metallic/emission maps, transparency blending (only a 0.5 alpha cutout),
+  lightmaps, or custom shaders. Texture formats are limited to what `image` decodes (PNG/JPEG/TGA/
+  BMP/GIF — no DDS/PSD/EXR); undecodable textures fall back to the material's flat colour.
 - **FBX transform fidelity.** We compose `Lcl` Translation/Rotation/Scaling only — no per-node
   `RotationOrder`, pre/post-rotation, rotation/scale pivots, geometric transforms, or `InheritType`
   scale-inheritance modes. Uncommon on static world props; rare cases can be mis-oriented/scaled.
@@ -85,7 +103,8 @@ sizes inside it.
 
 ## Verifying
 
-The output is a PNG you can open. The avatar path renders the real SDK2 avatar upright and
-undistorted. The world path assembles real Unity scenes at correct scale (validated against the Cozy
-Cabin world) — geometrically faithful, visually approximate (untextured) per the limitations above.
-Combined `--avatar --world` composes both into one frame at consistent scale.
+The output is a PNG you can open. The avatar path renders the real SDK2 avatar upright, undistorted,
+and **textured** from its embedded materials. The world path assembles real Unity scenes at correct
+scale **and texture** (validated against the Cozy Cabin world) — geometrically faithful, shaded with
+base-colour textures (flat-lit, not shader-accurate) per the limitations above. Combined
+`--avatar --world` composes both into one frame at consistent scale.
