@@ -30,12 +30,15 @@ const BLEND_TYPE_DIRECT: i64 = 4;
 /// A declared animator parameter (`m_AnimatorParameters` entry).
 #[derive(Debug, Clone, Serialize)]
 pub struct AnimatorParameter {
+    /// The parameter's `m_Name`.
     pub name: String,
     /// Raw `m_Type`: 1 Float, 3 Int, 4 Bool, 9 Trigger.
     pub raw_type: i64,
 }
 
 impl AnimatorParameter {
+    /// Human-readable name of [`Self::raw_type`] (`"Float"`/`"Int"`/`"Bool"`/`"Trigger"`,
+    /// else `"Unknown"`).
     pub fn type_name(&self) -> &'static str {
         match self.raw_type {
             1 => "Float",
@@ -54,6 +57,7 @@ pub struct AnimatorCondition {
     pub parameter: String,
     /// Raw `m_ConditionMode`: 1 If, 2 IfNot, 3 Greater, 4 Less, 6 Equals, 7 NotEqual.
     pub mode: i64,
+    /// Comparison value (Unity's misspelled `m_EventTreshold`).
     pub threshold: f64,
 }
 
@@ -62,7 +66,9 @@ pub struct AnimatorCondition {
 pub struct BlendTreeInfo {
     /// `m_BlendType`: 0 = 1D, 1–3 = 2D variants, 4 = Direct.
     pub blend_type: i64,
+    /// `m_BlendParameter` — the X-axis blend parameter.
     pub blend_parameter: String,
+    /// `m_BlendParameterY` — the Y-axis blend parameter (only read by 2D blend types).
     pub blend_parameter_y: String,
     /// Per-child `m_DirectBlendParameter` (only meaningful for a Direct blend tree).
     pub direct_parameters: Vec<String>,
@@ -88,6 +94,7 @@ impl BlendTreeInfo {
 /// A state machine within the controller (`AnimatorStateMachine`, class 1107).
 #[derive(Debug, Clone, Serialize)]
 pub struct StateMachineInfo {
+    /// Number of `m_ChildStates` entries.
     pub child_state_count: usize,
     /// `true` if `m_DefaultState` points at a real state.
     pub has_default_state: bool,
@@ -96,14 +103,19 @@ pub struct StateMachineInfo {
 /// An AnimatorController parsed from a `.controller` file.
 #[derive(Debug, Clone, Serialize)]
 pub struct AnimatorController {
+    /// The controller's `m_Name`, if present.
     pub name: Option<String>,
+    /// Declared `m_AnimatorParameters`.
     pub parameters: Vec<AnimatorParameter>,
     /// Every condition across every transition in the file.
     pub conditions: Vec<AnimatorCondition>,
+    /// Every blend tree (class 206) in the file.
     pub blend_trees: Vec<BlendTreeInfo>,
+    /// Every state machine (class 1107) in the file.
     pub state_machines: Vec<StateMachineInfo>,
     /// `m_WriteDefaultValues` for every state, in document order.
     pub write_defaults: Vec<bool>,
+    /// Number of `AnimatorState` (class 1102) documents.
     pub state_count: usize,
 }
 

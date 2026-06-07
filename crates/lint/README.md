@@ -32,4 +32,4 @@ Built: **M2**.
 ## See also
 
 - [`docs/reference/sdk3-lint-rules.md`](../../docs/reference/sdk3-lint-rules.md) — the full rule
-  table (`VRC001`–`VRC044`) and how assets are identified.
+  table (`VRC001`–`VRC052`) and how assets are identified.
