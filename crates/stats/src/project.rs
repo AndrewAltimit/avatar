@@ -34,7 +34,9 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use avatar_fbx::FbxDocument;
-use avatar_unity_yaml::{UnityFile, Yaml, field_f64, field_i64};
+use avatar_unity_yaml::{
+    UnityFile, Yaml, build_guid_index, field_f64, field_i64, meta_path, relative, walk_assets,
+};
 use avatar_vpm::UnityProject;
 use avatar_vrc_descriptor::{AssetRef, VrcAsset, extract};
 
@@ -71,11 +73,12 @@ struct Resolver {
 pub fn analyze_project(path: &Path) -> Result<Vec<PerfReport>> {
     let project = UnityProject::discover(path)?;
 
-    let mut files = Vec::new();
     let assets = project.assets_dir();
-    if assets.is_dir() {
-        walk(&assets, &mut files);
-    }
+    let files = if assets.is_dir() {
+        walk_assets(&assets)
+    } else {
+        Vec::new()
+    };
 
     let guids = build_guid_index(&files);
     let mut resolver = Resolver::default();
@@ -115,24 +118,6 @@ pub fn analyze_project(path: &Path) -> Result<Vec<PerfReport>> {
     }
 
     Ok(reports)
-}
-
-/// Build the `guid -> asset path` index from the project's `.meta` files. A `Foo.fbx.meta` describes
-/// `Foo.fbx`; mesh references elsewhere point at it by this guid.
-fn build_guid_index(files: &[PathBuf]) -> GuidIndex {
-    let mut index = GuidIndex::new();
-    for path in files {
-        if path.extension().is_none_or(|e| e != "meta") {
-            continue;
-        }
-        let Ok(text) = std::fs::read_to_string(path) else {
-            continue;
-        };
-        if let Some(guid) = avatar_unity_yaml::meta_guid(&text) {
-            index.insert(guid, path.with_extension("")); // strip ".meta"
-        }
-    }
-    index
 }
 
 /// The avatar's name if this file declares one (carries a VRC Avatar Descriptor), else `None`.
@@ -844,9 +829,8 @@ fn texture_guids_of_material(file: &UnityFile) -> Vec<String> {
                 continue;
             };
             for value in hash.values() {
-                if let Some(guid) = value["m_Texture"]["guid"]
-                    .as_str()
-                    .filter(|s| !s.is_empty())
+                if let Some(guid) =
+                    avatar_unity_yaml::ref_guid(value, "m_Texture").filter(|s| !s.is_empty())
                 {
                     out.push(guid.to_string());
                 }
@@ -875,13 +859,6 @@ fn texture_bytes(
     });
     cache.insert(tex_guid.to_string(), bytes);
     bytes
-}
-
-/// The `.meta` path for an asset (`Foo.png` → `Foo.png.meta`).
-fn meta_path(path: &Path) -> PathBuf {
-    let mut s = path.to_path_buf().into_os_string();
-    s.push(".meta");
-    PathBuf::from(s)
 }
 
 /// Component tallies for one avatar.
@@ -1058,28 +1035,6 @@ fn is_scene_or_prefab(path: &Path) -> bool {
         path.extension().and_then(|e| e.to_str()),
         Some("prefab" | "unity")
     )
-}
-
-/// Recursively collect every file under `dir`.
-fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
-    let Ok(entries) = std::fs::read_dir(dir) else {
-        return;
-    };
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path.is_dir() {
-            walk(&path, out);
-        } else {
-            out.push(path);
-        }
-    }
-}
-
-fn relative(root: &Path, path: &Path) -> String {
-    path.strip_prefix(root)
-        .unwrap_or(path)
-        .display()
-        .to_string()
 }
 
 #[cfg(test)]

@@ -9,6 +9,9 @@
 //! This is a *reader*. It does not attempt byte-stable round-trip writing (see PLAN §8) — asset
 //! generation will be a separate concern.
 
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+
 use anyhow::{Context, Result};
 
 pub use yaml_rust2::Yaml;
@@ -239,6 +242,85 @@ pub fn field_bool(node: &Yaml, key: &str) -> Option<bool> {
 /// Convenience: read a string field.
 pub fn field_str<'a>(node: &'a Yaml, key: &str) -> Option<&'a str> {
     node[key].as_str()
+}
+
+/// Read the `guid` of a `{fileID, guid, type}` reference stored under `key` (a cross-asset
+/// reference). Returns `None` for in-file (`fileID`-only) references.
+pub fn ref_guid<'a>(node: &'a Yaml, key: &str) -> Option<&'a str> {
+    field_str(&node[key], "guid")
+}
+
+/// Read the `fileID` of a `{fileID, guid, type}` reference stored under `key`.
+pub fn ref_fileid(node: &Yaml, key: &str) -> Option<i64> {
+    field_i64(&node[key], "fileID")
+}
+
+/// 64-bit FNV-1a hash. Stable across platforms and runs (unlike `DefaultHasher`, which is *not*
+/// guaranteed stable), so derived values (e.g. generated fileIDs, texture fingerprints) are
+/// reproducible.
+pub fn fnv1a(bytes: &[u8]) -> u64 {
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for &b in bytes {
+        h ^= b as u64;
+        h = h.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    h
+}
+
+/// Recursively collect every file under `root` (directories are descended, not emitted). Returns
+/// an empty vec if `root` is unreadable.
+pub fn walk_assets(root: &Path) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    walk_into(root, &mut out);
+    out
+}
+
+fn walk_into(dir: &Path, out: &mut Vec<PathBuf>) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            walk_into(&path, out);
+        } else {
+            out.push(path);
+        }
+    }
+}
+
+/// Build a `guid -> asset path` index from a set of files: every `.meta` whose `guid` parses maps
+/// to the asset it describes (the `.meta` path with the trailing `.meta` stripped). A
+/// `Foo.fbx.meta` describes `Foo.fbx`; references elsewhere point at it by this guid.
+pub fn build_guid_index(files: &[PathBuf]) -> HashMap<String, PathBuf> {
+    let mut index = HashMap::new();
+    for path in files {
+        if path.extension().is_none_or(|e| e != "meta") {
+            continue;
+        }
+        let Ok(text) = std::fs::read_to_string(path) else {
+            continue;
+        };
+        if let Some(guid) = meta_guid(&text) {
+            index.insert(guid, path.with_extension("")); // strip ".meta"
+        }
+    }
+    index
+}
+
+/// A `path` rendered relative to `root` (falling back to the full path if it isn't under `root`).
+pub fn relative(root: &Path, path: &Path) -> String {
+    path.strip_prefix(root)
+        .unwrap_or(path)
+        .display()
+        .to_string()
+}
+
+/// The `.meta` sidecar path for an asset (`Foo.png` → `Foo.png.meta`).
+pub fn meta_path(path: &Path) -> PathBuf {
+    let mut s = path.to_path_buf().into_os_string();
+    s.push(".meta");
+    PathBuf::from(s)
 }
 
 #[cfg(test)]
