@@ -390,6 +390,7 @@ name = "avatar-unity-yaml"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "avatar-testkit",
  "yaml-rust2",
 ]
 

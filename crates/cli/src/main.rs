@@ -10,6 +10,7 @@
 //!   - `avatar anim-gen blendtree …`      — generate an analog-gesture FX blend-tree (Unity YAML)
 //!   - `avatar anim-gen clip …`           — generate a `.anim` clip (blendshape / toggle curves)
 //!   - `avatar anim-gen controller …`     — generate a complete FX `.controller` (full M4 asset)
+//!   - `avatar asset set <file> …`        — surgically edit a value in a Unity YAML asset (round-trip)
 //!   - `avatar schema [name]`             — JSON Schema for a `--json` report type (output contract)
 //!   - `avatar mcp serve`                 — expose the read/diagnose tools over MCP (stdio JSON-RPC)
 //!   - `avatar osc send|input|monitor …`  — drive / observe a running VRChat over OSC
@@ -34,6 +35,7 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 
 use cmd::anim_gen::AnimGenCommand;
+use cmd::asset::AssetCommand;
 use cmd::describe::DescribeArgs;
 use cmd::fbx::{ArmatureCommand, FbxCommand};
 use cmd::lint::LintArgs;
@@ -72,6 +74,9 @@ enum Command {
     /// Generate Unity animation assets (`.anim` clips, FX analog-gesture blend trees).
     #[command(subcommand, name = "anim-gen")]
     AnimGen(AnimGenCommand),
+    /// Surgically edit a value in a Unity YAML asset, preserving fileIDs/refs/formatting.
+    #[command(subcommand)]
+    Asset(AssetCommand),
     /// Drive or observe a running VRChat avatar over OSC.
     #[command(subcommand)]
     Osc(OscCommand),
@@ -120,6 +125,9 @@ fn run() -> Result<ExitCode> {
         }
         Command::AnimGen(AnimGenCommand::Controller(args)) => {
             cmd::anim_gen::controller(&args).map(|()| ExitCode::SUCCESS)
+        }
+        Command::Asset(AssetCommand::Set(args)) => {
+            cmd::asset::set(&args).map(|()| ExitCode::SUCCESS)
         }
         Command::Osc(OscCommand::Send(args)) => cmd::osc::send(&args).map(|()| ExitCode::SUCCESS),
         Command::Osc(OscCommand::Input(args)) => cmd::osc::input(&args).map(|()| ExitCode::SUCCESS),

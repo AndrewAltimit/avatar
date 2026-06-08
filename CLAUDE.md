@@ -27,6 +27,7 @@ VRChat upload step is not. For what's built and the roadmap, see [Status](#statu
 | [`docs/reference/rig-runtime.md`](docs/reference/rig-runtime.md) | Runtime rig layer: skin/bind extraction, posing + bone-matrix palette, two-bone IK, tracker input. |
 | [`docs/reference/performance-stats.md`](docs/reference/performance-stats.md) | `avatar stats`: performance-rank metrics (incl. particles & constraints), component recognition, PC/Android threshold tables. |
 | [`docs/reference/anim-gen.md`](docs/reference/anim-gen.md) | `avatar-anim-gen`: `.anim` clip + analog-gesture blend-tree + FX `AnimatorController` generation (Unity-YAML emitter, deterministic fileIDs). |
+| [`docs/reference/unity-yaml-edit.md`](docs/reference/unity-yaml-edit.md) | `EditableUnityFile` / `avatar asset set`: surgical, round-trip-safe value edits to an *existing* Unity asset by span-splicing raw text (fileIDs/refs/key-order/formatting preserved). |
 | [`docs/reference/osc-runtime.md`](docs/reference/osc-runtime.md) | `avatar-osc`: VRChat OSC address space, codec, UDP client, OSCQuery avatar-config parsing; the analog-gesture daemon. |
 | [`docs/reference/unitypackage.md`](docs/reference/unitypackage.md) | `avatar-unitypackage`: reading the `.unitypackage` format, extracting to a Unity project tree, the avatar-in-world co-import testbed. |
 | [`docs/reference/render.md`](docs/reference/render.md) | `avatar-render` / `avatar render` + `avatar view`: offscreen wgpu preview pipeline, avatar rest-pose render (auto-upright), world-scene render, avatar-dropped-at-spawn-in-world, interactive winit viewer (orbit/zoom/walk) + limits. |
@@ -71,7 +72,9 @@ Unity or the VRChat SDK upload step (interactive VRChat-account login, effective
    (`avatar_fbx::FbxDocument`), resolving the long-standing PLAN §8 risk.
 2. **Unity/VRChat project layer — UnityYAML** (`.anim`, `.controller`, `.asset`, `.prefab`,
    scene, `.meta`): humanoid mapping, Avatar Descriptor, animator layers, expression menus/params.
-   Read/lint is low-risk; *generating* assets Unity accepts requires correct fileIDs/GUIDs.
+   Read/lint is low-risk; *generating* whole assets Unity accepts requires correct fileIDs/GUIDs
+   (M4). *Editing* an existing asset is round-trip-safe via `EditableUnityFile` (span-splice; see
+   [`docs/reference/unity-yaml-edit.md`](docs/reference/unity-yaml-edit.md)).
 
 ## Conventions (mirrors legend-of-legaia-re)
 
@@ -129,6 +132,10 @@ READMEs. What exists today, with its doc:
   ([`armature-repair.md`](docs/reference/armature-repair.md)).
 - **Generate (M4)** — `avatar anim-gen clip|blendtree|controller`: Unity-YAML `.anim` + a full FX
   `AnimatorController`, deterministic fileIDs ([`anim-gen.md`](docs/reference/anim-gen.md)).
+- **Edit** — `avatar asset set` / `avatar_unity_yaml::EditableUnityFile`: surgical, round-trip-safe
+  value edits to an *existing* Unity asset (scalars, reference re-targets, flow-map subfields) by
+  span-splicing raw text — fileIDs/refs/key-order/formatting preserved
+  ([`unity-yaml-edit.md`](docs/reference/unity-yaml-edit.md)).
 - **OSC runtime (M5)** — `avatar osc send|input|monitor|change|query` + the analog-gesture daemon
   `avatar osc gestures` ([`osc-runtime.md`](docs/reference/osc-runtime.md)).
 - **Packaging / preview** — `avatar unitypackage info|list|extract|testbed`

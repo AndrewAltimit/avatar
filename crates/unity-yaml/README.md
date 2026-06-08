@@ -1,7 +1,7 @@
 # avatar-unity-yaml
 
-A reader for Unity's YAML serialization format. Package `avatar-unity-yaml` · library
-`avatar_unity_yaml`. Part of the [avatar](../../README.md) monorepo.
+A reader **and surgical editor** for Unity's YAML serialization format. Package `avatar-unity-yaml` ·
+library `avatar_unity_yaml`. Part of the [avatar](../../README.md) monorepo.
 
 ## What it does
 
@@ -11,8 +11,12 @@ by `stripped`). The class id and file id live on that header line; the body belo
 YAML. This crate splits on the header lines itself to recover the class/file ids, then parses each
 body with [`yaml-rust2`](https://crates.io/crates/yaml-rust2).
 
-This is a **reader** — it does not attempt byte-stable round-trip writing (see
-[`PLAN.md`](../../PLAN.md) §8); asset generation will be a separate concern.
+Reading does not round-trip through `yaml-rust2` (which drops formatting, key order, and the `--- !u!`
+headers). For *editing* an existing asset, `EditableUnityFile` instead **span-splices the raw text** —
+it replaces only the bytes of the value you change, leaving every `&fileID`, `{fileID, guid}`
+reference, key order, and byte of formatting untouched, then re-parses to validate. Generating *whole*
+new assets is a separate concern (`avatar-anim-gen`). Full detail:
+[`docs/reference/unity-yaml-edit.md`](../../docs/reference/unity-yaml-edit.md).
 
 ## Key API
 
@@ -26,6 +30,10 @@ This is a **reader** — it does not attempt byte-stable round-trip writing (see
   instead of failing the file (large scenes occasionally serialize scalars it can't parse; used by the
   world renderer, which only needs Transforms/MeshFilters).
 - `parse_meta(text)` — parse a single-document file (e.g. a `.meta`) into its root `Yaml` node.
+- `EditableUnityFile::parse(text)` — load for surgical editing. `set_scalar(doc, path, Scalar)` and
+  `set_reference(doc, path, fileID, guid, type)` splice a single value; `doc_by_file_id`,
+  `documents()`, `into_string()`. Paths are `parse_path("parameters/0/saved")` /
+  `parse_path("m_Script/guid")`. See the [reference doc](../../docs/reference/unity-yaml-edit.md).
 
 ## Usage
 
@@ -60,4 +68,4 @@ assert_eq!(field_i64(&params[0], "valueType"), Some(0));
 
 ## Status
 
-Built: **M2**.
+Built: **M2** (reader) + surgical editor (`EditableUnityFile` / `avatar asset set`).

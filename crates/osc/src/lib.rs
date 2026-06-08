@@ -34,6 +34,12 @@
 //! <https://docs.vrchat.com/docs/osc-avatar-parameters>,
 //! <https://docs.vrchat.com/docs/osc-as-input-controller>.
 
+// Regression guard for an ingest crate: an `.unwrap()`/`.expect()` on a parse/decode path turns
+// malformed wire bytes or config into an opaque panic instead of a structured `anyhow` error an agent
+// can read. Warn on them in non-test code — CI runs clippy with `-D warnings`, so a new one fails the
+// build; tests use them freely.
+#![cfg_attr(not(test), warn(clippy::unwrap_used, clippy::expect_used))]
+
 use std::io;
 use std::net::{ToSocketAddrs, UdpSocket};
 

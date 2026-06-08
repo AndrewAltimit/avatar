@@ -6,8 +6,14 @@
 //! standard parser can read. We therefore split on the header lines ourselves to recover the
 //! class id / file id, then parse each body with `yaml-rust2`.
 //!
-//! This is a *reader*. It does not attempt byte-stable round-trip writing (see PLAN §8) — asset
-//! generation will be a separate concern.
+//! This crate reads Unity YAML; surgical, round-trip-safe *editing* lives in [`edit`]
+//! ([`EditableUnityFile`]). Generating whole new assets is a separate concern (`avatar-anim-gen`).
+
+// Regression guard for an ingest crate: an `.unwrap()`/`.expect()` on a parse path turns a malformed
+// user file into an opaque panic instead of a structured `anyhow` error an agent can read. Warn on
+// them in non-test code — CI runs clippy with `-D warnings`, so a new one fails the build; tests use
+// them freely.
+#![cfg_attr(not(test), warn(clippy::unwrap_used, clippy::expect_used))]
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -16,6 +22,9 @@ use anyhow::{Context, Result};
 
 pub use yaml_rust2::Yaml;
 use yaml_rust2::YamlLoader;
+
+pub mod edit;
+pub use edit::{EditableUnityFile, Scalar, Seg, parse_path};
 
 /// One document within a Unity YAML file.
 #[derive(Debug, Clone)]
@@ -193,7 +202,7 @@ fn split_documents(text: &str) -> Vec<(&str, String)> {
 }
 
 /// Parse a `--- !u!<classID> &<fileID> [stripped]` header into `(class_id, file_id, stripped)`.
-fn parse_header(header: &str) -> Option<(u32, i64, bool)> {
+pub(crate) fn parse_header(header: &str) -> Option<(u32, i64, bool)> {
     let stripped = header.contains("stripped");
     let class_id = header
         .split("!u!")

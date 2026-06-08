@@ -9,6 +9,12 @@
 //! world transforms or interpret skinning. Higher-level interpretation (skeletons, Unity
 //! humanoid mapping) lives in `avatar-armature`.
 
+// Regression guard for an ingest crate: an `.unwrap()`/`.expect()` on a parse path turns a malformed
+// user file into an opaque panic instead of a structured `anyhow` error an agent can read. Warn on
+// them in non-test code — CI runs clippy with `-D warnings`, so a new one fails the build; tests use
+// them freely.
+#![cfg_attr(not(test), warn(clippy::unwrap_used, clippy::expect_used))]
+
 mod mesh;
 
 use std::fs::File;
