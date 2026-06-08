@@ -94,7 +94,9 @@ pub fn describe(args: &DescribeArgs) -> Result<ExitCode> {
     Ok(code)
 }
 
-fn build(path: &std::path::Path) -> Result<DescribeReport> {
+/// Build the consolidated describe report for `path`. Public so the MCP server (`avatar mcp serve`)
+/// can return the same report the `describe --json` CLI emits.
+pub fn build(path: &std::path::Path) -> Result<DescribeReport> {
     if is_fbx(path) {
         let scene = FbxScene::load(path)?;
         let armature = avatar_armature::analyze(&scene);

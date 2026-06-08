@@ -11,6 +11,7 @@
 //!   - `avatar anim-gen clip …`           — generate a `.anim` clip (blendshape / toggle curves)
 //!   - `avatar anim-gen controller …`     — generate a complete FX `.controller` (full M4 asset)
 //!   - `avatar schema [name]`             — JSON Schema for a `--json` report type (output contract)
+//!   - `avatar mcp serve`                 — expose the read/diagnose tools over MCP (stdio JSON-RPC)
 //!   - `avatar osc send|input|monitor …`  — drive / observe a running VRChat over OSC
 //!   - `avatar osc query <config.json>`   — list an avatar's parameters from its OSCQuery config
 //!   - `avatar osc gestures`              — run the analog-gesture daemon (demo trigger sweep)
@@ -36,6 +37,7 @@ use cmd::anim_gen::AnimGenCommand;
 use cmd::describe::DescribeArgs;
 use cmd::fbx::{ArmatureCommand, FbxCommand};
 use cmd::lint::LintArgs;
+use cmd::mcp::McpCommand;
 use cmd::osc::OscCommand;
 use cmd::render::{RenderArgs, ViewArgs};
 use cmd::schema::SchemaArgs;
@@ -82,6 +84,9 @@ enum Command {
     View(ViewArgs),
     /// Print the JSON Schema for a `--json` report type (for agents consuming the output).
     Schema(SchemaArgs),
+    /// Run a Model Context Protocol server exposing the read/diagnose tools to an agent host.
+    #[command(subcommand)]
+    Mcp(McpCommand),
 }
 
 fn main() -> ExitCode {
@@ -143,5 +148,6 @@ fn run() -> Result<ExitCode> {
         Command::Render(args) => cmd::render::render(&args).map(|()| ExitCode::SUCCESS),
         Command::View(args) => cmd::render::view(&args).map(|()| ExitCode::SUCCESS),
         Command::Schema(args) => cmd::schema::schema(&args).map(|()| ExitCode::SUCCESS),
+        Command::Mcp(McpCommand::Serve(args)) => cmd::mcp::serve(&args).map(|()| ExitCode::SUCCESS),
     }
 }

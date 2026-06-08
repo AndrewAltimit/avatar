@@ -19,17 +19,20 @@ pub struct SchemaArgs {
     name: Option<String>,
 }
 
+/// A named schema generator: builds one report type's JSON Schema as a serde `Value`.
 #[cfg(feature = "schema")]
-pub fn schema(args: &SchemaArgs) -> Result<()> {
-    use anyhow::bail;
+type Entry = (&'static str, fn() -> serde_json::Value);
+
+/// The published report-type schemas, keyed by the command whose `--json` emits the type. Keep in
+/// sync as report types are added. Shared by the `avatar schema` command and the `avatar_schema`
+/// MCP tool so both expose exactly the same set.
+#[cfg(feature = "schema")]
+fn entries() -> &'static [Entry] {
     use schemars::schema_for;
-    use serde_json::Value;
-
-    /// A named schema generator: builds one report type's JSON Schema as a serde `Value`.
-    type Entry = (&'static str, fn() -> Value);
-
-    // Keyed by the command whose `--json` emits the type. Keep in sync as report types are added.
-    let entries: &[Entry] = &[
+    // The `: &'static [Entry]` annotation is load-bearing: it gives each non-capturing closure the
+    // expected `fn() -> Value` type so they coerce to a uniform element type (rvalue static
+    // promotion then makes the array `'static`).
+    let entries: &'static [Entry] = &[
         ("describe", || {
             serde_json::to_value(schema_for!(crate::cmd::describe::DescribeReport)).unwrap()
         }),
@@ -46,6 +49,32 @@ pub fn schema(args: &SchemaArgs) -> Result<()> {
             serde_json::to_value(schema_for!(crate::cmd::fbx::InspectSummary)).unwrap()
         }),
     ];
+    entries
+}
+
+/// The names of the available schemas, in publication order.
+#[cfg(feature = "schema")]
+pub fn schema_names() -> Vec<&'static str> {
+    entries().iter().map(|(n, _)| *n).collect()
+}
+
+/// Build one report type's JSON Schema by name. Errors (listing the valid names) on an unknown name.
+#[cfg(feature = "schema")]
+pub fn schema_value(name: &str) -> Result<serde_json::Value> {
+    match entries().iter().find(|(n, _)| *n == name) {
+        Some((_, make)) => Ok(make()),
+        None => anyhow::bail!(
+            "unknown schema '{name}'; available: {}",
+            schema_names().join(", ")
+        ),
+    }
+}
+
+#[cfg(feature = "schema")]
+pub fn schema(args: &SchemaArgs) -> Result<()> {
+    use serde_json::Value;
+
+    let entries = entries();
 
     let Some(name) = args.name.as_deref() else {
         println!("Available schemas (use `avatar schema <name>`, or `avatar schema all`):");
@@ -64,20 +93,8 @@ pub fn schema(args: &SchemaArgs) -> Result<()> {
         return Ok(());
     }
 
-    match entries.iter().find(|(n, _)| *n == name) {
-        Some((_, make)) => {
-            println!("{}", serde_json::to_string_pretty(&make())?);
-            Ok(())
-        }
-        None => bail!(
-            "unknown schema '{name}'; available: {}",
-            entries
-                .iter()
-                .map(|(n, _)| *n)
-                .collect::<Vec<_>>()
-                .join(", ")
-        ),
-    }
+    println!("{}", serde_json::to_string_pretty(&schema_value(name)?)?);
+    Ok(())
 }
 
 #[cfg(not(feature = "schema"))]

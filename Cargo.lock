@@ -227,6 +227,7 @@ dependencies = [
  "avatar-fbx",
  "avatar-gltf",
  "avatar-lint",
+ "avatar-mcp",
  "avatar-mesh",
  "avatar-osc",
  "avatar-osc-gestures",
@@ -285,6 +286,15 @@ dependencies = [
  "avatar-vrc-descriptor",
  "schemars",
  "serde",
+]
+
+[[package]]
+name = "avatar-mcp"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

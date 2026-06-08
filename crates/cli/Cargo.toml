@@ -31,6 +31,9 @@ avatar-unitypackage = { path = "../unitypackage" }
 avatar-anim-gen = { path = "../anim-gen" }
 avatar-osc = { path = "../osc" }
 avatar-osc-gestures = { path = "../osc-gestures" }
+# MCP (Model Context Protocol) stdio server — `avatar mcp serve` wraps the read/diagnose surface as
+# tools an agent host can discover and call structurally instead of parsing CLI stdout.
+avatar-mcp = { path = "../mcp" }
 # Decode texture images (PNG/JPEG/TGA/BMP/GIF) for the render command. Default features off to keep
 # the format set lean; these cover Unity project + FBX-embedded textures in practice.
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "tga", "bmp", "gif"] }

@@ -53,6 +53,7 @@ format and subsystem references.
 | [`avatar-render`](crates/render/README.md) | **GPU preview** via wgpu: render an avatar (and a Unity world scene, with the avatar dropped at the world's spawn point) to a PNG, headless — plus an optional interactive **winit viewer** (orbit/zoom/walk). Wired to `avatar render` / `avatar view` |
 | [`avatar-osc`](crates/osc/README.md) | VRChat **OSC runtime**: `/avatar/parameters`, `/input`, `/avatar/change` codec + UDP client and OSCQuery avatar-config parsing — the M5 runtime foundation, wired to `avatar osc` |
 | [`avatar-osc-gestures`](crates/osc-gestures/README.md) | The **analog-gesture daemon** ("Vive advanced controls on any hardware"): controller trigger → `Gesture*`/`Gesture*Weight` over OSC, with deadzone + change detection. Wired to `avatar osc gestures` |
+| [`avatar-mcp`](crates/mcp/README.md) | A domain-agnostic **MCP server** (stdio JSON-RPC): exposes the read/diagnose surface as tools an agent host can discover + call. Wired to `avatar mcp serve` |
 | [`avatar-cli`](crates/cli/README.md) | The `avatar` binary tying the above together |
 
 The asset-generation (`avatar-anim-gen`), OSC-runtime (`avatar-osc`), and analog-gesture daemon

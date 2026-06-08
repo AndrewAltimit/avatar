@@ -36,6 +36,8 @@ Documentation for the [avatar](../README.md) monorepo. Start with the root
 - [`reference/render.md`](reference/render.md) — `avatar-render` / `avatar render`: the offscreen
   wgpu preview pipeline, avatar rest-pose rendering (auto-upright), and experimental world-scene
   rendering with its limitations.
+- [`reference/mcp.md`](reference/mcp.md) — `avatar-mcp` / `avatar mcp serve`: the stdio MCP server,
+  the read-only tool registry, the handshake, and the two-layer error model.
 
 ## Planned directories
 
