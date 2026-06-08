@@ -4,7 +4,13 @@
 # Local sample assets used for tests/dev (may contain copyrighted avatars).
 # Never commit user-supplied FBX / Unity projects.
 /samples/
-/fixtures/
+# The committed test corpus lives under fixtures/ (text only: Unity YAML, JSON, md). Ignore
+# anything else dropped there (e.g. a local project for inspection) but keep the corpus. The
+# *.fbx / *.unitypackage globs below still apply inside the re-included subtree, so binary avatar
+# assets are never committed even under fixtures/projects/.
+/fixtures/*
+!/fixtures/README.md
+!/fixtures/projects/
 *.fbx
 *.unitypackage
 

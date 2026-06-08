@@ -21,3 +21,6 @@ schema = ["dep:schemars"]
 [dev-dependencies]
 # Used only to synthesize a binary FBX in-memory for the non-gated write-back test.
 fbxcel = { version = "0.9", features = ["tree", "writer"] }
+# Golden-snapshot harness + the in-code synthetic humanoid skeleton (the `fbx` feature).
+avatar-testkit = { path = "../testkit", features = ["fbx"] }
+serde_json.workspace = true

@@ -1,0 +1,63 @@
+{
+  "avatar_sdk_version": "3.7.0",
+  "controllers": 2,
+  "descriptors": 1,
+  "diagnostics": [
+    {
+      "code": "VRC038",
+      "file": "Assets/Avatar/Avatar.prefab",
+      "hint": "Map every one of the 15 visemes to a blend shape on the viseme mesh.",
+      "message": "A viseme blend-shape entry is empty or unmapped (-none-)",
+      "severity": "Warn"
+    },
+    {
+      "code": "VRC038",
+      "file": "Assets/Avatar/Avatar.prefab",
+      "hint": "Each viseme should map to a distinct blend shape; a duplicate means a viseme is mis-mapped.",
+      "message": "Duplicate viseme blend-shape entry: 'vrc.v_aa'",
+      "severity": "Warn"
+    },
+    {
+      "code": "VRC045",
+      "file": "Assets/Avatar/Avatar.prefab",
+      "hint": "Use one Write Defaults setting for every state on every playable layer (VRChat's templates use Off).",
+      "message": "Write Defaults is inconsistent across the avatar's playable-layer controllers (1 states on, 1 off)",
+      "severity": "Warn"
+    },
+    {
+      "code": "VRC050",
+      "file": "Assets/Avatar/Avatar.prefab",
+      "hint": "Set the PhysBone's Root Transform to a bone under it — or check the bone wasn't stripped from a nested prefab.",
+      "message": "A PhysBone's root transform could not be resolved in this file",
+      "severity": "Warn"
+    },
+    {
+      "code": "VRC051",
+      "file": "Assets/Avatar/Avatar.prefab",
+      "hint": "Point the Root Transform at a bone with child bones, or set a non-zero Endpoint Position.",
+      "message": "A PhysBone moves no transforms (its root has no child bones and no endpoint)",
+      "severity": "Warn"
+    },
+    {
+      "code": "VRC052",
+      "file": "Assets/Avatar/Avatar.prefab",
+      "hint": "Assign a PhysBone Collider to each slot, or remove the empty slots.",
+      "message": "A PhysBone has 2 collider slot(s) but none are assigned",
+      "severity": "Warn"
+    }
+  ],
+  "menu_assets": 0,
+  "packages": [
+    {
+      "name": "com.vrchat.avatars",
+      "version": "3.7.0"
+    },
+    {
+      "name": "com.vrchat.base",
+      "version": "3.7.0"
+    }
+  ],
+  "parameter_assets": 0,
+  "project_root": "<ROOT>/fixtures/projects/DynamicsProject",
+  "unity_version": "2022.3.22f1"
+}

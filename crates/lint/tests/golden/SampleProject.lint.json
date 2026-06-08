@@ -1,0 +1,74 @@
+{
+  "avatar_sdk_version": "3.7.0",
+  "controllers": 0,
+  "descriptors": 0,
+  "diagnostics": [
+    {
+      "code": "VRC002",
+      "file": null,
+      "hint": "An uploadable avatar needs a GameObject with a VRC Avatar Descriptor component.",
+      "message": "No VRC Avatar Descriptor found in any scene or prefab under Assets/",
+      "severity": "Info"
+    },
+    {
+      "code": "VRC011",
+      "file": "Assets/Avatar/Expressions/Parameters.asset",
+      "hint": "Remove the duplicate entry — only the first is synced and the budget counts both.",
+      "message": "Duplicate expression parameter name: 'DupName'",
+      "severity": "Warn"
+    },
+    {
+      "code": "VRC012",
+      "file": "Assets/Avatar/Expressions/Parameters.asset",
+      "hint": "Wire it to a menu or animator — or ignore if it's driven by OSC, contacts, or a build-time tool (Modular Avatar / VRCFury).",
+      "message": "Expression parameter 'DupName' is referenced by no menu control, animator condition, or blend tree anywhere in the project",
+      "severity": "Info"
+    },
+    {
+      "code": "VRC012",
+      "file": "Assets/Avatar/Expressions/Parameters.asset",
+      "hint": "Wire it to a menu or animator — or ignore if it's driven by OSC, contacts, or a build-time tool (Modular Avatar / VRCFury).",
+      "message": "Expression parameter 'LocalOnlyFloat' is referenced by no menu control, animator condition, or blend tree anywhere in the project",
+      "severity": "Info"
+    },
+    {
+      "code": "VRC020",
+      "file": "Assets/Avatar/Expressions/Menu.asset",
+      "hint": "Move extra controls into a sub-menu.",
+      "message": "Expression menu has 10 controls, over the limit of 8",
+      "severity": "Error"
+    },
+    {
+      "code": "VRC021",
+      "file": "Assets/Avatar/Expressions/Menu.asset",
+      "hint": "Add it to the avatar's Expression Parameters, or it may be generated at build time (e.g. Modular Avatar).",
+      "message": "Menu control 'Mystery' references parameter 'GhostParam', which is not declared in any Expression Parameters asset",
+      "severity": "Warn"
+    },
+    {
+      "code": "VRC022",
+      "file": "Assets/Avatar/Expressions/Menu.asset",
+      "hint": "Assign a parameter (or point it at a sub-menu), or remove the control.",
+      "message": "Menu control 'DeadControl' drives nothing (no parameter, sub-parameters, or sub-menu)",
+      "severity": "Warn"
+    }
+  ],
+  "menu_assets": 1,
+  "packages": [
+    {
+      "name": "com.vrchat.avatars",
+      "version": "3.7.0"
+    },
+    {
+      "name": "com.vrchat.base",
+      "version": "3.7.0"
+    },
+    {
+      "name": "nadena.dev.modular-avatar",
+      "version": "1.10.0"
+    }
+  ],
+  "parameter_assets": 1,
+  "project_root": "<ROOT>/fixtures/projects/SampleProject",
+  "unity_version": "2022.3.22f1"
+}

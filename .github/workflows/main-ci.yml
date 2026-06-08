@@ -9,7 +9,7 @@
 #     local disk. That turns the otherwise-skipped real-FBX-parse and
 #     `.unitypackage` open/extract integration tests into real, every-push
 #     coverage (the lint / project-stats read paths are already covered on every
-#     push by the committed synthetic fixtures under crates/lint/tests/fixtures).
+#     push by the committed synthetic fixtures under fixtures/projects).
 #     Paths default to this machine's local files but are overridable via repo
 #     variables; if a path is absent the tests self-skip, so forks stay green.
 #   - The heavier world cross-check (a ~700 MB world package) stays on the

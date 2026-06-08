@@ -1,0 +1,54 @@
+{
+  "android_overall": "Excellent",
+  "kind": "fbx",
+  "not_evaluated": [
+    "Texture Memory",
+    "PhysBone Components",
+    "PhysBone Colliders",
+    "Contacts",
+    "Particle Systems",
+    "Lights",
+    "Audio Sources",
+    "Constraints",
+    "Animators"
+  ],
+  "pc_overall": "Excellent",
+  "source": "humanoid_skeleton.fbx",
+  "stats": [
+    {
+      "android": "Excellent",
+      "android_value": 0,
+      "name": "Triangles",
+      "pc": "Excellent",
+      "value": 0
+    },
+    {
+      "android": "Excellent",
+      "android_value": 0,
+      "name": "Skinned Meshes",
+      "pc": "Excellent",
+      "value": 0
+    },
+    {
+      "android": "Excellent",
+      "android_value": 0,
+      "name": "Basic Meshes",
+      "pc": "Excellent",
+      "value": 0
+    },
+    {
+      "android": "Excellent",
+      "android_value": 0,
+      "name": "Material Slots",
+      "pc": "Excellent",
+      "value": 0
+    },
+    {
+      "android": "Excellent",
+      "android_value": 24,
+      "name": "Bones",
+      "pc": "Excellent",
+      "value": 24
+    }
+  ]
+}

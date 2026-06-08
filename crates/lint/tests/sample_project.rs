@@ -1,11 +1,9 @@
 //! End-to-end lint over a committed synthetic Unity project fixture.
 //!
-//! The fixture (`tests/fixtures/SampleProject`) deliberately contains a few issues so the rules
+//! The fixture (`fixtures/projects/SampleProject`) deliberately contains a few issues so the rules
 //! are exercised: a duplicate parameter (VRC011), a 9-control menu (VRC020), and a menu control
 //! referencing an undeclared parameter (VRC021). The avatar SDK is present, so VRC001 must NOT
 //! fire, and references to built-ins (GestureLeft) and declared params (VRCEmote) must be clean.
-
-use std::path::PathBuf;
 
 fn codes(report: &avatar_lint::LintReport) -> Vec<&str> {
     report.diagnostics.iter().map(|d| d.code).collect()
@@ -13,7 +11,7 @@ fn codes(report: &avatar_lint::LintReport) -> Vec<&str> {
 
 #[test]
 fn lints_sample_project() {
-    let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/SampleProject");
+    let fixture = avatar_testkit::corpus("projects/SampleProject");
     let report = avatar_lint::run(&fixture).expect("lint sample project");
 
     assert_eq!(report.unity_version.as_deref(), Some("2022.3.22f1"));

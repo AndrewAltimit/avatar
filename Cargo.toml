@@ -20,6 +20,7 @@ members = [
     "crates/osc-gestures",
     "crates/mcp",
     "crates/cli",
+    "crates/testkit",
 ]
 
 [workspace.package]

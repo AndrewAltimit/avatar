@@ -1,0 +1,79 @@
+{
+  "armature_roots": [
+    "mixamorig:Hips"
+  ],
+  "bone_like_count": 24,
+  "duplicate_mappings": {},
+  "ignored_finger_bones": 2,
+  "ignored_leaf_bones": 1,
+  "mapped": {
+    "Chest": [
+      "mixamorig:Spine1"
+    ],
+    "Head": [
+      "mixamorig:Head"
+    ],
+    "Hips": [
+      "mixamorig:Hips"
+    ],
+    "LeftFoot": [
+      "mixamorig:LeftFoot"
+    ],
+    "LeftHand": [
+      "mixamorig:LeftHand"
+    ],
+    "LeftLowerArm": [
+      "mixamorig:LeftForeArm"
+    ],
+    "LeftLowerLeg": [
+      "mixamorig:LeftLeg"
+    ],
+    "LeftShoulder": [
+      "mixamorig:LeftShoulder"
+    ],
+    "LeftToes": [
+      "mixamorig:LeftToeBase"
+    ],
+    "LeftUpperArm": [
+      "mixamorig:LeftArm"
+    ],
+    "LeftUpperLeg": [
+      "mixamorig:LeftUpLeg"
+    ],
+    "Neck": [
+      "mixamorig:Neck"
+    ],
+    "RightFoot": [
+      "mixamorig:RightFoot"
+    ],
+    "RightHand": [
+      "mixamorig:RightHand"
+    ],
+    "RightLowerArm": [
+      "mixamorig:RightForeArm"
+    ],
+    "RightLowerLeg": [
+      "mixamorig:RightLeg"
+    ],
+    "RightShoulder": [
+      "mixamorig:RightShoulder"
+    ],
+    "RightToes": [
+      "mixamorig:RightToeBase"
+    ],
+    "RightUpperArm": [
+      "mixamorig:RightArm"
+    ],
+    "RightUpperLeg": [
+      "mixamorig:RightUpLeg"
+    ],
+    "Spine": [
+      "mixamorig:Spine"
+    ]
+  },
+  "mesh_roots": [],
+  "missing_recommended": [],
+  "missing_required": [],
+  "total_models": 24,
+  "unmapped_bones": []
+}

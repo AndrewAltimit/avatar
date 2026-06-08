@@ -6,7 +6,7 @@
 //! user packages (see `.gitignore`).
 //!
 //! Why this exists: the lint / project-stats *read* paths are already covered on every push by the
-//! committed synthetic fixture projects (`crates/lint/tests/fixtures/*`), but two paths could only
+//! committed synthetic fixture projects (`fixtures/projects/*`), but two paths could only
 //! be exercised against real data and otherwise self-skipped — **binary FBX parsing** of a
 //! real-world (ripped / MMD-exported) rig, and **`.unitypackage` open/extract**. This walks the full
 //! pipeline on real bytes: extract the package, then run the actual `describe` / `lint` / `stats`

@@ -111,7 +111,15 @@ user FBX / Unity projects — they are git-ignored (see `.gitignore`). The gated
 
 On the self-hosted CI runner these point at local files so the otherwise-skipped real-data paths run
 on every push (see `.github/workflows/main-ci.yml`); the committed synthetic fixture projects under
-`crates/lint/tests/fixtures/` already cover the lint / project-stats paths hermetically.
+`fixtures/projects/` already cover the lint / project-stats paths hermetically.
+
+**Golden (snapshot) tests.** Report-producing read paths are pinned with golden tests via the
+`avatar-testkit` harness: the whole serialized report is diffed against a committed
+`crates/<crate>/tests/golden/*.json` snapshot, so any change to the report surface is a reviewable
+diff rather than a silent regression. After an intentional change, regenerate and review:
+`UPDATE_GOLDEN=1 cargo test --workspace` then `git diff -- '**/tests/golden/**'`. The corpus +
+harness are documented in [`docs/reference/testing.md`](docs/reference/testing.md) and
+[`fixtures/README.md`](fixtures/README.md).
 
 ```rust
 #[test]

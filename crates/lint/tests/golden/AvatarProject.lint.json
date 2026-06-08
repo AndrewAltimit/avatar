@@ -1,0 +1,112 @@
+{
+  "avatar_sdk_version": "3.7.0",
+  "controllers": 1,
+  "descriptors": 1,
+  "diagnostics": [
+    {
+      "code": "VRC012",
+      "file": "Assets/Avatar/Parameters.asset",
+      "hint": "Wire it to a menu or animator — or ignore if it's driven by OSC, contacts, or a build-time tool (Modular Avatar / VRCFury).",
+      "message": "Expression parameter 'FloatThing' is referenced by no menu control, animator condition, or blend tree anywhere in the project",
+      "severity": "Info"
+    },
+    {
+      "code": "VRC032",
+      "file": "Assets/Avatar/Avatar.prefab",
+      "hint": "The .controller asset was moved or deleted; reassign it on the Avatar Descriptor.",
+      "message": "FX playable layer references an animator controller missing from the project (guid dddddddddddddddddddddddddddddddd)",
+      "severity": "Warn"
+    },
+    {
+      "code": "VRC033",
+      "file": "Assets/Avatar/Avatar.prefab",
+      "hint": "Map all 15 visemes (sil, PP, FF, TH, DD, kk, CH, SS, nn, RR, aa, E, ih, oh, ou).",
+      "message": "Lip-sync is set to Viseme Blend Shape but 3 viseme blend shapes are configured (expected 15)",
+      "severity": "Warn"
+    },
+    {
+      "code": "VRC033",
+      "file": "Assets/Avatar/Avatar.prefab",
+      "hint": "Assign the face mesh (VisemeSkinnedMesh) on the Avatar Descriptor.",
+      "message": "Lip-sync is set to Viseme Blend Shape but no skinned mesh is assigned",
+      "severity": "Warn"
+    },
+    {
+      "code": "VRC034",
+      "file": "Assets/Avatar/Avatar.prefab",
+      "hint": "Assign the left/right eye bones on the Avatar Descriptor, or disable Eye Look.",
+      "message": "Eye Look is enabled but no eye bones are assigned",
+      "severity": "Warn"
+    },
+    {
+      "code": "VRC035",
+      "file": "Assets/Avatar/Avatar.prefab",
+      "hint": "Assign the eyelids mesh on the Avatar Descriptor, or set Eyelid Type to None.",
+      "message": "Eyelids are set to Blendshapes but no eyelid skinned mesh is assigned",
+      "severity": "Warn"
+    },
+    {
+      "code": "VRC036",
+      "file": "Assets/Avatar/Avatar.prefab",
+      "hint": "Add a matching parameter to a playable-layer controller — or ignore if it's driven by OSC, contacts, or a build-time tool (Modular Avatar / VRCFury).",
+      "message": "Expression parameter 'FloatThing' is not used by any of the avatar's playable-layer animator controllers",
+      "severity": "Warn"
+    },
+    {
+      "code": "VRC037",
+      "file": "Assets/Avatar/Avatar.prefab",
+      "hint": "Make the expression parameter and the animator parameter the same type.",
+      "message": "Expression parameter 'Toggle1' (Bool) does not match the animator parameter of the same name (Int)",
+      "severity": "Warn"
+    },
+    {
+      "code": "VRC040",
+      "file": "Assets/Avatar/Hands.controller",
+      "hint": "Add the parameter to the Animator Controller, or fix the condition's name.",
+      "message": "Transition condition references parameter 'Undeclared', which is not declared in this controller",
+      "severity": "Warn"
+    },
+    {
+      "code": "VRC041",
+      "file": "Assets/Avatar/Hands.controller",
+      "hint": "Add the parameter to the Animator Controller.",
+      "message": "Blend tree uses parameter 'MissingBlend', which is not declared in this controller",
+      "severity": "Warn"
+    },
+    {
+      "code": "VRC042",
+      "file": "Assets/Avatar/Hands.controller",
+      "hint": "Right-click a state in the layer and choose 'Set as Layer Default State'.",
+      "message": "1 state machine(s) have states but no default state set",
+      "severity": "Warn"
+    },
+    {
+      "code": "VRC043",
+      "file": "Assets/Avatar/Hands.controller",
+      "hint": "Rename or delete the duplicate parameter in the Animator Controller (Unity keeps only one).",
+      "message": "Duplicate animator parameter name: 'Dup'",
+      "severity": "Warn"
+    },
+    {
+      "code": "VRC044",
+      "file": "Assets/Avatar/Hands.controller",
+      "hint": "Set Write Defaults the same way on every state (VRChat's templates use Off).",
+      "message": "Mixed Write Defaults across states (1 on, 1 off); VRChat recommends a consistent setting",
+      "severity": "Warn"
+    }
+  ],
+  "menu_assets": 1,
+  "packages": [
+    {
+      "name": "com.vrchat.avatars",
+      "version": "3.7.0"
+    },
+    {
+      "name": "com.vrchat.base",
+      "version": "3.7.0"
+    }
+  ],
+  "parameter_assets": 1,
+  "project_root": "<ROOT>/fixtures/projects/AvatarProject",
+  "unity_version": "2022.3.22f1"
+}
