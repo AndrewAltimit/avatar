@@ -23,7 +23,8 @@ backend remains. See [`PLAN.md`](PLAN.md) for the roadmap and the [Status](#stat
 | [`docs/README.md`](docs/README.md) | Index of the `docs/` directory. |
 | [`docs/overview.md`](docs/overview.md) | The layered architecture in brief, with external references. |
 | [`docs/reference/humanoid-bones.md`](docs/reference/humanoid-bones.md) | Unity humanoid bones + VRChat rig requirements. |
-| [`docs/reference/sdk3-lint-rules.md`](docs/reference/sdk3-lint-rules.md) | Every `avatar lint` rule (`VRC001`–`VRC044`) + encodings. |
+| [`docs/reference/sdk3-lint-rules.md`](docs/reference/sdk3-lint-rules.md) | Every `avatar lint` rule (`VRC001`–`VRC052`) + encodings. |
+| [`docs/reference/unity-asset.md`](docs/reference/unity-asset.md) | `avatar-unity-asset`: the typed AnimatorController (`.controller`) reader the controller lint rules consume. |
 | [`docs/reference/armature-repair.md`](docs/reference/armature-repair.md) | What `avatar armature fix` repairs, and the FBX writer. |
 | [`docs/reference/rig-runtime.md`](docs/reference/rig-runtime.md) | Runtime rig layer: skin/bind extraction, posing + bone-matrix palette, two-bone IK, tracker input. |
 | [`docs/reference/performance-stats.md`](docs/reference/performance-stats.md) | `avatar stats`: performance-rank metrics (incl. particles & constraints), component recognition, PC/Android threshold tables. |
@@ -109,8 +110,13 @@ and green. M2 lints Expression Parameters/Menus, the VRC Avatar Descriptor parse
 prefabs/scenes (expression + playable-layer references resolved via a guid→path `.meta` index,
 viseme lip-sync), animator-controller contents (`.controller`, via the `avatar-unity-asset` crate:
 parameter references, default states, Write Defaults consistency, duplicate params), and
-project/VPM info. Lint rule codes: `docs/reference/sdk3-lint-rules.md`. Roadmap and crate plan:
-`PLAN.md`.
+project/VPM info. Seven rules landed on top of the M2 set: `VRC012` (Info: expression param
+referenced by no menu/animator anywhere), `VRC022` (Warn: empty menu control), `VRC038` (Warn:
+duplicate/empty viseme blendshape entry), `VRC045` (Warn: Write Defaults inconsistent across the
+avatar's playable-layer controllers), and a new `VRC05x` PhysBones/Avatar-Dynamics group — `VRC050`
+(unresolvable PhysBone root), `VRC051` (PhysBone moves zero transforms), `VRC052` (PhysBone has
+collider slots but none wired). Lint rule codes (`VRC001`–`VRC052`): `docs/reference/sdk3-lint-rules.md`.
+Roadmap and crate plan: `PLAN.md`.
 
 **Performance stats (built):** `avatar stats <path>` (crate `avatar-stats`) computes VRChat's
 performance ranking offline — `analyze_fbx` for geometry (triangles/meshes/material-slots/bones),
@@ -128,9 +134,12 @@ with an unresolvable root flagged), for a unified geometry+component rank. It al
 particle count** (per `ParticleSystem`: `min(maxParticles, ceil(rate × lifetime))`, summed;
 unparseable systems flagged) and **constraint count + depth** (Unity built-in constraint class ids
 320–325 + VRChat constraint `MonoBehaviour`s recognized structurally; depth = longest
-constraint→source chain via a cycle-safe walk, reported only when every source resolves). Overall =
-worst measured metric; what remains in `not_evaluated` is now only the particle sub-metrics (mesh-
-particle polygons, trail/collision flags). PC+Android limit tables are data on `Metric::limits`.
+constraint→source chain via a cycle-safe walk, reported only when every source resolves). The three
+former `not_evaluated` particle sub-metrics now landed too — **Mesh Particle Polygons** (a mesh-mode
+`ParticleSystemRenderer`'s mesh triangles × the system's particle count, resolved through the same
+renderer→mesh→FBX chain as geometry — approximate), **Particle Trails**, and **Particle Collision**
+(count of systems with `TrailModule`/`CollisionModule` enabled) — so `not_evaluated` is now empty by
+default. Overall = worst measured metric. PC+Android limit tables are data on `Metric::limits`.
 Behaviour: `docs/reference/performance-stats.md`.
 
 **Runtime rig layer (built, green):** the "load and drive a rig at runtime" foundation for the
@@ -197,8 +206,13 @@ gesture blend trees (`BlendTree`, class 206, blending `GestureLeft/RightWeight`)
 hand-written YAML emitter (`yaml_emit`) handles Unity's exact field names, block indentation, and
 flow maps; `IdGen` hands out **deterministic** FNV-1a-seeded fileIDs so generated assets are
 diffable/reproducible, and every generated clip round-trips through the `avatar-unity-yaml` reader in
-tests. Driven by `avatar anim-gen blendtree` / `avatar anim-gen clip` (write to stdout or `-o`).
-Behaviour: `docs/reference/anim-gen.md`.
+tests. A new `controller.rs` module now emits a **full FX `AnimatorController`** (Unity class 91)
+wrapping a blend-tree layer — `m_AnimatorParameters` + `m_AnimatorLayers` + the state machine — via
+`AnimatorController`/`AnimatorLayer`/`AnimatorParameter`/`ParamType` and the `fx_blend_tree`
+convenience, with deterministic fileIDs and a round-trip validated through `avatar-unity-asset`'s
+reader (in-repo only — not yet a real Unity import). This closes the M4 "full FX animator-layer
+assembly" gap. Driven by `avatar anim-gen blendtree` / `avatar anim-gen clip` (write to stdout or
+`-o`). Behaviour: `docs/reference/anim-gen.md`.
 
 **OSC runtime — M5 (built; library + CLI):** `avatar-osc` speaks VRChat's OSC *parameter* protocol —
 `/avatar/parameters/*`, `/input/*` (axes/buttons, reset-to-zero), `/avatar/change` — split into a
@@ -234,6 +248,13 @@ flagged `identical` when bytes match — and path collisions). Extraction refuse
 Driven by `avatar unitypackage info|list|extract|testbed` (testbed has `--strict` for gating).
 Validated against a real SDK2 avatar package and the Cozy Cabin world (PC/Quest) exports. Behaviour:
 `docs/reference/unitypackage.md`.
+
+**Robustness hardening (built):** the importers were hardened against malformed/hostile inputs.
+`avatar-unitypackage` extraction now caps decompressed bytes per entry (512 MiB) and in total
+(2 GiB) — a decompression-bomb guard. `avatar-gltf` rejects primitives with more than `u32::MAX`
+vertices. `avatar-fbx` reads `UpAxis`/`FrontAxis` via checked `i32::try_from` instead of an `as`
+cast. `avatar-unity-yaml`'s `parse_lossy` was refactored to be infallible by construction, removing
+a latent panic path.
 
 M3 resolves the project's biggest risk — native binary FBX **write-back**. `avatar-fbx`'s
 `FbxDocument` retains `fbxcel` 0.9's mutable tree (enable the `writer` feature) and serializes via

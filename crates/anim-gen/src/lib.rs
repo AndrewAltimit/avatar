@@ -13,6 +13,9 @@
 //! - [`blendtree`] — [`BlendTree`] → a `--- !u!206` 1D blend tree (plus, optionally, the owning
 //!   `AnimatorState`/`AnimatorStateMachine`) that blends `GestureLeftWeight`/`GestureRightWeight`
 //!   across child clips so any gesture reaches any fraction — the analog-gesture headline feature.
+//! - [`controller`] — [`AnimatorController`] → a `--- !u!91` FX `AnimatorController` wrapping a
+//!   blend-tree fragment in one layer ([`fx_blend_tree`]), for callers who want a complete
+//!   standalone `.controller` rather than a fragment to paste into an existing one.
 //!
 //! # fileID strategy
 //!
@@ -27,10 +30,14 @@
 
 pub mod blendtree;
 pub mod clip;
+pub mod controller;
 pub mod yaml_emit;
 
 pub use blendtree::{BlendTree, ChildMotion};
 pub use clip::{AnimationClip, ClipSettings, FloatCurve, Keyframe};
+pub use controller::{
+    AnimatorController, AnimatorLayer, AnimatorParameter, ParamType, fx_blend_tree,
+};
 pub use yaml_emit::{Emitter, ObjectRef};
 
 /// A deterministic allocator of Unity local `fileID`s for one generated file.
@@ -49,7 +56,7 @@ impl IdGen {
         // FNV-1a over the seed, masked into a comfortable positive range and rounded so the first
         // ids look like Unity's (which tend to be large round-ish numbers). The exact value is
         // unimportant; determinism and intra-file uniqueness are.
-        let h = fnv1a(seed.as_bytes());
+        let h = avatar_unity_yaml::fnv1a(seed.as_bytes());
         // Keep within ~10^15 and away from 0; step by 1 thereafter.
         let base = (h % 900_000_000_000_000) + 100_000_000_000_000;
         IdGen { next: base as i64 }
@@ -61,17 +68,6 @@ impl IdGen {
         self.next += 1;
         id
     }
-}
-
-/// 64-bit FNV-1a hash. Stable across platforms and runs (unlike `DefaultHasher`, which is *not*
-/// guaranteed stable), so generated fileIDs are reproducible.
-fn fnv1a(bytes: &[u8]) -> u64 {
-    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
-    for &b in bytes {
-        h ^= b as u64;
-        h = h.wrapping_mul(0x0000_0100_0000_01b3);
-    }
-    h
 }
 
 #[cfg(test)]

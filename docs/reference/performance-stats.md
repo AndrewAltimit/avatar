@@ -39,6 +39,9 @@ The overall rank is the worst of the metrics actually measured.
 | Contacts | — | ✅ | `MonoBehaviour` with `collisionTags` (sender + receiver). |
 | Particle Systems | — | ✅ | `ParticleSystem` (class 198). |
 | Total Particles | — | ✅ | Σ over `ParticleSystem`s of `min(maxParticles, ceil(rate × lifetime))` (see below). |
+| Mesh Particle Polygons | — | ✅ | Σ over mesh-mode particle renderers of `mesh triangles × live-particle count` (see below). |
+| Particle Trails | — | ✅ | Particle systems with a `TrailModule.enabled: 1`. |
+| Particle Collision | — | ✅ | Particle systems with a `CollisionModule.enabled: 1`. |
 | Constraints | — | ✅ | Unity built-in constraints (classes 320–325) + VRChat constraint `MonoBehaviour`s (structural). |
 | Constraint Depth | — | ✅ | Longest chain of constraints driving one another (see below). |
 | Lights | — | ✅ | `Light` (class 108). |
@@ -49,13 +52,13 @@ The overall rank is the worst of the metrics actually measured.
 | Physics Rigidbodies | — | ✅ | `Rigidbody` (class 54). |
 | Animators | — | ✅ | `Animator` (class 95). |
 
-**Not evaluated by either source** (surfaced in `not_evaluated` so a clean rank isn't mistaken for
-the whole story): the **mesh-particle active-polygon** count and the **particle trail / collision**
-flags. (Total particle count and constraint count/depth used to live here too; they are now measured
-— see the dedicated sections below.) An individual measured metric can also *add* a
+**Everything either source can reproduce from the files is now measured** — the project view's
+`not_evaluated` list is empty by default. (Total particle count, mesh-particle polygons, the
+particle trail/collision flags, and constraint count/depth all used to live here; they are now
+measured — see the dedicated sections below.) An individual measured metric can still *add* a
 `not_evaluated` note when its inputs were incomplete (e.g. a particle system whose modules can't be
-parsed, or a constraint chain whose sources don't resolve), marking that the value is a lower bound /
-the depth unknown.
+parsed, a mesh-particle renderer whose mesh doesn't resolve to an FBX, or a constraint chain whose
+sources don't resolve), marking that the value is a lower bound / the depth unknown.
 
 ### How components are recognized
 
@@ -149,8 +152,33 @@ term (or a bare number for the simple form). This is an **estimate**: animated c
 term — a close ballpark, not an exact ceiling, and on the low side for burst-heavy or sub-emitting
 effects. A system that has no readable `InitialModule` (so its ceiling can't be bounded) is
 **flagged** in `not_evaluated` and contributes nothing, making the total a lower bound — never
-silently assumed to emit zero. The **mesh-particle polygon** count and the trail/collision *flags*
-VRChat also tracks are left in `not_evaluated`.
+silently assumed to emit zero.
+
+### How mesh-particle polygons & trail/collision flags are estimated
+
+A particle system's renderer can draw each particle as a **mesh** rather than a billboard, which
+multiplies that mesh's geometry by however many particles are alive — VRChat budgets the resulting
+**active polygons**. The system (`ParticleSystem`, class 198) and its renderer
+(`ParticleSystemRenderer`, class 199) are two documents on the same GameObject; `avatar stats` pairs
+them by GameObject fileID. For each renderer in **Mesh** render mode (`m_RenderMode: 4`) it:
+
+1. Resolves the renderer's `m_Mesh` (falling back to the first non-null `m_Meshes` entry) to its
+   **source FBX** through the same `guid → path` `.meta` index and triangle cache used for the
+   geometry triangle count.
+2. Multiplies that FBX's triangles by the **sibling system's live-particle count** (the same
+   `min(maxParticles, ceil(rate × lifetime))` estimate as Total Particles) and sums across renderers.
+
+This shares `resolve_geometry`'s **lower-fidelity caveat**: triangles are summed per *distinct source
+FBX* (so the count covers all the FBX's sub-meshes), which means a particle mesh that points at a
+single sub-mesh of a multi-mesh FBX **over-counts** (it's charged the whole file's geometry). A
+mesh-mode renderer whose mesh resolves to a non-FBX source (a baked/built-in `.asset` mesh) or a
+missing guid is reported as **unresolved**: its polygons are omitted (so the count is a lower bound)
+and the gap is noted in `not_evaluated`, never silently dropped.
+
+The **trail** and **collision** flags are read straight off the system body: a
+`TrailModule.enabled: 1` increments the Particle Trails count, a `CollisionModule.enabled: 1` the
+Particle Collision count. Both are ranked like Lights (`0/0/0/1`): any system with the module
+enabled costs a tier.
 
 ### How constraint count & depth are computed
 
@@ -199,6 +227,9 @@ that tier; the next worse tier starts one above it, and anything over **Poor** i
 | Contacts | 8 | 16 | 24 | 32 |
 | Particle Systems | 0 | 4 | 8 | 16 |
 | Total Particles | 0 | 300 | 1,000 | 2,500 |
+| Mesh Particle Polygons † | 0 | 2,000 | 20,000 | 50,000 |
+| Particle Trails | 0 | 0 | 0 | 1 |
+| Particle Collision | 0 | 0 | 0 | 1 |
 | Constraints | 100 | 250 | 300 | 350 |
 | Constraint Depth | 20 | 50 | 80 | 100 |
 | Lights | 0 | 0 | 0 | 1 |
@@ -226,6 +257,9 @@ that tier; the next worse tier starts one above it, and anything over **Poor** i
 | Contacts | 2 | 4 | 8 | 16 |
 | Particle Systems | 0 | 0 | 0 | 2 |
 | Total Particles | 0 | 0 | 0 | 200 |
+| Mesh Particle Polygons † | 0 | 0 | 2,000 | 20,000 |
+| Particle Trails | 0 | 0 | 0 | 1 |
+| Particle Collision | 0 | 0 | 0 | 1 |
 | Constraints | 30 | 60 | 120 | 150 |
 | Constraint Depth | 5 | 15 | 35 | 50 |
 | Trail Renderers | 0 | 0 | 0 | 1 |
@@ -235,5 +269,10 @@ that tier; the next worse tier starts one above it, and anything over **Poor** i
 Lights, Audio Sources, Cloths, and the physics colliders/rigidbodies are **not ranked on Android**
 (those component types are stripped on mobile); `avatar stats` shows `-` for them in the Android
 column.
+
+† **Mesh Particle Polygons** thresholds are **approximate**. VRChat folds mesh-particle polygons
+into its particle budget rather than publishing a standalone per-tier table, so these bounds are our
+own triangle-style ramp — confirm against VRChat's published budget when one is available (PLAN
+risk 3: rules as data, so a correction is a one-line edit to `Metric::defs`).
 
 [src]: https://creators.vrchat.com/avatars/avatar-performance-ranking-system/

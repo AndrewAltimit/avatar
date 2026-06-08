@@ -304,3 +304,45 @@ fn empty_archive_is_an_error() {
     let bytes = gz.finish().unwrap();
     assert!(UnityPackage::read(&bytes[..]).is_err());
 }
+
+#[test]
+fn rejects_member_exceeding_per_entry_cap() {
+    // 64 bytes of asset against an 8-byte per-entry cap: the bomb guard must bail.
+    let pkg_bytes = build_package(&[Member {
+        guid: "cccccccccccccccccccccccccccccccc",
+        pathname: Some("Assets/big.bin"),
+        asset: Some(&[0u8; 64]),
+        meta: None,
+    }]);
+    let err = UnityPackage::read_capped(&pkg_bytes[..], 8, 1024).unwrap_err();
+    assert!(
+        err.to_string().contains("per-entry size cap"),
+        "unexpected error: {err}"
+    );
+    // The same archive parses fine under the production caps.
+    assert!(UnityPackage::read(&pkg_bytes[..]).is_ok());
+}
+
+#[test]
+fn rejects_total_exceeding_aggregate_cap() {
+    // Two 64-byte members; per-entry cap of 128 passes each, but the 100-byte total cap bails.
+    let pkg_bytes = build_package(&[
+        Member {
+            guid: "dddddddddddddddddddddddddddddddd",
+            pathname: Some("Assets/a.bin"),
+            asset: Some(&[1u8; 64]),
+            meta: None,
+        },
+        Member {
+            guid: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+            pathname: Some("Assets/b.bin"),
+            asset: Some(&[2u8; 64]),
+            meta: None,
+        },
+    ]);
+    let err = UnityPackage::read_capped(&pkg_bytes[..], 128, 100).unwrap_err();
+    assert!(
+        err.to_string().contains("total size cap"),
+        "unexpected error: {err}"
+    );
+}

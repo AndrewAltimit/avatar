@@ -50,15 +50,16 @@ Crate dirs are unprefixed; package names `avatar-<slug>`; lib names `avatar_<slu
   installed SDK / Modular Avatar / VRCFury versions. **[built: M2]**
 
 **Logic**
-- `avatar-lint` — diagnostics engine; rules over project/params/menus → structured report
-  (`serde_json` + pretty print, error/warn/info). Rule codes in `docs/reference/sdk3-lint-rules.md`.
-  **[built: M2]**
+- `avatar-lint` — diagnostics engine; rules over project/params/menus/descriptor/controllers/
+  PhysBones → structured report (`serde_json` + pretty print, error/warn/info). Rule codes
+  (`VRC001`–`VRC052`) in `docs/reference/sdk3-lint-rules.md`. **[built: M2 + extensions]**
 - `avatar-stats` — offline VRChat **performance ranking** (Excellent→Very Poor): geometry metrics
   from an FBX (`analyze_fbx`) and component metrics from a project's avatars (`analyze_project`),
   ranked against the PC + Android limit tables (encoded as data). **[built]**
-- `avatar-anim-gen` — generate `.anim` clips + FX-layer blend trees for analog gestures and general
-  expression authoring. Unity-YAML emitter, deterministic fileIDs, reader-validated round-trip.
-  **[built: M4 — library + `avatar anim-gen` CLI; full animator-layer assembly next]**
+- `avatar-anim-gen` — generate `.anim` clips + FX-layer blend trees (wrapped in a full FX
+  `AnimatorController`) for analog gestures and general expression authoring. Unity-YAML emitter,
+  deterministic fileIDs, reader-validated round-trip.
+  **[built: M4 — library + `avatar anim-gen` CLI; full FX animator-layer assembly done]**
 
 **Runtime**
 - `avatar-osc` — `rosc`-backed VRChat OSC parameter protocol: `/avatar/parameters/*`, `/input/*` axes
@@ -130,6 +131,11 @@ Locked to the `legend-of-legaia-re` style — see `CLAUDE.md`. Addition vs. Lega
 4. **Ecosystem overlap.** Modular Avatar / VRCFury / NDMF already cover non-destructive Unity-side
    building. Complement them (own the FBX/armature + headless-validation layer; consider emitting MA
    components) rather than duplicate.
+5. **Malformed / hostile inputs.** Hardened: `.unitypackage` extraction caps decompressed bytes per
+   entry (512 MiB) and in total (2 GiB) — a decompression-bomb guard; `avatar-gltf` rejects
+   primitives with > `u32::MAX` vertices; `avatar-fbx` reads `UpAxis`/`FrontAxis` via checked
+   `i32::try_from`; and `avatar-unity-yaml`'s `parse_lossy` is now infallible by construction (no
+   latent panic path).
 
 ## 9. Milestones
 
@@ -142,7 +148,11 @@ Locked to the `legend-of-legaia-re` style — see `CLAUDE.md`. Addition vs. Lega
   playable-layer animator-controller existence, viseme lip-sync, eye-look config, and an
   expression-parameter↔animator wiring cross-check by name+type: `VRC002`/`030`–`037`), **and**
   animator-controller contents (parameter references, default states, Write Defaults consistency,
-  duplicate params: `VRC040`–`044`). M2 gaps closed. Next: animation-clip / PhysBones checks (or M3).
+  duplicate params: `VRC040`–`044`). Since extended with seven more rules: `VRC012` (param used by no
+  menu/animator), `VRC022` (empty menu control), `VRC038` (duplicate/empty viseme blendshape),
+  `VRC045` (Write Defaults inconsistent across the avatar's playable-layer controllers), and a
+  PhysBones/Avatar-Dynamics group `VRC050`–`052` (unresolvable root, moves zero transforms, collider
+  slots but none wired). M2 gaps closed. Next: animation-clip checks (or M3).
 - **M3 — Armature repair.** ✅ `avatar armature fix <model.fbx>` plans repairs and (with `-o`) writes
   a corrected binary FBX via `avatar-fbx`'s `FbxDocument`. The one native repair is canonical
   humanoid bone **renames** (id-safe; what makes Unity auto-map). Mis-wired parent **topology** and
@@ -154,8 +164,11 @@ Locked to the `legend-of-legaia-re` style — see `CLAUDE.md`. Addition vs. Lega
 - **M4 — Asset generation.** 🟡 *Library + CLI landed.* `avatar-anim-gen` generates Unity-YAML
   `.anim` clips (`AnimationClip`: blendshape-weight + GameObject-active curves) and FX-layer
   analog-gesture blend trees (`BlendTree`), with a faithful YAML emitter, deterministic FNV-seeded
-  fileIDs, and a reader-validated round-trip — driven by `avatar anim-gen blendtree` / `… clip`.
-  Remaining: full FX animator-layer assembly, and typed `AnimationClip`/material/scene in
+  fileIDs, and a reader-validated round-trip — driven by `avatar anim-gen blendtree` / `… clip`. A
+  `controller.rs` module now also emits a **full FX `AnimatorController`** (class 91) wrapping a
+  blend-tree layer (`m_AnimatorParameters` + `m_AnimatorLayers` + state machine), round-tripped
+  through `avatar-unity-asset`'s reader (in-repo only — not yet a live Unity import) — closing the
+  full FX animator-layer assembly gap. Remaining: typed `AnimationClip`/material/scene in
   `avatar-unity-asset`. Behaviour: `docs/reference/anim-gen.md`.
 - **M5 — OSC runtime.** 🟡 *Library + CLI landed.* `avatar-osc` implements VRChat's OSC parameter
   protocol (`/avatar/parameters`, `/input`, `/avatar/change`) as a pure codec + non-blocking UDP
@@ -188,9 +201,11 @@ flagged), so a project gets a unified geometry+component rank on both platforms.
 Android) are encoded as data (decision §7, risk 3). **Total particle count** (per `ParticleSystem`:
 `min(maxParticles, ceil(rate × lifetime))`, summed; unparseable systems flagged) and **constraint
 count + depth** (Unity constraint class ids 320–325 + structural VRChat constraints; depth = longest
-constraint→source chain via a cycle-safe walk) are now measured rather than deferred. Behaviour:
-`docs/reference/performance-stats.md`. Next: mesh-particle polygon cost and particle trail/collision
-flags.
+constraint→source chain via a cycle-safe walk) are now measured rather than deferred. **Mesh-particle
+polygon cost** (mesh-mode renderer's mesh triangles × particle count, resolved through the
+renderer→mesh→FBX chain — approximate) and **particle trail/collision flags** (systems with
+`TrailModule`/`CollisionModule` enabled) have now landed too, emptying the `not_evaluated` list by
+default. Behaviour: `docs/reference/performance-stats.md`.
 
 ### Runtime rig layer (built, green) — the "drive a rig at runtime" band
 

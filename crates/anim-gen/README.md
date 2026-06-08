@@ -30,14 +30,19 @@ output back** in tests.
   - `.emit_tree(&mut Emitter, file_id)` — the 206 document only.
   - `.to_state_fragment(&mut IdGen)` — the wired `StateMachine`/`State`/`BlendTree` trio.
   - `.wiring_note(tree_file_id)` — prose on how to graft the tree into an existing controller.
+- `controller`: `AnimatorController`/`AnimatorLayer`/`AnimatorParameter`/`ParamType` + the
+  `fx_blend_tree(name, layer_name, &BlendTree, &mut IdGen)` convenience — emit a full FX
+  `AnimatorController` (class 91: `m_AnimatorParameters` + `m_AnimatorLayers` + state machine)
+  wrapping a blend-tree layer.
 - `IdGen::new(seed)` + `.alloc()` — deterministic (FNV-1a–seeded) `fileID` allocation; no randomness.
 - `yaml_emit`: `Emitter`, `ObjectRef`, `fmt_f32` — the low-level Unity-YAML emitter.
 
 ## Status
 
-Built: **M4** (initial). Covers `.anim` float-curve clips and 1D analog-gesture blend trees.
-Out of scope for now: transform (position/scale/rotation) curves, PPtr curves, and full
-AnimatorController emission (the layer list / class-91 object).
+Built: **M4**. Covers `.anim` float-curve clips, 1D analog-gesture blend trees, and full FX
+`AnimatorController` emission (the layer list / class-91 object, via `controller::fx_blend_tree`),
+round-tripped through `avatar-unity-asset`'s reader (in-repo only — not yet a live Unity import).
+Out of scope for now: transform (position/scale/rotation) curves and PPtr curves.
 
 ## See also
 

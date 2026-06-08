@@ -43,13 +43,13 @@ format and subsystem references.
 | [`avatar-pose`](crates/pose/README.md) | Runtime posing + skinning: `PosedSkeleton` → world matrices, GPU bone-matrix palette, CPU skinning, two-bone IK (renderer-agnostic) |
 | [`avatar-input`](crates/input/README.md) | Backend-agnostic VR tracker input (`TrackerState`/`TrackerSource`): mock + OSC backends, OpenXR planned |
 | [`avatar-unity-yaml`](crates/unity-yaml/README.md) | Reader for Unity's YAML format (`.asset`/`.prefab`/`.unity`/`.meta`) |
-| [`avatar-unity-asset`](crates/unity-asset/README.md) | Typed Unity asset graphs over the YAML reader (AnimatorController today) |
+| [`avatar-unity-asset`](crates/unity-asset/README.md) | Typed Unity asset graphs over the YAML reader (the `AnimatorController` reader the controller lint rules consume) |
 | [`avatar-unitypackage`](crates/unitypackage/README.md) | Read Unity's `.unitypackage` (gzip+tar): summarize, extract into a Unity project tree, and cross-check an avatar against a world/map for co-import GUID/path conflicts. Wired to `avatar unitypackage` |
 | [`avatar-vpm`](crates/vpm/README.md) | Discover a Unity/VPM project: manifest packages, editor version, asset paths |
 | [`avatar-vrc-descriptor`](crates/vrc-descriptor/README.md) | Typed extraction of the VRChat Avatar Descriptor, Expression Parameters & Menus + SDK3 rule constants |
-| [`avatar-lint`](crates/lint/README.md) | Diagnostics engine: SDK3 compliance rules over a project (params, menus, descriptor refs, visemes) |
+| [`avatar-lint`](crates/lint/README.md) | Diagnostics engine: SDK3 compliance rules over a project (params, menus, descriptor refs, visemes, Write Defaults, PhysBones/Avatar-Dynamics) |
 | [`avatar-stats`](crates/stats/README.md) | Offline VRChat **performance ranking** (Excellent→Very Poor) from an FBX (geometry) or a project's avatars (components), against PC + Android limits |
-| [`avatar-anim-gen`](crates/anim-gen/README.md) | **Generate** Unity `.anim` clips + FX-layer analog-gesture blend trees as Unity YAML (deterministic fileIDs) — the M4 asset-generation layer, wired to `avatar anim-gen` |
+| [`avatar-anim-gen`](crates/anim-gen/README.md) | **Generate** Unity `.anim` clips + FX-layer analog-gesture blend trees, wrapped in a full FX `AnimatorController`, as Unity YAML (deterministic fileIDs) — the M4 asset-generation layer, wired to `avatar anim-gen` |
 | [`avatar-render`](crates/render/README.md) | **GPU preview** via wgpu: render an avatar (and a Unity world scene, with the avatar dropped at the world's spawn point) to a PNG, headless — plus an optional interactive **winit viewer** (orbit/zoom/walk). Wired to `avatar render` / `avatar view` |
 | [`avatar-osc`](crates/osc/README.md) | VRChat **OSC runtime**: `/avatar/parameters`, `/input`, `/avatar/change` codec + UDP client and OSCQuery avatar-config parsing — the M5 runtime foundation, wired to `avatar osc` |
 | [`avatar-osc-gestures`](crates/osc-gestures/README.md) | The **analog-gesture daemon** ("Vive advanced controls on any hardware"): controller trigger → `Gesture*`/`Gesture*Weight` over OSC, with deadzone + change detection. Wired to `avatar osc gestures` |
@@ -109,7 +109,8 @@ transform, not a metadata relabel (see
 | [`docs/tutorial.md`](docs/tutorial.md) | End-to-end walkthrough of the `avatar` CLI from FBX to lint to stats. |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Build/test/lint, conventions, and how to add a lint rule or crate. |
 | [`docs/reference/humanoid-bones.md`](docs/reference/humanoid-bones.md) | Unity humanoid bones + VRChat rig requirements. |
-| [`docs/reference/sdk3-lint-rules.md`](docs/reference/sdk3-lint-rules.md) | Every `avatar lint` rule (`VRC001`–`VRC044`) + encodings. |
+| [`docs/reference/sdk3-lint-rules.md`](docs/reference/sdk3-lint-rules.md) | Every `avatar lint` rule (`VRC001`–`VRC052`) + encodings. |
+| [`docs/reference/unity-asset.md`](docs/reference/unity-asset.md) | `avatar-unity-asset`: the typed AnimatorController (`.controller`) reader the controller lint rules consume. |
 | [`docs/reference/armature-repair.md`](docs/reference/armature-repair.md) | What `avatar armature fix` repairs, and the FBX writer. |
 | [`docs/reference/performance-stats.md`](docs/reference/performance-stats.md) | `avatar stats`: metrics (incl. particles & constraints), component recognition, and PC/Android threshold tables. |
 | [`docs/reference/rig-runtime.md`](docs/reference/rig-runtime.md) | Runtime rig layer: skin/bind extraction, posing, IK, tracker input. |

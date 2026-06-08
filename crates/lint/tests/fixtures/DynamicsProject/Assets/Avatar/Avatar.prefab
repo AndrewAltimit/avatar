@@ -1,0 +1,135 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &100000
+GameObject:
+  m_ObjectHideFlags: 0
+  m_Name: Avatar
+  m_Component:
+  - component: {fileID: 400}
+  - component: {fileID: 114000}
+--- !u!4 &400
+Transform:
+  m_GameObject: {fileID: 100000}
+  m_Children:
+  - {fileID: 401}
+  - {fileID: 402}
+  - {fileID: 410}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+--- !u!1 &100401
+GameObject:
+  m_Name: Hair
+  m_Component:
+  - component: {fileID: 401}
+  - component: {fileID: 1140100}
+--- !u!4 &401
+Transform:
+  m_GameObject: {fileID: 100401}
+  m_Children:
+  - {fileID: 403}
+--- !u!4 &403
+Transform:
+  m_GameObject: {fileID: 100403}
+  m_Children: []
+--- !u!1 &100402
+GameObject:
+  m_Name: Tail
+  m_Component:
+  - component: {fileID: 402}
+  - component: {fileID: 1140200}
+--- !u!4 &402
+Transform:
+  m_GameObject: {fileID: 100402}
+  m_Children: []
+--- !u!1 &100410
+GameObject:
+  m_Name: Skirt
+  m_Component:
+  - component: {fileID: 410}
+  - component: {fileID: 1140300}
+--- !u!4 &410
+Transform:
+  m_GameObject: {fileID: 100410}
+  m_Children:
+  - {fileID: 411}
+--- !u!4 &411
+Transform:
+  m_GameObject: {fileID: 100411}
+  m_Children: []
+--- !u!114 &114000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_GameObject: {fileID: 100000}
+  m_Script: {fileID: 11500000, guid: 67cc4cb7839cd3741b63733d5adf0442, type: 3}
+  m_Name:
+  ViewPosition: {x: 0, y: 1.2, z: 0.15}
+  lipSync: 3
+  VisemeSkinnedMesh: {fileID: 555}
+  VisemeBlendShapes:
+  - vrc.v_sil
+  - vrc.v_pp
+  - vrc.v_ff
+  - vrc.v_th
+  - vrc.v_dd
+  - vrc.v_kk
+  - vrc.v_ch
+  - vrc.v_ss
+  - vrc.v_nn
+  - vrc.v_rr
+  - vrc.v_aa
+  - vrc.v_aa
+  - vrc.v_ih
+  - ''
+  - vrc.v_ou
+  enableEyeLook: 0
+  customExpressions: 0
+  expressionsMenu: {fileID: 0}
+  expressionParameters: {fileID: 0}
+  baseAnimationLayers:
+  - isEnabled: 1
+    type: 4
+    animatorController: {fileID: 9100000, guid: dddddddddddddddddddddddddddddddd, type: 2}
+    isDefault: 0
+  - isEnabled: 1
+    type: 2
+    animatorController: {fileID: 9100000, guid: eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee, type: 2}
+    isDefault: 0
+  specialAnimationLayers:
+  - isEnabled: 0
+    type: 6
+    animatorController: {fileID: 0}
+    isDefault: 1
+--- !u!114 &1140100
+MonoBehaviour:
+  m_GameObject: {fileID: 100401}
+  endpointPosition: {x: 0, y: -0.1, z: 0}
+  multiChildType: 0
+  rootTransform: {fileID: 401}
+  ignoreTransforms: []
+  colliders:
+  - {fileID: 500}
+--- !u!114 &1140200
+MonoBehaviour:
+  m_GameObject: {fileID: 100402}
+  endpointPosition: {x: 0, y: 0, z: 0}
+  multiChildType: 0
+  rootTransform: {fileID: 402}
+  ignoreTransforms: []
+  colliders: []
+--- !u!114 &1140300
+MonoBehaviour:
+  m_GameObject: {fileID: 100410}
+  endpointPosition: {x: 0, y: -0.2, z: 0}
+  multiChildType: 0
+  rootTransform: {fileID: 410}
+  ignoreTransforms: []
+  colliders:
+  - {fileID: 0}
+  - {fileID: 0}
+--- !u!114 &1140400
+MonoBehaviour:
+  m_GameObject: {fileID: 100000}
+  endpointPosition: {x: 0, y: 0, z: 0}
+  multiChildType: 0
+  rootTransform: {fileID: 99999}
+  ignoreTransforms: []
+  colliders: []

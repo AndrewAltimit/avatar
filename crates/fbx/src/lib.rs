@@ -463,8 +463,20 @@ fn read_global_settings(root: &NodeHandle) -> GlobalSettings {
         };
         match key {
             "UnitScaleFactor" => settings.unit_scale_factor = attrs.get(4).and_then(as_f64),
-            "UpAxis" => settings.up_axis = attrs.get(4).and_then(as_i64).map(|v| v as i32),
-            "FrontAxis" => settings.front_axis = attrs.get(4).and_then(as_i64).map(|v| v as i32),
+            // Axes are small ints (0/1/2); `try_from` makes an out-of-range value `None` rather
+            // than silently wrapping a bogus i64 into a plausible-looking axis index.
+            "UpAxis" => {
+                settings.up_axis = attrs
+                    .get(4)
+                    .and_then(as_i64)
+                    .and_then(|v| i32::try_from(v).ok())
+            }
+            "FrontAxis" => {
+                settings.front_axis = attrs
+                    .get(4)
+                    .and_then(as_i64)
+                    .and_then(|v| i32::try_from(v).ok())
+            }
             _ => {}
         }
     }

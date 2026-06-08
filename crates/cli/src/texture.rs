@@ -168,7 +168,11 @@ fn decode_rgba(bytes: &[u8]) -> Option<(u32, u32, Vec<u8>)> {
 fn texture_ref_key(fbx_dir: &Path, t: &TextureRef) -> String {
     if let Some(bytes) = &t.embedded {
         // Embedded textures may have no usable name; key by a cheap content fingerprint.
-        return format!("emb:{}:{:016x}", bytes.len(), fnv1a(bytes));
+        return format!(
+            "emb:{}:{:016x}",
+            bytes.len(),
+            avatar_unity_yaml::fnv1a(bytes)
+        );
     }
     format!(
         "fbxtex:{}|{}|{}",
@@ -226,16 +230,6 @@ fn find_by_basename(dir: &Path, base: &std::ffi::OsStr, max_depth: usize) -> Opt
         }
     }
     None
-}
-
-/// 64-bit FNV-1a, for fingerprinting embedded texture bytes.
-fn fnv1a(bytes: &[u8]) -> u64 {
-    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
-    for &b in bytes {
-        h ^= b as u64;
-        h = h.wrapping_mul(0x0000_0100_0000_01b3);
-    }
-    h
 }
 
 #[cfg(test)]

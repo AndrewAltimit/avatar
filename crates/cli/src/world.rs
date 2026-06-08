@@ -29,7 +29,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, bail};
 use avatar_mesh::RawMesh;
 use avatar_render::RenderMesh;
-use avatar_unity_yaml::{UnityFile, Yaml, field_f64, field_i64, field_str};
+use avatar_unity_yaml::{UnityFile, Yaml, field_f64, field_i64, field_str, ref_fileid};
 use glam::{EulerRot, Mat4, Quat, Vec3};
 
 use crate::texture::{SlotStyle, TextureSet, split_by_material};
@@ -59,12 +59,9 @@ pub struct WorldLoad {
     pub spawn: Option<Vec3>,
 }
 
-fn ref_fileid(node: &Yaml, key: &str) -> Option<i64> {
-    field_i64(&node[key], "fileID")
-}
-
+/// Owned-`String` wrapper over [`avatar_unity_yaml::ref_guid`] (callers store the guid).
 fn ref_guid(node: &Yaml, key: &str) -> Option<String> {
-    field_str(&node[key], "guid").map(|s| s.to_string())
+    avatar_unity_yaml::ref_guid(node, key).map(str::to_string)
 }
 
 fn read_vec3(node: &Yaml, default: f32) -> Vec3 {
@@ -149,26 +146,8 @@ fn project_root_of(scene: &Path) -> Option<PathBuf> {
 
 /// Build a `guid -> asset path` index from every `.meta` under the project's `Assets/`.
 fn build_guid_index(root: &Path) -> HashMap<String, PathBuf> {
-    let mut index = HashMap::new();
-    let mut stack = vec![root.join("Assets")];
-    while let Some(d) = stack.pop() {
-        let Ok(rd) = std::fs::read_dir(&d) else {
-            continue;
-        };
-        for e in rd.flatten() {
-            let p = e.path();
-            if p.is_dir() {
-                stack.push(p);
-            } else if p.extension().is_some_and(|x| x == "meta")
-                && let Ok(text) = std::fs::read_to_string(&p)
-                && let Some(guid) = avatar_unity_yaml::meta_guid(&text)
-            {
-                // The asset is the .meta path without the trailing ".meta".
-                index.insert(guid, p.with_extension(""));
-            }
-        }
-    }
-    index
+    let files = avatar_unity_yaml::walk_assets(&root.join("Assets"));
+    avatar_unity_yaml::build_guid_index(&files)
 }
 
 /// World matrix for a scene transform, composing up the father chain (memoized, cycle-guarded).
@@ -376,7 +355,7 @@ fn material_def_from_text(text: &str) -> MatDef {
         ]
     });
     let main_tex = find_in_keyed_list(&saved["m_TexEnvs"], "_MainTex")
-        .and_then(|v| field_str(&v["m_Texture"], "guid").map(|s| s.to_string()));
+        .and_then(|v| avatar_unity_yaml::ref_guid(v, "m_Texture").map(str::to_string));
     MatDef { color, main_tex }
 }
 

@@ -96,11 +96,53 @@ Two emission modes:
   `m_WriteDefaultValues: 0` (VRChat's recommendation for FX clips). It returns the fragment text
   and the state-machine fileID (the entry point a layer's `m_StateMachine` references).
 
-Emitting a *whole* AnimatorController (the class-91 object, the layer list, the
-AnimatorControllerLayer `m_StateMachine` refs) is deliberately out of scope: it is large, brittle
-across SDK versions, and users almost always want to graft the tree into the FX controller their
-avatar already ships with. The fragment-plus-note approach matches how the rest of the toolchain
-treats Unity assets — own the well-understood pieces, leave the orchestration to the user's project.
+### 3. Full FX AnimatorController (`.controller`, class id 91)
+
+The fragment-plus-note approach above leaves the orchestration to the user's project — the right
+default when grafting into an avatar's *existing* FX controller. For the case where a brand-new
+controller is wanted, the `controller` module reverses that scope decision and emits the enclosing
+class-91 `AnimatorController` object: its `m_AnimatorParameters` and `m_AnimatorLayers`, each
+layer's `m_StateMachine` referencing a fragment's state machine by local fileID.
+
+- `AnimatorController::new(name).parameter(p).layer(name, sm_id)` is the typed builder;
+  `emit_controller(&mut Emitter, file_id)` writes only the class-91 document.
+- `ParamType` (`Float`/`Int`/`Bool`/`Trigger`) carries Unity's raw `m_Type` ints (1/3/4/9);
+  `AnimatorParameter::{float,int,bool,trigger}` are the constructors.
+- **`fx_blend_tree(name, layer_name, tree, ids)`** is the headline: it allocates the controller id
+  first (the lowest, stablest id in the file), assembles the state-machine/state/blend-tree
+  fragment via `to_state_fragment`, auto-declares the tree's `blend_parameter` as a `Float`, wires
+  one layer to the fragment's state machine, and returns the complete multi-document `.controller`
+  text (`%YAML` preamble + class-91 doc + fragment).
+
+The class-91 field set/order is matched against a real Unity-authored FX controller — not just the
+minimal subset our reader needs — including the `serializedVersion` markers the importer checks
+(91 → 5, each `AnimatorControllerLayer` sub-struct → 5; the per-parameter entries carry no
+top-level `serializedVersion`). Empty sequences are emitted as `[]` (e.g. `m_Motions: []`,
+`m_Behaviours: []`).
+
+**Round-trip validation.** The generated controller is parsed back through
+`avatar-unity-asset`'s `AnimatorController::from_file` (the repo's typed `.controller` reader):
+the test confirms the controller name, that the blend parameter is read as a `Float`, that there is
+exactly one state machine with a default state and one child state, that the blend tree references
+the blend parameter, that Write Defaults is OFF on the state, and — explicitly — that the class-91
+doc's first layer `m_StateMachine.fileID` equals the `AnimatorStateMachine` (1107) document's
+fileID. Determinism is pinned by a same-seed-byte-identical test.
+
+> **Unity-import caveat (the same "last mile" as below).** The round-trip proves the controller
+> parses through *our* reader and that its internal cross-references resolve; it does **not** prove
+> a *specific* Unity editor accepts it on import. The fields and `serializedVersion` markers are
+> matched against Unity's stable serialization, but final acceptance — importing the `.controller`
+> and seeing the layer drive the gesture in-game — remains the manual Unity/VRChat step this
+> toolchain deliberately does not own (`PLAN.md` §1, §5).
+
+```rust
+use avatar_anim_gen::*;
+let mut ids = IdGen::new("FX");
+let tree = BlendTree::analog_gesture("Fist", "GestureLeftWeight")
+    .clip("1234567890abcdef1234567890abcdef", 0.0)
+    .clip("abcdef1234567890abcdef1234567890", 1.0);
+let controller_text = fx_blend_tree("FX", "Base Layer", &tree, &mut ids);
+```
 
 ```rust
 use avatar_anim_gen::*;
