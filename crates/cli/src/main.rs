@@ -1,6 +1,7 @@
 //! `avatar` — command-line entry point for the VRChat avatar tools.
 //!
 //! Subcommands:
+//!   - `avatar describe <path>`           — one-shot snapshot: FBX structure+armature+perf, or project lint+perf
 //!   - `avatar fbx inspect <path>`        — dump an FBX's structure and flag unit/orientation issues
 //!   - `avatar armature check <path>`     — validate the skeleton against VRChat humanoid requirements
 //!   - `avatar armature fix <path> -o …`  — write a repaired FBX (canonical bone names, topology)
@@ -8,6 +9,8 @@
 //!   - `avatar stats <path>`              — VRChat performance ranking of an FBX or project avatar
 //!   - `avatar anim-gen blendtree …`      — generate an analog-gesture FX blend-tree (Unity YAML)
 //!   - `avatar anim-gen clip …`           — generate a `.anim` clip (blendshape / toggle curves)
+//!   - `avatar anim-gen controller …`     — generate a complete FX `.controller` (full M4 asset)
+//!   - `avatar schema [name]`             — JSON Schema for a `--json` report type (output contract)
 //!   - `avatar osc send|input|monitor …`  — drive / observe a running VRChat over OSC
 //!   - `avatar osc query <config.json>`   — list an avatar's parameters from its OSCQuery config
 //!   - `avatar osc gestures`              — run the analog-gesture daemon (demo trigger sweep)
@@ -30,10 +33,12 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 
 use cmd::anim_gen::AnimGenCommand;
+use cmd::describe::DescribeArgs;
 use cmd::fbx::{ArmatureCommand, FbxCommand};
 use cmd::lint::LintArgs;
 use cmd::osc::OscCommand;
 use cmd::render::{RenderArgs, ViewArgs};
+use cmd::schema::SchemaArgs;
 use cmd::stats::StatsArgs;
 use cmd::unitypackage::UnitypackageCommand;
 
@@ -56,6 +61,8 @@ enum Command {
     /// Inspect and validate avatar armatures / skeletons.
     #[command(subcommand)]
     Armature(ArmatureCommand),
+    /// Summarize an avatar asset in one shot: FBX structure+armature+geometry, or project lint+perf.
+    Describe(DescribeArgs),
     /// Lint a Unity/VRChat project for SDK3 compliance.
     Lint(LintArgs),
     /// Estimate the VRChat performance ranking of an FBX or a project's avatar(s).
@@ -73,6 +80,8 @@ enum Command {
     Render(RenderArgs),
     /// Open an interactive window onto an avatar dropped into a world (orbit / zoom / walk).
     View(ViewArgs),
+    /// Print the JSON Schema for a `--json` report type (for agents consuming the output).
+    Schema(SchemaArgs),
 }
 
 fn main() -> ExitCode {
@@ -95,6 +104,7 @@ fn run() -> Result<ExitCode> {
         Command::Armature(ArmatureCommand::Fix(args)) => {
             cmd::fbx::armature_fix(&args).map(|()| ExitCode::SUCCESS)
         }
+        Command::Describe(args) => cmd::describe::describe(&args),
         Command::Lint(args) => cmd::lint::lint(&args),
         Command::Stats(args) => cmd::stats::stats(&args).map(|()| ExitCode::SUCCESS),
         Command::AnimGen(AnimGenCommand::Blendtree(args)) => {
@@ -102,6 +112,9 @@ fn run() -> Result<ExitCode> {
         }
         Command::AnimGen(AnimGenCommand::Clip(args)) => {
             cmd::anim_gen::clip(&args).map(|()| ExitCode::SUCCESS)
+        }
+        Command::AnimGen(AnimGenCommand::Controller(args)) => {
+            cmd::anim_gen::controller(&args).map(|()| ExitCode::SUCCESS)
         }
         Command::Osc(OscCommand::Send(args)) => cmd::osc::send(&args).map(|()| ExitCode::SUCCESS),
         Command::Osc(OscCommand::Input(args)) => cmd::osc::input(&args).map(|()| ExitCode::SUCCESS),
@@ -129,5 +142,6 @@ fn run() -> Result<ExitCode> {
         }
         Command::Render(args) => cmd::render::render(&args).map(|()| ExitCode::SUCCESS),
         Command::View(args) => cmd::render::view(&args).map(|()| ExitCode::SUCCESS),
+        Command::Schema(args) => cmd::schema::schema(&args).map(|()| ExitCode::SUCCESS),
     }
 }

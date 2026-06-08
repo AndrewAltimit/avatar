@@ -13,6 +13,7 @@ anyhow.workspace = true
 clap.workspace = true
 serde = { workspace = true }
 serde_json.workspace = true
+schemars = { workspace = true, optional = true }
 # Linear algebra for the render command's scene glue (placement/camera). Confined to render_scene.rs.
 glam.workspace = true
 # Unity YAML reader, used by the render command's world-scene parser.
@@ -38,8 +39,16 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg",
 # On by default so `avatar view` (the interactive window) works out of the box. winit builds fine
 # headlessly — it only needs a display at runtime — so CI builds stay green. Disable with
 # `--no-default-features` for a pure-offscreen build with no windowing deps.
-default = ["viewer"]
+default = ["viewer", "schema"]
 viewer = ["avatar-render/viewer"]
+# `avatar schema …` — emit JSON Schemas for the `--json` report types. On by default so the schema
+# command is always available in a normal build; turns on each report crate's own `schema` feature.
+schema = [
+    "dep:schemars",
+    "avatar-lint/schema",
+    "avatar-stats/schema",
+    "avatar-armature/schema",
+]
 
 [dev-dependencies]
 # Used only to synthesize binary FBX fixtures in-memory for the CLI exit-code tests.

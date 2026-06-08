@@ -129,6 +129,98 @@ fn anim_gen_clip_writes_to_output_file() {
     assert!(written.contains("--- !u!74 &"), "wrote a real .anim file");
 }
 
+#[test]
+fn anim_gen_clip_json_is_machine_readable_and_emits_no_raw_yaml() {
+    let (code, out) = run(&[
+        "anim-gen",
+        "clip",
+        "--name",
+        "Smile",
+        "--blendshape",
+        "Body:Smile:100",
+        "--json",
+    ]);
+    assert_eq!(code, 0);
+    // In --json mode stdout is the report, not the YAML — it must be parseable JSON.
+    let v: serde_json::Value = serde_json::from_str(&out).expect("stdout is JSON, not raw YAML");
+    assert_eq!(v["kind"], "clip");
+    assert!(v["clip_file_id"].is_u64(), "carries the allocated fileID");
+    assert_eq!(v["written"], false, "no -o, so nothing was written");
+    // The YAML asset is embedded in the report so an agent gets both in one call.
+    assert!(
+        v["yaml"].as_str().unwrap().contains("--- !u!74 &"),
+        "report embeds the AnimationClip YAML"
+    );
+}
+
+#[test]
+fn anim_gen_controller_emits_a_full_fx_controller() {
+    let (code, out) = run(&[
+        "anim-gen",
+        "controller",
+        "--name",
+        "FX",
+        "--clip",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@0.0",
+        "--clip",
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb@1.0",
+    ]);
+    assert_eq!(code, 0);
+    assert!(
+        out.contains("--- !u!91 &"),
+        "is an AnimatorController document"
+    );
+    assert!(out.contains("--- !u!206 &"), "wraps a BlendTree");
+    assert!(out.contains("m_Name: FX"));
+}
+
+#[test]
+fn anim_gen_dry_run_writes_nothing() {
+    let path = temp_path("dry.anim");
+    let _ = std::fs::remove_file(&path);
+    let (code, out) = run(&[
+        "anim-gen",
+        "clip",
+        "--name",
+        "Dry",
+        "--blendshape",
+        "Body:Smile:100",
+        "-o",
+        path.to_str().unwrap(),
+        "--dry-run",
+    ]);
+    let exists = path.exists();
+    let _ = std::fs::remove_file(&path);
+    assert_eq!(code, 0);
+    assert!(out.is_empty(), "dry-run prints nothing to stdout");
+    assert!(!exists, "dry-run must not create the output file");
+}
+
+#[test]
+fn anim_gen_refuses_to_overwrite_without_force() {
+    let path = temp_path("guard.anim");
+    let p = path.to_str().unwrap();
+    let args = [
+        "anim-gen",
+        "clip",
+        "--name",
+        "Guard",
+        "--blendshape",
+        "Body:Smile:100",
+        "-o",
+        p,
+    ];
+    // First write succeeds; a second write to the same path is refused...
+    assert_eq!(run(&args).0, 0, "first write succeeds");
+    assert_ne!(run(&args).0, 0, "second write is refused (no --force)");
+    // ...but --force allows it.
+    let mut forced = args.to_vec();
+    forced.push("--force");
+    let forced_code = run(&forced).0;
+    let _ = std::fs::remove_file(&path);
+    assert_eq!(forced_code, 0, "--force permits overwrite");
+}
+
 const OSCQUERY_CONFIG: &str = r#"{
   "name": "MyAvatar",
   "FULL_PATH": "/",

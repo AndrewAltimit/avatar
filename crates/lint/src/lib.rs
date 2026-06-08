@@ -25,6 +25,7 @@ use builtins::BUILTIN_PARAMETERS;
 /// How serious a lint finding is: an `Error` is something VRChat will reject or that breaks the
 /// avatar, a `Warn` is a likely-but-uncertain problem, and `Info` is advisory only.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub enum Severity {
     /// VRChat will reject this, or it breaks the avatar.
     Error,
@@ -46,6 +47,7 @@ impl Severity {
 
 /// A single lint finding.
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Diagnostic {
     pub severity: Severity,
     /// Stable rule code, e.g. `"VRC010"`.
@@ -59,6 +61,7 @@ pub struct Diagnostic {
 
 /// The result of linting a project.
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct LintReport {
     pub project_root: String,
     pub unity_version: Option<String>,
@@ -73,6 +76,7 @@ pub struct LintReport {
 
 /// A VPM package found in the project's manifest (name and resolved version).
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct PackageInfo {
     pub name: String,
     pub version: String,

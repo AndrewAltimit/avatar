@@ -1,5 +1,7 @@
-# Headless Unity acceptance for `avatar armature fix`: prove that a repaired FBX configures as a
-# valid Humanoid avatar in a real Unity editor — the "last mile" the Rust tests can't cover.
+# Headless Unity acceptance: prove in a real Unity editor that (1) a repaired FBX configures as a
+# valid Humanoid avatar (`avatar armature fix`), and (2) the CLI-generated `.anim`/`.controller`
+# assets (`avatar anim-gen`) import into the expected object types with no errors — the "last mile"
+# the Rust round-trip tests can't cover.
 #
 # This is the automated form of the manual check in docs/reference/armature-repair.md. It runs the
 # Unity editor inside GameCI's x86_64 Docker image on a self-hosted (amd64) runner, so it needs no
@@ -81,3 +83,31 @@ jobs:
           buildMethod: HumanoidAcceptance.Run
           allowDirtyBuild: true
           customParameters: -fbx /tmp/fixed.fbx
+
+      - name: Generate FX assets (clip + full controller) with the CLI
+        run: |
+          mkdir -p /tmp/gen
+          # A static expression clip and a complete FX AnimatorController wrapping an analog-gesture
+          # blend tree — the M4 assets whose YAML only round-trips through our own reader in unit tests.
+          ./target/release/avatar anim-gen clip --name Smile \
+            --blendshape Body:Smile:100 -o /tmp/gen/Smile.anim
+          ./target/release/avatar anim-gen controller --name FX --layer "Base Layer" \
+            --clip aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@0.0 \
+            --clip bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb@1.0 -o /tmp/gen/FX.controller
+
+      # The "last mile" the Rust round-trip tests can't cover: prove a real editor imports the
+      # generated YAML into the expected object types with no import errors logged.
+      - name: Assert the generated assets import cleanly in Unity
+        if: steps.lic.outputs.ok == 'true'
+        uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          unityVersion: ${{ env.UNITY_VERSION }}
+          projectPath: acceptance/unity
+          targetPlatform: StandaloneLinux64
+          buildMethod: GeneratedAssetAcceptance.Run
+          allowDirtyBuild: true
+          customParameters: -assets /tmp/gen

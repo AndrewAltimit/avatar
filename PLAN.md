@@ -58,8 +58,9 @@ Crate dirs are unprefixed; package names `avatar-<slug>`; lib names `avatar_<slu
   ranked against the PC + Android limit tables (encoded as data). **[built]**
 - `avatar-anim-gen` — generate `.anim` clips + FX-layer blend trees (wrapped in a full FX
   `AnimatorController`) for analog gestures and general expression authoring. Unity-YAML emitter,
-  deterministic fileIDs, reader-validated round-trip.
-  **[built: M4 — library + `avatar anim-gen` CLI; full FX animator-layer assembly done]**
+  deterministic fileIDs, reader-validated round-trip + a real-editor import gate in CI.
+  **[built: M4 — library + `avatar anim-gen clip|blendtree|controller` CLI; full FX animator-layer
+  assembly done; CLI-generated assets gated against a real Unity editor]**
 
 **Runtime**
 - `avatar-osc` — `rosc`-backed VRChat OSC parameter protocol: `/avatar/parameters/*`, `/input/*` axes
@@ -164,12 +165,15 @@ Locked to the `legend-of-legaia-re` style — see `CLAUDE.md`. Addition vs. Lega
 - **M4 — Asset generation.** 🟡 *Library + CLI landed.* `avatar-anim-gen` generates Unity-YAML
   `.anim` clips (`AnimationClip`: blendshape-weight + GameObject-active curves) and FX-layer
   analog-gesture blend trees (`BlendTree`), with a faithful YAML emitter, deterministic FNV-seeded
-  fileIDs, and a reader-validated round-trip — driven by `avatar anim-gen blendtree` / `… clip`. A
-  `controller.rs` module now also emits a **full FX `AnimatorController`** (class 91) wrapping a
-  blend-tree layer (`m_AnimatorParameters` + `m_AnimatorLayers` + state machine), round-tripped
-  through `avatar-unity-asset`'s reader (in-repo only — not yet a live Unity import) — closing the
-  full FX animator-layer assembly gap. Remaining: typed `AnimationClip`/material/scene in
-  `avatar-unity-asset`. Behaviour: `docs/reference/anim-gen.md`.
+  fileIDs, and a reader-validated round-trip — driven by `avatar anim-gen blendtree` / `… clip` /
+  `… controller`. A `controller.rs` module also emits a **full FX `AnimatorController`** (class 91)
+  wrapping a blend-tree layer (`m_AnimatorParameters` + `m_AnimatorLayers` + state machine), now
+  exposed by the `controller` subcommand. The reader round-trip is in-repo, **and** the
+  Unity-acceptance workflow now imports CLI-generated `.anim`/`.controller` assets into a real editor
+  (`GeneratedAssetAcceptance.cs`) and asserts they parse into the expected object types with no
+  import errors — closing the "live Unity import" gap for M4 (gated on a `UNITY_LICENSE` secret).
+  Remaining: typed `AnimationClip`/material/scene in `avatar-unity-asset`. Behaviour:
+  `docs/reference/anim-gen.md`.
 - **M5 — OSC runtime.** 🟡 *Library + CLI landed.* `avatar-osc` implements VRChat's OSC parameter
   protocol (`/avatar/parameters`, `/input`, `/avatar/change`) as a pure codec + non-blocking UDP
   `ParamClient`, plus offline OSCQuery avatar-config parsing — driven by `avatar osc

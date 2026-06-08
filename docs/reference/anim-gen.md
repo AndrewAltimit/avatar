@@ -6,8 +6,8 @@ analog-gesture blend trees — for the M4 "asset generation" milestone (`PLAN.md
 parse Unity YAML, this emits it, in the exact shape Unity's own serializer writes so the result
 imports cleanly.
 
-It is a library crate (no CLI surface yet). Everything below is a typed Rust builder that renders to
-a Unity-YAML string.
+Everything below is a typed Rust builder that renders to a Unity-YAML string; the CLI surface that
+drives it (`avatar anim-gen clip|blendtree|controller`) is documented in [CLI surface](#cli-surface).
 
 ## Why a generator, not an editor
 
@@ -155,6 +155,31 @@ let tree_doc = format!("{}{}", yaml_emit::UNITY_PREAMBLE, e.into_string());
 println!("{}", tree.wiring_note(110600000));
 ```
 
+## CLI surface
+
+Three subcommands in `avatar-cli` (`cmd/anim_gen.rs`) drive the builders above:
+
+| Command | Emits | Key flags |
+|---------|-------|-----------|
+| `avatar anim-gen clip --name N [--blendshape PATH:SHAPE:VALUE]… [--toggle PATH]…` | a `.anim` AnimationClip | — |
+| `avatar anim-gen blendtree --name N [--parameter P] [--clip GUID@THRESHOLD]… [--tree-only]` | the blend-tree fragment (state-machine trio, or `--tree-only` the bare 206 doc) | — |
+| `avatar anim-gen controller --name N [--layer L] [--parameter P] [--clip GUID@THRESHOLD]…` | a complete FX `.controller` (`fx_blend_tree`) | — |
+
+Shared flags on all three:
+
+- **`-o, --output <file>`** writes the generated YAML *asset* to a file; without it the YAML goes to
+  stdout.
+- **`--dry-run`** previews without writing (reports the byte count and target to stderr, creates
+  nothing). **`--force`** permits overwriting an existing output file; without it a write to an
+  existing path is refused, so a generator run can never silently clobber an asset.
+- **`--json`** switches stdout from the raw YAML to a machine-readable report — the allocated
+  fileID(s), the parsed child clips, the wiring note (for `blendtree`), the output path, a `written`
+  flag, and the YAML itself embedded under `yaml`. This lets an agent wire the asset (e.g. point a
+  layer's `m_StateMachine` at the reported `state_machine_file_id`) without parsing YAML. With
+  `--json`, `-o` still controls where the YAML asset is written; the JSON report is the stdout
+  channel. The schema of these reports is informal (they are `serde_json` objects); the *report
+  crates'* schemas are published via `avatar schema` (see [CLI README](../../crates/cli/README.md)).
+
 ## The fileID strategy
 
 Unity identifies every object in a file by a 64-bit local `fileID`. Generated ids must be:
@@ -201,9 +226,14 @@ ids, names, and nested binding fields survive a real parse and that the fragment
 resolve (state machine → default state → motion → blend tree). The fileID allocator's determinism
 is pinned by a same-seed-same-sequence test.
 
-What the in-repo tests *cannot* prove is the same last mile as `armature fix`: that a *specific*
-Unity editor accepts the asset on import. That is the interactive Unity step this toolchain
-deliberately doesn't own (`PLAN.md` §1, §5). The field names and document shapes here are matched
-against Unity's stable serialization, but final acceptance — importing a generated `.anim` and
-seeing the curve drive a blendshape, or grafting the blend tree and pulling a trigger in-game —
-remains a manual Unity/VRChat check, as with the rest of the project-layer outputs.
+What the in-repo tests *cannot* prove is that a *specific* Unity editor accepts the asset on import.
+That gap is now closed by a headless **Unity-acceptance gate** (`GeneratedAssetAcceptance.cs`, run
+by `.github/workflows/unity-acceptance.yml`): it imports CLI-generated `.anim`/`.controller` assets
+in a real editor and asserts each parses into the expected object type (`AnimationClip` with curves;
+`AnimatorController` with parameters, a layer, and a state whose motion is a `BlendTree`) with **no
+import errors logged**. Like the `armature fix` humanoid gate it shares a workflow with, it
+self-skips until a `UNITY_LICENSE` secret is configured, so the field shapes here are matched against
+Unity's stable serialization *and* — when the license is present — verified against the real
+importer. The only step that remains genuinely manual is the in-game behaviour check (pulling a
+trigger and seeing the gesture blend), the interactive Unity/VRChat step this toolchain deliberately
+doesn't own (`PLAN.md` §1, §5).

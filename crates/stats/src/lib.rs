@@ -56,6 +56,7 @@ impl Platform {
 /// One of VRChat's five performance tiers. Declared in **ascending severity** so the worst of a set
 /// is `max` ([`Rank::worst`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub enum Rank {
     Excellent,
     Good,
@@ -252,6 +253,7 @@ impl Metric {
 /// the measured quantity itself is platform-dependent: **texture memory**, where the textures are
 /// recompressed to a different format (ASTC/ETC2 vs DXT/BC) for each platform.
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct MetricStat {
     #[serde(skip)]
     pub metric: Metric,
@@ -305,6 +307,7 @@ impl MetricStat {
 
 /// A performance report for one source (an FBX file, or one avatar in a project).
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct PerfReport {
     /// What was measured (a file path, or `path (AvatarName)` for a project avatar).
     pub source: String,

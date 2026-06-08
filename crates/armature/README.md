@@ -31,6 +31,12 @@ Diagnosis + hierarchy-aware mapping: **M1**. Repair planning + apply: **M3** —
 **renames** are applied (the only native repair); topology reparents and scale/orientation are
 **flagged, not applied** (they need a geometry transform, not a metadata relabel).
 
+## Features
+
+- `schema` (off by default) — derive [`schemars::JsonSchema`](https://crates.io/crates/schemars) on
+  `ArmatureReport` so a consumer can emit a JSON Schema for the report. The `avatar` CLI enables it
+  (on by default) to back `avatar schema armature`.
+
 ## See also
 
 - [`docs/reference/humanoid-bones.md`](../../docs/reference/humanoid-bones.md) — the bone table and

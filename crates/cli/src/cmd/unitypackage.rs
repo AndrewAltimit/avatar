@@ -49,6 +49,10 @@ pub struct UpExtractArgs {
     /// Destination directory (created if missing). The project tree is written under it.
     #[arg(short, long)]
     output: PathBuf,
+    /// Extract into a non-empty destination anyway (otherwise the extraction is refused so an
+    /// existing project tree is never silently merged into / clobbered).
+    #[arg(long)]
+    force: bool,
     /// Emit a machine-readable JSON report instead of human-readable text.
     #[arg(long)]
     json: bool,
@@ -187,6 +191,16 @@ pub fn list(args: &UpListArgs) -> Result<()> {
 }
 
 pub fn extract(args: &UpExtractArgs) -> Result<()> {
+    // Don't silently merge into an existing populated tree — that mixes two projects' assets.
+    if !args.force
+        && let Ok(mut entries) = std::fs::read_dir(&args.output)
+        && entries.next().is_some()
+    {
+        anyhow::bail!(
+            "destination {} is not empty (pass --force to extract into it anyway)",
+            args.output.display()
+        );
+    }
     let pkg = open_package(&args.path)?;
     let report = pkg.extract(&args.output)?;
     if args.json {

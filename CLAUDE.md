@@ -256,6 +256,28 @@ vertices. `avatar-fbx` reads `UpAxis`/`FrontAxis` via checked `i32::try_from` in
 cast. `avatar-unity-yaml`'s `parse_lossy` was refactored to be infallible by construction, removing
 a latent panic path.
 
+**Agent ergonomics (built):** four changes make the toolchain easier for agents to drive and trust.
+(1) **`avatar describe <path>`** (crate `avatar-cli`, `cmd/describe.rs`) is a one-shot consolidated
+snapshot — for an FBX it runs inspect + armature + geometry stats; for a project it runs lint +
+per-avatar stats — so one call yields a full mental model instead of stitching four commands. Gates
+non-zero on a non-humanoid-ready rig or lint errors. (2) **Dry-run-safe writes**: a shared
+`WriteGuard` (`--dry-run`/`--force`) in `cmd/mod.rs` (`write_out_guarded`) backs the generators so
+they preview without writing and never silently clobber; `armature fix` refuses to overwrite any
+pre-existing output (not just the input) without `--force`, and `unitypackage extract` refuses a
+non-empty destination without `--force`. (3) **`--json` is now uniform** across the read/generate
+surface — added to `anim-gen clip|blendtree|controller` (the report carries allocated fileIDs + the
+wiring note + the YAML, so an agent needn't parse YAML to wire the asset). (4) **`avatar schema
+[name|all]`** emits a JSON Schema for each `--json` report type (`describe`/`lint`/`stats`/
+`armature`/`fbx-inspect`) so an agent can introspect the output contract and we can catch our own
+breaking changes; built on `schemars`, derived via a `schema` cargo feature on `avatar-lint`/
+`-stats`/`-armature` (optional for library consumers, on by default in the cli). A new **`avatar
+anim-gen controller`** subcommand exposes the crate's `fx_blend_tree` — a complete, Unity-importable
+FX `AnimatorController` (class 91) — which the M4 generator previously couldn't emit from the CLI.
+The headless Unity-acceptance workflow gained a second gate (`GeneratedAssetAcceptance.cs`): it
+imports CLI-generated `.anim`/`.controller` assets in a real editor and asserts they parse into the
+expected object types with no import errors — the "last mile" the in-repo round-trip tests can't
+cover for M4.
+
 M3 resolves the project's biggest risk — native binary FBX **write-back**. `avatar-fbx`'s
 `FbxDocument` retains `fbxcel` 0.9's mutable tree (enable the `writer` feature) and serializes via
 `Writer::write_tree`/`finalize`; it edits objects by FBX **object id** (skin/anim refs are by id,

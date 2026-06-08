@@ -32,6 +32,10 @@ anyhow = "1"
 clap = { version = "4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# JSON Schema generation for the report types, so an agent can introspect `--json` output shapes
+# (`avatar schema …`). Optional + feature-gated per crate (the `schema` feature) to keep library
+# consumers lean; the cli turns it on by default.
+schemars = "0.8"
 yaml-rust2 = "0.11"
 # Linear algebra for the runtime rig layer (pose/skinning/IK/input). f32 to match the GPU.
 glam = "0.29"

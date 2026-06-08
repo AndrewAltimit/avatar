@@ -29,6 +29,12 @@ and [`avatar-unity-asset`](../unity-asset/README.md) over
 
 Built: **M2**.
 
+## Features
+
+- `schema` (off by default) — derive [`schemars::JsonSchema`](https://crates.io/crates/schemars) on
+  `LintReport` (and `Diagnostic`/`Severity`/`PackageInfo`) so a consumer can emit a JSON Schema for
+  the report. The `avatar` CLI enables it (on by default) to back `avatar schema lint`.
+
 ## See also
 
 - [`docs/reference/sdk3-lint-rules.md`](../../docs/reference/sdk3-lint-rules.md) — the full rule

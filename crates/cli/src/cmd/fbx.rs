@@ -30,7 +30,7 @@ pub struct FixArgs {
     /// Write the repaired FBX here. Without this, runs as a dry run (prints the plan only).
     #[arg(short, long)]
     output: Option<std::path::PathBuf>,
-    /// Allow `--output` to overwrite the input file.
+    /// Allow `--output` to overwrite the input file or any existing output file.
     #[arg(long)]
     force: bool,
     /// Emit a machine-readable JSON plan instead of human-readable text.
@@ -200,11 +200,19 @@ pub fn armature_fix(args: &FixArgs) -> Result<()> {
             }
         }
         Some(out) => {
-            if overwrites_input(&args.path, out) && !args.force {
-                bail!(
-                    "refusing to overwrite the input file {}; choose a different -o path or pass --force",
-                    args.path.display()
-                );
+            if !args.force {
+                if overwrites_input(&args.path, out) {
+                    bail!(
+                        "refusing to overwrite the input file {}; choose a different -o path or pass --force",
+                        args.path.display()
+                    );
+                }
+                if out.exists() {
+                    bail!(
+                        "refusing to overwrite existing file {} (pass --force to overwrite)",
+                        out.display()
+                    );
+                }
             }
             let applied = apply_plan(&mut doc, &plan)?;
             doc.write(out)?;
@@ -260,19 +268,20 @@ fn print_plan(path: &Path, plan: &RepairPlan) {
 }
 
 #[derive(serde::Serialize)]
-struct InspectSummary {
-    version: u32,
-    unit_scale_factor: Option<f64>,
-    up_axis: Option<i32>,
-    total_objects: usize,
-    models: usize,
-    geometries: usize,
-    materials: usize,
-    bone_like: usize,
-    roots: Vec<String>,
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub(crate) struct InspectSummary {
+    pub(crate) version: u32,
+    pub(crate) unit_scale_factor: Option<f64>,
+    pub(crate) up_axis: Option<i32>,
+    pub(crate) total_objects: usize,
+    pub(crate) models: usize,
+    pub(crate) geometries: usize,
+    pub(crate) materials: usize,
+    pub(crate) bone_like: usize,
+    pub(crate) roots: Vec<String>,
 }
 
-fn inspect_summary(scene: &FbxScene) -> InspectSummary {
+pub(crate) fn inspect_summary(scene: &FbxScene) -> InspectSummary {
     let counts = ObjectCounts::of(scene);
     let roots = model_roots(scene)
         .into_iter()
