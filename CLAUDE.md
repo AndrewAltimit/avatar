@@ -86,8 +86,14 @@ Unity or the VRChat SDK upload step (interactive VRChat-account login, effective
 - Manual, transparent parsing over heavy combinator frameworks — match the format byte/field for
   field and validate with `bail`, like the Legaia format crates.
 - Integration tests live in `crates/<name>/tests/` and are **gated by an env var** pointing at a
-  sample asset (e.g. `AVATAR_SAMPLE_FBX`); if unset, the test prints a skip notice and returns OK
-  so CI without fixtures stays green. Never commit user FBX/Unity projects (see `.gitignore`).
+  sample asset (`AVATAR_SAMPLE_FBX`, `AVATAR_SAMPLE_UNITYPACKAGE`, `AVATAR_SAMPLE_UNITYPACKAGE_WORLD`);
+  if unset, the test prints a skip notice and returns OK so CI without fixtures stays green. Never
+  commit user FBX/Unity projects (see `.gitignore`). **Ground truth:** the self-hosted CI runner is
+  the dev machine, so `main-ci.yml` points `AVATAR_SAMPLE_UNITYPACKAGE` at a local avatar package —
+  the main `ci` job extracts it and runs the real FBX-parse + lint + project-stats pipeline on every
+  push (`crates/cli/tests/sample_avatar_pipeline.rs`), turning those skips into real coverage; the
+  lint / project-stats read paths are *also* covered hermetically by the committed synthetic fixture
+  projects under `crates/lint/tests/fixtures/`, which run on any machine.
 
 ## Commands
 

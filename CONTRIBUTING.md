@@ -99,9 +99,19 @@ These mirror the `legend-of-legaia-re` style; keep new code consistent with it.
 Unit tests live next to the code. Integration tests live in `crates/<name>/tests/`.
 
 Integration tests that need a real asset are **gated by an environment variable** pointing at a
-sample file, e.g. `AVATAR_SAMPLE_FBX`. The pattern: if the env var is unset, print a skip notice and
-return `Ok(())` so CI without fixtures stays green; if it is set, load that asset and run the real
-assertion. Never commit user FBX / Unity projects — they are git-ignored (see `.gitignore`).
+sample file. The pattern: if the env var is unset, print a skip notice and return `Ok(())` so CI
+without fixtures stays green; if it is set, load that asset and run the real assertion. Never commit
+user FBX / Unity projects — they are git-ignored (see `.gitignore`). The gated vars:
+
+| Var | Points at | Exercised by |
+|-----|-----------|--------------|
+| `AVATAR_SAMPLE_FBX` | a binary `.fbx` | armature check/fix + FBX geometry stats |
+| `AVATAR_SAMPLE_UNITYPACKAGE` | an avatar `.unitypackage` | package open/extract, **and** the full read pipeline (real FBX parse + lint + project stats) over the extracted tree |
+| `AVATAR_SAMPLE_UNITYPACKAGE_WORLD` | a world `.unitypackage` | the avatar-vs-world co-import cross-check |
+
+On the self-hosted CI runner these point at local files so the otherwise-skipped real-data paths run
+on every push (see `.github/workflows/main-ci.yml`); the committed synthetic fixture projects under
+`crates/lint/tests/fixtures/` already cover the lint / project-stats paths hermetically.
 
 ```rust
 #[test]
