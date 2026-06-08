@@ -3,15 +3,13 @@
 //! are present), but its FX playable layer points at a missing animator-controller guid (VRC032)
 //! and its lip-sync is set to Viseme Blend Shape with no mesh and only 3 of 15 visemes (VRC033).
 
-use std::path::PathBuf;
-
 fn codes(report: &avatar_lint::LintReport) -> Vec<&str> {
     report.diagnostics.iter().map(|d| d.code).collect()
 }
 
 #[test]
 fn lints_avatar_descriptor_project() {
-    let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/AvatarProject");
+    let fixture = avatar_testkit::corpus("projects/AvatarProject");
     let report = avatar_lint::run(&fixture).expect("lint avatar project");
 
     assert_eq!(report.descriptors, 1, "should find the descriptor prefab");

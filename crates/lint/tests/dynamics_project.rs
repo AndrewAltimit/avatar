@@ -8,15 +8,13 @@
 //! (VRC050), one that moves no transforms (VRC051), and one whose collider slots are all null
 //! (VRC052) — plus the well-formed one with a wired collider, which must NOT trip VRC052.
 
-use std::path::PathBuf;
-
 fn codes(report: &avatar_lint::LintReport) -> Vec<&str> {
     report.diagnostics.iter().map(|d| d.code).collect()
 }
 
 #[test]
 fn lints_dynamics_project() {
-    let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/DynamicsProject");
+    let fixture = avatar_testkit::corpus("projects/DynamicsProject");
     let report = avatar_lint::run(&fixture).expect("lint dynamics project");
 
     assert_eq!(report.descriptors, 1, "should find the descriptor prefab");

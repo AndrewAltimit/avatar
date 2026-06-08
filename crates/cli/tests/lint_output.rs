@@ -2,17 +2,17 @@
 //! `hint:` lines, that `-o/--output` writes the same report to a file instead of stdout, and that a
 //! `Diagnostic`'s hint survives JSON serialization (the `--json` path).
 //!
-//! Driven through the real `avatar` binary against the committed lint fixture in the sibling
-//! `avatar-lint` crate (a synthetic project with a duplicate parameter, an oversized menu, etc.).
+//! Driven through the real `avatar` binary against the committed lint fixture in the shared corpus
+//! (a synthetic project with a duplicate parameter, an oversized menu, etc.).
 
 use std::path::PathBuf;
 use std::process::Command;
 
 const AVATAR: &str = env!("CARGO_BIN_EXE_avatar");
 
-/// The committed SampleProject fixture lives in the `avatar-lint` crate's tests/ tree.
+/// The committed SampleProject fixture lives in the shared corpus (`<workspace>/fixtures/projects`).
 fn sample_project() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../lint/tests/fixtures/SampleProject")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/projects/SampleProject")
 }
 
 #[test]

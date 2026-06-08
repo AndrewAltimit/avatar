@@ -38,6 +38,9 @@ Documentation for the [avatar](../README.md) monorepo. Start with the root
   rendering with its limitations.
 - [`reference/mcp.md`](reference/mcp.md) — `avatar-mcp` / `avatar mcp serve`: the stdio MCP server,
   the read-only tool registry, the handshake, and the two-layer error model.
+- [`reference/testing.md`](reference/testing.md) — the fixture corpus and the `avatar-testkit`
+  golden-snapshot harness: the three corpus layers, `golden::assert_json`/`redact_roots`, and the
+  `UPDATE_GOLDEN` workflow.
 
 ## Planned directories
 

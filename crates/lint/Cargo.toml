@@ -20,3 +20,8 @@ avatar-vrc-descriptor = { path = "../vrc-descriptor" }
 [features]
 # Derive `schemars::JsonSchema` on the report types so consumers can emit a JSON Schema for them.
 schema = ["dep:schemars"]
+
+[dev-dependencies]
+# Golden-snapshot harness + the shared fixture corpus resolver.
+avatar-testkit = { path = "../testkit" }
+serde_json.workspace = true

@@ -55,6 +55,7 @@ format and subsystem references.
 | [`avatar-osc-gestures`](crates/osc-gestures/README.md) | The **analog-gesture daemon** ("Vive advanced controls on any hardware"): controller trigger → `Gesture*`/`Gesture*Weight` over OSC, with deadzone + change detection. Wired to `avatar osc gestures` |
 | [`avatar-mcp`](crates/mcp/README.md) | A domain-agnostic **MCP server** (stdio JSON-RPC): exposes the read/diagnose surface as tools an agent host can discover + call. Wired to `avatar mcp serve` |
 | [`avatar-cli`](crates/cli/README.md) | The `avatar` binary tying the above together |
+| [`avatar-testkit`](crates/testkit/README.md) | Test-only (`publish = false`): the golden-snapshot harness + in-code synthetic-FBX builders behind the workspace's fixture corpus |
 
 The asset-generation (`avatar-anim-gen`), OSC-runtime (`avatar-osc`), and analog-gesture daemon
 (`avatar-osc-gestures`) crates are driven by the `avatar anim-gen` / `avatar osc` subcommands. The

@@ -212,9 +212,11 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "avatar-fbx",
+ "avatar-testkit",
  "fbxcel",
  "schemars",
  "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -280,12 +282,14 @@ name = "avatar-lint"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "avatar-testkit",
  "avatar-unity-asset",
  "avatar-unity-yaml",
  "avatar-vpm",
  "avatar-vrc-descriptor",
  "schemars",
  "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -352,12 +356,24 @@ dependencies = [
  "anyhow",
  "avatar-fbx",
  "avatar-mesh",
+ "avatar-testkit",
  "avatar-unity-yaml",
  "avatar-vpm",
  "avatar-vrc-descriptor",
  "fbxcel",
  "schemars",
  "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "avatar-testkit"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "fbxcel",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

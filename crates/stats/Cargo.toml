@@ -26,3 +26,6 @@ schema = ["dep:schemars"]
 # Used only to synthesize binary FBX fixtures in-memory for the geometry-stats tests
 # (same approach as the avatar-cli exit-code tests — no committed asset needed).
 fbxcel = { version = "0.9", features = ["tree", "writer"] }
+# Golden-snapshot harness + shared corpus resolver + in-code synthetic FBX (the `fbx` feature).
+avatar-testkit = { path = "../testkit", features = ["fbx"] }
+serde_json.workspace = true

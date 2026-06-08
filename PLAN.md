@@ -80,6 +80,12 @@ Crate dirs are unprefixed; package names `avatar-<slug>`; lib names `avatar_<slu
 **Entry point**
 - `avatar-cli` — `avatar` binary, clap v4 subcommands. **[building: M1]**
 
+**Test support**
+- `avatar-testkit` — test-only (`publish = false`): the golden-snapshot harness (`golden::assert_json`
+  / `redact_roots`), the shared fixture-corpus resolver (`corpus`/`workspace_root`), and in-code
+  synthetic-FBX builders (`fbx::humanoid_skeleton`, feature `fbx`). Pulled in as a dev-dependency by
+  the crates that golden-test their report surfaces. See `docs/reference/testing.md`. **[built]**
+
 ## 3. "Fix the armature" workflow
 
 1. `avatar fbx inspect model.fbx` — node hierarchy, skeleton roots, bone count, scale/orientation,

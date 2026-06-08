@@ -1,0 +1,22 @@
+[package]
+name = "avatar-testkit"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+name = "avatar_testkit"
+path = "src/lib.rs"
+
+[dependencies]
+anyhow.workspace = true
+serde = { workspace = true }
+serde_json.workspace = true
+# Optional: only the `fbx` feature (in-code synthetic FBX fixtures) needs the writer.
+fbxcel = { version = "0.9", features = ["tree", "writer"], optional = true }
+
+[features]
+# Build the in-code synthetic-FBX fixture builders (`avatar_testkit::fbx`). Off by default so
+# crates that only golden-test Unity-YAML reports don't pull the FBX writer.
+fbx = ["dep:fbxcel"]
