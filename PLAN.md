@@ -137,8 +137,16 @@ Locked to the `legend-of-legaia-re` style — see `CLAUDE.md`. Addition vs. Lega
    Unity import. Note `write_tree` re-emits arrays uncompressed (larger files, semantically fine).
    The Blender-headless fallback is reserved for mutations that *require* re-transforming geometry
    (scale/orientation normalization), which M3 deliberately flags rather than applies.
-2. **UnityYAML round-trip + `.meta` GUIDs.** Read/lint low-risk; generation needs correct
-   fileIDs/GUIDs. Prefer generating fresh assets (new GUIDs) over surgical edits.
+2. **UnityYAML round-trip + `.meta` GUIDs.** Read/lint low-risk; *generating whole assets* needs
+   correct fileIDs/GUIDs (done in M4 for `.anim`/`.controller`). **Surgical edits are now safe too**:
+   `avatar_unity_yaml::EditableUnityFile` (and `avatar asset set`) edit an *existing* asset by
+   span-splicing the raw text — it locates the target value's byte range and replaces only that,
+   leaving every `&fileID`, `{fileID, guid}` reference, key order, and byte of formatting untouched
+   by construction, then re-parses to validate. This sidesteps the original risk (a parse→re-emit
+   that reorders keys / drops anchors breaks references): unchanged bytes are never rewritten.
+   Scope is value edits (scalars, reference re-targets, flow-map subfields); *structural* edits
+   (adding/removing keys or sequence elements) still prefer the generators. See
+   [`docs/reference/unity-yaml-edit.md`](docs/reference/unity-yaml-edit.md).
 3. **VRChat SDK churn.** Encode rules as data/config, not hardcoded constants.
 4. **Ecosystem overlap.** Modular Avatar / VRCFury / NDMF already cover non-destructive Unity-side
    building. Complement them (own the FBX/armature + headless-validation layer; consider emitting MA

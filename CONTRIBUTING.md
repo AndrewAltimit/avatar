@@ -87,7 +87,12 @@ These mirror the `legend-of-legaia-re` style; keep new code consistent with it.
   `[workspace.dependencies]` and are pulled in with `dep.workspace = true`; crate-specific deps are
   declared per-crate, pinned to a major version.
 - **Error handling.** `anyhow` everywhere — `Result`, `Context`, `bail!`. No `thiserror`, no `eyre`.
-  Validate inputs and fail loudly with `bail!` / `.context(...)`.
+  Validate inputs and fail loudly with `bail!` / `.context(...)`. The file-ingest crates (`fbx`,
+  `unitypackage`, `stats`, `osc`, `unity-yaml`) carry
+  `#![cfg_attr(not(test), warn(clippy::unwrap_used, clippy::expect_used))]` at the crate root: a
+  panic on a parse path is an opaque abort an agent can't reason about, so non-test code returns a
+  structured error instead. Tests may `.unwrap()`/`.expect()` freely (the lint is off under
+  `cfg(test)`); since CI runs clippy with `-D warnings`, a new non-test one fails the build.
 - **Parsing.** Manual, transparent parsing over heavy combinator frameworks: match the format
   byte/field for field and validate as you go, like the Legaia format crates.
 - **CLI.** `clap` v4 derive. Logging (binaries only) is `log` + `env_logger`. Reports serialize with

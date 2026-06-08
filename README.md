@@ -42,7 +42,7 @@ format and subsystem references.
 | [`avatar-gltf`](crates/gltf/README.md) | glTF 2.0 importer → the same `RawMesh` + skeleton (a second rig source alongside FBX) |
 | [`avatar-pose`](crates/pose/README.md) | Runtime posing + skinning: `PosedSkeleton` → world matrices, GPU bone-matrix palette, CPU skinning, two-bone IK (renderer-agnostic) |
 | [`avatar-input`](crates/input/README.md) | Backend-agnostic VR tracker input (`TrackerState`/`TrackerSource`): mock + OSC backends, OpenXR planned |
-| [`avatar-unity-yaml`](crates/unity-yaml/README.md) | Reader for Unity's YAML format (`.asset`/`.prefab`/`.unity`/`.meta`) |
+| [`avatar-unity-yaml`](crates/unity-yaml/README.md) | Reader **+ surgical editor** for Unity's YAML format (`.asset`/`.prefab`/`.unity`/`.meta`): `EditableUnityFile` span-splices value edits into an existing asset, preserving fileIDs/refs/formatting. Wired to `avatar asset set` |
 | [`avatar-unity-asset`](crates/unity-asset/README.md) | Typed Unity asset graphs over the YAML reader (the `AnimatorController` reader the controller lint rules consume) |
 | [`avatar-unitypackage`](crates/unitypackage/README.md) | Read Unity's `.unitypackage` (gzip+tar): summarize, extract into a Unity project tree, and cross-check an avatar against a world/map for co-import GUID/path conflicts. Wired to `avatar unitypackage` |
 | [`avatar-vpm`](crates/vpm/README.md) | Discover a Unity/VPM project: manifest packages, editor version, asset paths |
@@ -79,6 +79,7 @@ cargo run -p avatar-cli -- stats path/to/model.fbx                     # perform
 cargo run -p avatar-cli -- stats path/to/UnityProject                  # performance rank (components)
 cargo run -p avatar-cli -- anim-gen clip --name Smile --blendshape Body:Smile:100 -o Smile.anim
 cargo run -p avatar-cli -- anim-gen controller --name FX --clip <guid>@0.0 --clip <guid>@1.0 -o FX.controller  # full FX controller
+cargo run -p avatar-cli -- asset set Parameters.asset --path m_Name --value Params2   # surgical edit (round-trip-safe)
 cargo run -p avatar-cli -- schema describe                            # JSON Schema for a --json report type
 cargo run -p avatar-cli -- osc send VRCEmote 3                         # drive a running VRChat over OSC
 cargo run -p avatar-cli -- osc query path/to/avatar-osc-config.json    # list an avatar's OSC parameters
@@ -128,6 +129,7 @@ overwritten without `--force`.
 | [`docs/reference/performance-stats.md`](docs/reference/performance-stats.md) | `avatar stats`: metrics (incl. particles & constraints), component recognition, and PC/Android threshold tables. |
 | [`docs/reference/rig-runtime.md`](docs/reference/rig-runtime.md) | Runtime rig layer: skin/bind extraction, posing, IK, tracker input. |
 | [`docs/reference/anim-gen.md`](docs/reference/anim-gen.md) | `avatar-anim-gen`: `.anim` clip + analog-gesture blend-tree generation. |
+| [`docs/reference/unity-yaml-edit.md`](docs/reference/unity-yaml-edit.md) | `EditableUnityFile` / `avatar asset set`: surgical, round-trip-safe value edits to an existing Unity asset. |
 | [`docs/reference/osc-runtime.md`](docs/reference/osc-runtime.md) | `avatar-osc`: the OSC address space, codec, and OSCQuery config parsing. |
 | [`docs/reference/unitypackage.md`](docs/reference/unitypackage.md) | `avatar-unitypackage`: the `.unitypackage` format, extraction, and the avatar-in-world testbed. |
 | [`docs/reference/render.md`](docs/reference/render.md) | `avatar-render` / `avatar render` + `avatar view`: the wgpu preview, avatar rest-pose render, world rendering, avatar-at-spawn-in-world, and the interactive viewer. |

@@ -11,3 +11,8 @@ path = "src/lib.rs"
 [dependencies]
 anyhow.workspace = true
 yaml-rust2.workspace = true
+
+[dev-dependencies]
+# Reaches the committed fixture corpus (`fixtures/`) so the surgical-edit round-trip is exercised
+# against real Unity assets, not only embedded snippets.
+avatar-testkit = { path = "../testkit" }

@@ -3,6 +3,7 @@
 //! enum and the `run()` dispatcher. Shared helpers used by more than one group live here.
 
 pub mod anim_gen;
+pub mod asset;
 pub mod describe;
 pub mod fbx;
 pub mod lint;
