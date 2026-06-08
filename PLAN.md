@@ -71,6 +71,11 @@ Crate dirs are unprefixed; package names `avatar-<slug>`; lib names `avatar_<slu
   OSC. The "Vive advanced controls" feature. Glam-free `AnalogSource` + pure `HandMapping` (deadzone)
   + change-detecting `GestureDaemon`; demo trigger sweep headless, OpenXR input backend on-device.
   **[built: M5 — library + `avatar osc gestures` CLI; OpenXR input adapter next]**
+- `avatar-mcp` — a domain-agnostic Model Context Protocol server (stdio JSON-RPC 2.0): pure
+  `Server::handle` dispatch core + thin `serve_stdio` loop, no async, mirroring the `avatar-osc`
+  codec/transport split. The cli wires the read/diagnose surface in as MCP tools so an agent host can
+  discover + call capabilities structurally. **[built — library + `avatar mcp serve` CLI; read-only
+  tools, generation tools next]**
 
 **Entry point**
 - `avatar-cli` — `avatar` binary, clap v4 subcommands. **[building: M1]**

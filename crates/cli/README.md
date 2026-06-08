@@ -34,6 +34,7 @@ output file is never overwritten without `--force`.
 | `avatar unitypackage info\|list\|extract\|testbed <pkg>` | Inspect a `.unitypackage` (contents, detected SDK, avatar/world), list its assets, extract it into a Unity `Assets/` tree, or cross-check an avatar package against a world package for co-import conflicts. |
 | `avatar render [--avatar X] [--world Y] -o out.png` | Offscreen GPU preview → PNG. With both, the avatar is dropped at the world's player-spawn point at human scale; `--frame avatar\|world`, `--width/--height/--yaw/--pitch`. |
 | `avatar view [--avatar X] [--world Y]` | Open an interactive window onto the same scene: drag = orbit, wheel = zoom, WASD/Space/Shift = walk, R = reset, Esc = quit. Needs a display (cli `viewer` feature, on by default). |
+| `avatar mcp serve` | Run a Model Context Protocol server over stdio (JSON-RPC), exposing the **read-only** diagnose surface (`describe`/`lint`/`stats`/`armature`/`fbx-inspect`/`unitypackage-info`/`schema`) as tools an agent host can discover + call. Each returns the same JSON as the `--json` flags. |
 
 ```sh
 cargo run -p avatar-cli -- describe model.fbx --json         # one-call snapshot, machine-readable
@@ -50,6 +51,7 @@ cargo run -p avatar-cli -- osc gestures --seconds 10         # analog-gesture de
 cargo run -p avatar-cli -- unitypackage extract avatar.unitypackage -o avatar-proj
 cargo run -p avatar-cli -- render --avatar avatar.fbx --world world/Assets/Scene.unity -o in-world.png
 cargo run -p avatar-cli -- view   --avatar avatar.fbx --world world/Assets/Scene.unity  # interactive
+cargo run -p avatar-cli -- mcp serve                         # stdio MCP server for an agent host
 ```
 
 ## Exit codes
@@ -71,7 +73,7 @@ hard error (e.g. an unreadable file, or a refused overwrite without `--force`).
 assets are gated against a real editor by the Unity-acceptance workflow). `osc` / `osc gestures`:
 **M5** (library + CLI; the daemon's on-device OpenXR input backend is the remaining runtime piece).
 `describe` / `schema` and the generators' `--dry-run`/`--force` write-safety: built (agent
-ergonomics).
+ergonomics). `mcp serve`: built (read-only tool surface over MCP; generation tools next).
 
 ## See also
 
@@ -81,3 +83,4 @@ ergonomics).
   behaviour.
 - [`docs/reference/anim-gen.md`](../../docs/reference/anim-gen.md) — `anim-gen` generation.
 - [`docs/reference/osc-runtime.md`](../../docs/reference/osc-runtime.md) — `osc` address space + codec.
+- [`docs/reference/mcp.md`](../../docs/reference/mcp.md) — `mcp serve` tools, handshake, error model.
