@@ -18,6 +18,7 @@ members = [
     "crates/render",
     "crates/osc",
     "crates/osc-gestures",
+    "crates/mcp",
     "crates/cli",
 ]
 

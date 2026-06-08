@@ -6,6 +6,7 @@ pub mod anim_gen;
 pub mod describe;
 pub mod fbx;
 pub mod lint;
+pub mod mcp;
 pub mod osc;
 pub mod render;
 pub mod schema;

@@ -32,6 +32,7 @@ backend remains. See [`PLAN.md`](PLAN.md) for the roadmap and the [Status](#stat
 | [`docs/reference/osc-runtime.md`](docs/reference/osc-runtime.md) | `avatar-osc`: VRChat OSC address space, codec, UDP client, OSCQuery avatar-config parsing. |
 | [`docs/reference/unitypackage.md`](docs/reference/unitypackage.md) | `avatar-unitypackage`: reading the `.unitypackage` format, extracting to a Unity project tree, the avatar-in-world co-import testbed. |
 | [`docs/reference/render.md`](docs/reference/render.md) | `avatar-render` / `avatar render` + `avatar view`: offscreen wgpu preview pipeline, avatar rest-pose render (auto-upright), world-scene render, avatar-dropped-at-spawn-in-world, interactive winit viewer (orbit/zoom/walk) + limits. |
+| [`docs/reference/mcp.md`](docs/reference/mcp.md) | `avatar-mcp` / `avatar mcp serve`: the stdio MCP server exposing the read/diagnose tools to an agent host. |
 | [`docs/tutorial.md`](docs/tutorial.md) | End-to-end CLI walkthrough (FBX → armature → lint → stats). |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | No-external-contributions policy, then the internal dev reference: build/test/lint, conventions, adding a lint rule or crate. |
 
@@ -53,6 +54,7 @@ backend remains. See [`PLAN.md`](PLAN.md) for the roadmap and the [Status](#stat
 [`render`](crates/render/README.md) ·
 [`osc`](crates/osc/README.md) ·
 [`osc-gestures`](crates/osc-gestures/README.md) ·
+[`mcp`](crates/mcp/README.md) ·
 [`cli`](crates/cli/README.md).
 
 ## What this repo is
@@ -277,6 +279,25 @@ The headless Unity-acceptance workflow gained a second gate (`GeneratedAssetAcce
 imports CLI-generated `.anim`/`.controller` assets in a real editor and asserts they parse into the
 expected object types with no import errors — the "last mile" the in-repo round-trip tests can't
 cover for M4.
+
+**MCP server (built) — `avatar-mcp` / `avatar mcp serve`:** a domain-agnostic Model Context Protocol
+server lets an agent host discover (`tools/list`) and call (`tools/call`) the read/diagnose surface as
+typed JSON tools instead of shelling out and parsing stdout. Mirrors the `avatar-osc` split: a **pure**
+`avatar-mcp` crate (JSON-RPC 2.0 over newline-delimited stdio; `initialize`/`tools/list`/`tools/call`/
+`ping`; `Server::handle` is a pure `&Value → Option<Value>` dispatch core, exhaustively unit-tested;
+deps `anyhow`+`serde`+`serde_json` only, no async) + thin cli wiring (`cmd/mcp.rs`) that maps each tool
+to the library call producing its report. Tools (all **read-only** — generators/repairs stay on the CLI
+behind `WriteGuard`, so an agent can call freely): `avatar_describe`, `avatar_lint`, `avatar_stats`,
+`avatar_armature_check`, `avatar_fbx_inspect`, `avatar_unitypackage_info`, and (under the `schema`
+feature) `avatar_schema` — each returns the same JSON the `--json` flag emits. **Two-layer errors:** a
+protocol error (bad JSON → -32700, unknown method → -32601) is a JSON-RPC `error`; a *tool* failure
+(bad path, parse error, unknown tool) is a *successful* result with `isError: true` and the error text
+as content, rendered with the full anyhow `{:#}` chain — so a handler's actionable context reaches the
+model. This is the **error-as-agent-API** pass: handlers validate paths up front with recoverable
+messages ("path does not exist: … — paths resolve against the server's working directory"; "expected a
+single FBX file but … is a directory — for a Unity project use avatar_lint"), and `avatar-fbx`'s
+`load_tree` now distinguishes not-found / is-a-directory from a parse failure at the shared FBX entry
+point. Behaviour: `docs/reference/mcp.md`.
 
 M3 resolves the project's biggest risk — native binary FBX **write-back**. `avatar-fbx`'s
 `FbxDocument` retains `fbxcel` 0.9's mutable tree (enable the `writer` feature) and serializes via

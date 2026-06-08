@@ -1,0 +1,58 @@
+# `avatar-mcp` / `avatar mcp serve` — Model Context Protocol server
+
+`avatar mcp serve` exposes the toolchain's **read/diagnose** surface to an agent host over the Model
+Context Protocol (MCP), so an agent can discover and call capabilities as typed tools rather than
+shelling out to the CLI and parsing stdout. The protocol plumbing is the domain-agnostic
+[`avatar-mcp`](../../crates/mcp/README.md) crate; the avatar tool registry is the cli's
+`crates/cli/src/cmd/mcp.rs`.
+
+## Running
+
+```sh
+avatar mcp serve        # speaks newline-delimited JSON-RPC 2.0 on stdin/stdout
+```
+
+It is a long-lived stdio server: it reads one JSON-RPC message per line from stdin and writes one
+response per line to stdout until stdin reaches EOF. **All diagnostics go to stderr** — stdout is the
+protocol channel. Configure it in an MCP host as a stdio server with command `avatar` and args
+`["mcp", "serve"]`.
+
+## Handshake
+
+Standard MCP: `initialize` → (`notifications/initialized`) → `tools/list` → `tools/call`. The server
+echoes the client's requested `protocolVersion` (default `2024-11-05`), advertises a `tools`
+capability, and answers `ping` with an empty result.
+
+## Tools
+
+All tools are **read-only** — nothing here writes to the filesystem. Each takes a single `path` string
+(except `avatar_schema`) and returns the same JSON report the corresponding `--json` CLI flag emits.
+
+| Tool | Input | Returns |
+|------|-------|---------|
+| `avatar_describe` | `path` (FBX **or** project) | Consolidated `DescribeReport` — best first call |
+| `avatar_lint` | `path` (project) | `LintReport` (VRC001–VRC052 diagnostics) |
+| `avatar_stats` | `path` (FBX **or** project) | `PerfReport` (FBX) or `PerfReport[]` (project avatars) |
+| `avatar_armature_check` | `path` (FBX) | `ArmatureReport` (humanoid-bone mapping + flags) |
+| `avatar_fbx_inspect` | `path` (FBX) | `InspectSummary` (structure counts + unit/orientation flags) |
+| `avatar_unitypackage_info` | `path` (`.unitypackage`) | Package summary (counts, SDK, avatar/world traits) |
+| `avatar_schema` | `name?` | JSON Schema for a report type (omit `name` to list; `all` for every) — only under the `schema` feature |
+
+The output shapes are published as JSON Schemas (`avatar_schema` / `avatar schema`), so a consumer can
+introspect the contract instead of inferring it.
+
+### Why read-only
+
+The generators (`anim-gen …`) and repairs (`armature fix`) stay on the explicit CLI behind the
+`WriteGuard` (`--dry-run`/`--force`), so an agent can call every MCP tool freely with no risk of
+mutating assets. Exposing generation as text-returning, non-writing tools is a clean follow-up.
+
+## Errors are two-layered
+
+- A **protocol** error (malformed JSON, unknown method) comes back as a JSON-RPC `error` object.
+- A **tool** failure (a bad path, a parse error, an unknown tool name) comes back as a *successful*
+  `tools/call` result with `isError: true` and the error text as content — because that text is for
+  the model to read and act on. Handlers attach actionable context up front (e.g. `path does not
+  exist: … — paths are resolved relative to the server's working directory`; `expected a single FBX
+  file but … is a directory — for a Unity project use avatar_lint`), and the server renders the full
+  context chain, so the agent gets guidance it can recover from rather than a deep parser error.

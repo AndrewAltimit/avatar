@@ -186,6 +186,22 @@ fn check_depth(tree: &Tree, src: &str) -> Result<()> {
 
 /// Load and parse a binary FBX file into a versioned node tree.
 fn load_tree(path: &Path) -> Result<(FbxVersion, Tree)> {
+    // Distinguish the common, recoverable mistakes up front so the error tells the caller (or an
+    // agent) what to fix, rather than surfacing a bare "No such file or directory (os error 2)" or a
+    // mid-parse "bad magic" from trying to read a directory as a binary FBX.
+    if path.is_dir() {
+        bail!(
+            "{} is a directory, not an FBX file — pass the path to a single binary .fbx",
+            path.display()
+        );
+    }
+    if !path.exists() {
+        bail!(
+            "FBX file not found: {} — check the path (it is resolved relative to the current working \
+             directory; an absolute path avoids ambiguity)",
+            path.display()
+        );
+    }
     let file = File::open(path).with_context(|| format!("opening FBX file {}", path.display()))?;
     parse_tree(BufReader::new(file), &path.display().to_string())
 }
