@@ -12,12 +12,28 @@ cargo build --workspace
 ```
 
 Then run subcommands with `cargo run -p avatar-cli -- <subcommand>`, or run the built `avatar`
-binary directly from `target/`. Every command takes `--json` to emit a machine-readable report
-instead of the human-readable text shown here; `avatar lint` exits non-zero when it finds errors, so
-it can gate CI.
+binary directly from `target/`. Every read and generate command takes `--json` to emit a
+machine-readable report instead of the human-readable text shown here, and `avatar schema [name]`
+prints the JSON Schema of those reports so the output is a stable contract (handy when driving the
+CLI from a script or agent); `avatar lint` exits non-zero when it finds errors, so it can gate CI.
 
 > FBX support is **binary only** (FBX 7.x — the Autodesk/Unity/Blender default). ASCII FBX is not
 > supported; re-export as binary.
+
+## 0. The one-shot overview — `avatar describe`
+
+If you just want the whole picture of an asset in one call, start with `describe`. For an FBX it
+runs the inspect + armature + geometry-rank steps below in one shot; for a Unity project it runs lint
++ a per-avatar performance rank:
+
+```sh
+cargo run -p avatar-cli -- describe model.fbx              # human-readable summary
+cargo run -p avatar-cli -- describe model.fbx --json       # one consolidated machine-readable report
+cargo run -p avatar-cli -- describe path/to/UnityProject   # lint + per-avatar rank for a project
+```
+
+It exits non-zero on a non-humanoid-ready rig or a project with lint errors, so it gates CI too. The
+sections below cover the same checks individually when you want the detail.
 
 ## 1. Inspect the FBX — `avatar fbx inspect`
 
@@ -143,7 +159,7 @@ avatar stats path/to/UnityProject      # full component-side performance rank
 ## Generate animation assets — `avatar anim-gen`
 
 `avatar-anim-gen` emits Unity assets as text (Unity YAML, in the exact shape Unity's own serializer
-writes), with **deterministic** fileIDs so output is diffable and reproducible. Two subcommands:
+writes), with **deterministic** fileIDs so output is diffable and reproducible. Three subcommands:
 
 ```sh
 # A static expression clip: hold a blendshape (and/or toggle a GameObject on).
@@ -155,10 +171,17 @@ avatar anim-gen clip --name HatOn --toggle Armature/Head/Hat -o HatOn.anim
 # --tree-only emits just the BlendTree document to graft onto an existing Fist state.
 avatar anim-gen blendtree --name FistBlend --parameter GestureLeftWeight \
     --clip <relaxed-hand-guid>@0.0 --clip <fist-guid>@1.0 -o FistBlend.asset
+
+# A complete, Unity-importable FX AnimatorController wrapping that blend tree in one layer.
+avatar anim-gen controller --name FX --layer "Base Layer" \
+    --clip <relaxed-hand-guid>@0.0 --clip <fist-guid>@1.0 -o FX.controller
 ```
 
 Output goes to stdout (pipe/redirect) or a file with `-o`. A wiring note is printed to stderr
-explaining how to splice the result into your FX `.controller`. See
+explaining how to splice a fragment into your FX `.controller` (the `controller` subcommand emits the
+whole thing, so it needs none). These generators are **write-safe**: `--dry-run` previews without
+touching disk, and an existing output file is never overwritten without `--force`. Add `--json` to
+get a structured report (allocated fileIDs, the wiring note, the YAML) instead of raw YAML. See
 [`reference/anim-gen.md`](reference/anim-gen.md).
 
 ## Drive and inspect a running avatar — `avatar osc`

@@ -11,7 +11,12 @@ path = "src/lib.rs"
 [dependencies]
 anyhow.workspace = true
 serde = { workspace = true }
+schemars = { workspace = true, optional = true }
 avatar-fbx = { path = "../fbx" }
+
+[features]
+# Derive `schemars::JsonSchema` on the report types so consumers can emit a JSON Schema for them.
+schema = ["dep:schemars"]
 
 [dev-dependencies]
 # Used only to synthesize a binary FBX in-memory for the non-gated write-back test.

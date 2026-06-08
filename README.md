@@ -65,6 +65,8 @@ send are done and run headless via a demo source. See [`PLAN.md`](PLAN.md) and
 
 ```sh
 cargo build --workspace
+cargo run -p avatar-cli -- describe path/to/model.fbx                  # one-shot snapshot (FBX or project)
+cargo run -p avatar-cli -- describe path/to/model.fbx --json           # machine-readable, for agents
 cargo run -p avatar-cli -- fbx inspect path/to/model.fbx
 cargo run -p avatar-cli -- armature check path/to/model.fbx
 cargo run -p avatar-cli -- armature fix path/to/model.fbx              # dry run: print the repair plan
@@ -74,6 +76,8 @@ cargo run -p avatar-cli -- lint path/to/UnityProject --deny-warnings   # also fa
 cargo run -p avatar-cli -- stats path/to/model.fbx                     # performance rank (geometry)
 cargo run -p avatar-cli -- stats path/to/UnityProject                  # performance rank (components)
 cargo run -p avatar-cli -- anim-gen clip --name Smile --blendshape Body:Smile:100 -o Smile.anim
+cargo run -p avatar-cli -- anim-gen controller --name FX --clip <guid>@0.0 --clip <guid>@1.0 -o FX.controller  # full FX controller
+cargo run -p avatar-cli -- schema describe                            # JSON Schema for a --json report type
 cargo run -p avatar-cli -- osc send VRCEmote 3                         # drive a running VRChat over OSC
 cargo run -p avatar-cli -- osc query path/to/avatar-osc-config.json    # list an avatar's OSC parameters
 cargo run -p avatar-cli -- osc gestures --seconds 10                   # analog-gesture daemon (demo sweep)
@@ -97,6 +101,13 @@ transform, not a metadata relabel (see
 
 > FBX support is **binary only** (FBX 7.x, the Autodesk/Unity/Blender default).
 > ASCII FBX is not supported — re-export as binary.
+
+**For agents / scripting.** `avatar describe <path> [--json]` is a one-call snapshot of an asset
+(FBX structure + armature + geometry rank, or project lint + per-avatar rank). Every read and
+generate command takes `--json`; `avatar schema [name|all]` publishes the JSON Schema of those
+report types so the output shape is a contract, not a guess. The generators (`anim-gen …`) are
+write-safe: `--dry-run` previews without touching disk and an existing output file is never
+overwritten without `--force`.
 
 ## Documentation
 

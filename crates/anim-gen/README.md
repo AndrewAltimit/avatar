@@ -40,9 +40,13 @@ output back** in tests.
 ## Status
 
 Built: **M4**. Covers `.anim` float-curve clips, 1D analog-gesture blend trees, and full FX
-`AnimatorController` emission (the layer list / class-91 object, via `controller::fx_blend_tree`),
-round-tripped through `avatar-unity-asset`'s reader (in-repo only — not yet a live Unity import).
-Out of scope for now: transform (position/scale/rotation) curves and PPtr curves.
+`AnimatorController` emission (the layer list / class-91 object, via `controller::fx_blend_tree`).
+All three are driven from the CLI (`avatar anim-gen clip|blendtree|controller`, each with `--json`
++ write-safe `--dry-run`/`--force`). They round-trip through `avatar-unity-asset`'s reader in-repo,
+**and** — when a `UNITY_LICENSE` is configured — CLI-generated `.anim`/`.controller` assets are
+imported into a real editor by the Unity-acceptance workflow (`GeneratedAssetAcceptance.cs`), so the
+"live Unity import" gap is closed in CI. Out of scope for now: transform (position/scale/rotation)
+curves and PPtr curves.
 
 ## See also
 

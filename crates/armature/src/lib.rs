@@ -330,6 +330,7 @@ fn assign_chain(
 
 /// Result of validating a skeleton against VRChat humanoid rig requirements.
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct ArmatureReport {
     pub total_models: usize,
     pub bone_like_count: usize,

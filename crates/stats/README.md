@@ -56,6 +56,12 @@ estimate of VRChat's Avatar-Dynamics cost), for a unified geometry+component ran
 count, resolved through the renderer→mesh→FBX chain — approximate), and **particle trail/collision
 flags** are now measured too, so `not_evaluated` is empty by default.
 
+## Features
+
+- `schema` (off by default) — derive [`schemars::JsonSchema`](https://crates.io/crates/schemars) on
+  `PerfReport` (and `MetricStat`/`Rank`) so a consumer can emit a JSON Schema for the report. The
+  `avatar` CLI enables it (on by default) to back `avatar schema stats`.
+
 ## See also
 
 - [`docs/reference/performance-stats.md`](../../docs/reference/performance-stats.md) — the metrics,
