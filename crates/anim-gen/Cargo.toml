@@ -16,3 +16,4 @@ avatar-unity-yaml = { path = "../unity-yaml" }
 
 [dev-dependencies]
 avatar-unity-asset = { path = "../unity-asset" }
+avatar-vrc-descriptor = { path = "../vrc-descriptor" }

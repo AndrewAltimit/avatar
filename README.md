@@ -79,6 +79,9 @@ cargo run -p avatar-cli -- stats path/to/model.fbx                     # perform
 cargo run -p avatar-cli -- stats path/to/UnityProject                  # performance rank (components)
 cargo run -p avatar-cli -- anim-gen clip --name Smile --blendshape Body:Smile:100 -o Smile.anim
 cargo run -p avatar-cli -- anim-gen controller --name FX --clip <guid>@0.0 --clip <guid>@1.0 -o FX.controller  # full FX controller
+cargo run -p avatar-cli -- anim-gen params --param Hat:bool --param Dim:float:0.5:local -o Params.asset  # VRCExpressionParameters
+cargo run -p avatar-cli -- anim-gen menu --toggle Hat:Hat --radial Dim:Dim -o Menu.asset      # VRCExpressionsMenu
+cargo run -p avatar-cli -- toggle --name Hat --toggle Armature/Head/Hat -o HatBundle/  # full toggle bundle: clips+FX+params+menu (+.metas)
 cargo run -p avatar-cli -- asset set Parameters.asset --path m_Name --value Params2   # surgical edit (round-trip-safe)
 cargo run -p avatar-cli -- schema describe                            # JSON Schema for a --json report type
 cargo run -p avatar-cli -- osc send VRCEmote 3                         # drive a running VRChat over OSC
