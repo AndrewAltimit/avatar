@@ -412,6 +412,7 @@ name = "avatar-vpm"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "avatar-testkit",
  "serde",
  "serde_json",
 ]
