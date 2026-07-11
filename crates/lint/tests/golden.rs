@@ -46,3 +46,8 @@ fn golden_dynamics_project() {
 fn golden_clip_project() {
     snapshot("ClipProject");
 }
+
+#[test]
+fn golden_quest_project() {
+    snapshot("QuestProject");
+}

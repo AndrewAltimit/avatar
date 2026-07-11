@@ -319,6 +319,26 @@ pub fn run(path: &Path) -> Result<LintReport> {
         check_physbones(file, parsed, &mut diagnostics);
     }
 
+    // --- Project hygiene / Android (VRC06x) ---
+    for (file, parsed) in &prefab_scene_files {
+        check_missing_scripts(file, parsed, &mut diagnostics);
+    }
+    // Mobile-shader advisory: only over files that actually declare an avatar, and each material
+    // reported once no matter how many renderers use it.
+    let mut reported_materials: BTreeSet<String> = BTreeSet::new();
+    let descriptor_files: BTreeSet<&str> = descriptors.iter().map(|(f, _)| f.as_str()).collect();
+    for (file, parsed) in &prefab_scene_files {
+        if descriptor_files.contains(file.as_str()) {
+            check_mobile_shaders(
+                parsed,
+                &guid_to_path,
+                &project.root,
+                &mut reported_materials,
+                &mut diagnostics,
+            );
+        }
+    }
+
     Ok(LintReport {
         project_root: project.root.display().to_string(),
         unity_version: project.unity_version.clone(),
@@ -1393,6 +1413,136 @@ fn check_physbones(file: &str, parsed: &UnityFile, out: &mut Vec<Diagnostic>) {
 }
 
 /// Files we parse as Unity YAML looking for VRChat assets.
+/// VRC060: a MonoBehaviour whose `m_Script` is the null reference — Unity's
+/// "Missing (Mono Script)" state. The component's data is dead weight and the VRChat SDK's
+/// build-time validation refuses to upload an avatar carrying one. Stripped prefab-instance
+/// placeholders and MonoBehaviours that don't serialize `m_Script` at all are not counted.
+fn check_missing_scripts(file: &str, parsed: &UnityFile, out: &mut Vec<Diagnostic>) {
+    let missing = parsed
+        .documents
+        .iter()
+        .filter(|d| d.is_monobehaviour() && !d.stripped)
+        .filter(|d| {
+            let script = &d.body["m_Script"];
+            !script.is_badvalue()
+                && field_i64(script, "fileID") == Some(0)
+                && script["guid"].as_str().is_none()
+        })
+        .count();
+    if missing > 0 {
+        out.push(Diagnostic {
+            severity: Severity::Warn,
+            code: "VRC060",
+            message: format!(
+                "{missing} component(s) have a missing script (m_Script is a null reference)"
+            ),
+            file: Some(file.to_string()),
+            hint: Some(
+                "The script the component was created from no longer exists; remove the missing scripts (the SDK's builder refuses to upload with them present).".into(),
+            ),
+        });
+    }
+}
+
+/// The guid Unity uses for its built-in (always-included) shader set.
+const UNITY_BUILTIN_SHADER_GUID: &str = "0000000000000000f000000000000000";
+/// The prefix of VRChat's Android/Quest-whitelisted avatar shaders.
+const MOBILE_SHADER_PREFIX: &str = "VRChat/Mobile/";
+
+/// VRC061 (advisory): a material on one of the avatar's renderers uses a shader that is not in
+/// VRChat's Android/Quest mobile whitelist (`VRChat/Mobile/*`). Fine for a PC-only avatar —
+/// which is why this is Info — but it blocks a Quest upload, and the build target isn't knowable
+/// offline. Detection is deliberately conservative: a shader is flagged only when it is
+/// *positively* identifiable as non-mobile — a built-in Unity shader, or a `.shader` asset in
+/// the project whose declared name lacks the mobile prefix. Shaders whose guid doesn't resolve
+/// (e.g. SDK/package shaders outside `Assets/`) are skipped.
+fn check_mobile_shaders(
+    parsed: &UnityFile,
+    guid_to_path: &BTreeMap<String, String>,
+    project_root: &Path,
+    reported: &mut BTreeSet<String>,
+    out: &mut Vec<Diagnostic>,
+) {
+    for doc in &parsed.documents {
+        // SkinnedMeshRenderer (137) and MeshRenderer (23) carry m_Materials directly.
+        if !matches!(doc.class_id, 137 | 23) {
+            continue;
+        }
+        let Some(materials) = doc.body["m_Materials"].as_vec() else {
+            continue;
+        };
+        for mat_ref in materials {
+            let Some(guid) = mat_ref["guid"].as_str() else {
+                continue;
+            };
+            let Some(rel) = guid_to_path.get(guid) else {
+                continue;
+            };
+            if !reported.insert(rel.clone()) {
+                continue;
+            }
+            let Some(shader) =
+                material_shader_name(&project_root.join(rel), guid_to_path, project_root)
+            else {
+                continue;
+            };
+            let is_mobile = shader
+                .as_deref()
+                .is_some_and(|n| n.starts_with(MOBILE_SHADER_PREFIX));
+            if is_mobile {
+                continue;
+            }
+            let which = match shader.as_deref() {
+                Some(name) => format!("shader '{name}'"),
+                None => "a built-in Unity shader".to_string(),
+            };
+            out.push(Diagnostic {
+                severity: Severity::Info,
+                code: "VRC061",
+                message: format!(
+                    "Material uses {which}, which is not in VRChat's Android/Quest mobile whitelist (VRChat/Mobile/*)"
+                ),
+                file: Some(rel.clone()),
+                hint: Some(
+                    "Fine for a PC-only avatar; a Quest/Android upload requires a VRChat/Mobile shader on every material.".into(),
+                ),
+            });
+        }
+    }
+}
+
+/// Resolve a material asset to its shader's declared name. Returns `None` when nothing can be
+/// said (unreadable material, shader guid outside the project, non-`.shader` target);
+/// `Some(None)` for a built-in Unity shader (no name, definitely not mobile); `Some(Some(name))`
+/// for a `.shader` asset whose `Shader "<name>"` declaration was found.
+fn material_shader_name(
+    mat_path: &Path,
+    guid_to_path: &BTreeMap<String, String>,
+    project_root: &Path,
+) -> Option<Option<String>> {
+    let text = std::fs::read_to_string(mat_path).ok()?;
+    let file = UnityFile::parse(&text).ok()?;
+    // Material is Unity class 21.
+    let mat = file.documents.iter().find(|d| d.class_id == 21)?;
+    let shader_ref = &mat.body["m_Shader"];
+    let guid = shader_ref["guid"].as_str()?;
+    if guid == UNITY_BUILTIN_SHADER_GUID {
+        return Some(None);
+    }
+    let rel = guid_to_path.get(guid)?;
+    if !rel.to_ascii_lowercase().ends_with(".shader") {
+        return None;
+    }
+    // `.shader` is ShaderLab text, not YAML: the declaration line is `Shader "Name" {`.
+    let shader_text = std::fs::read_to_string(project_root.join(rel)).ok()?;
+    let name = shader_text.lines().find_map(|l| {
+        let rest = l.trim_start().strip_prefix("Shader")?.trim_start();
+        let rest = rest.strip_prefix('"')?;
+        Some(rest.split('"').next()?.to_string())
+    })?;
+    Some(Some(name))
+}
+
 fn is_yaml_asset(path: &Path) -> bool {
     matches!(
         path.extension().and_then(|e| e.to_str()),

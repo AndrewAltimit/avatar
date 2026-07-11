@@ -4,7 +4,8 @@ Rules emitted by `avatar lint <project>` (the `avatar-lint` crate). Errors are t
 will reject or that break the avatar; warnings are likely-but-not-certain problems.
 
 Codes are grouped: `VRC00x` project, `VRC01x` parameters, `VRC02x` menus, `VRC03x` Avatar
-Descriptor, `VRC04x` animator controllers + animation clips, `VRC05x` PhysBones / Avatar Dynamics.
+Descriptor, `VRC04x` animator controllers + animation clips, `VRC05x` PhysBones / Avatar Dynamics,
+`VRC06x` project hygiene / Android (Quest).
 
 | Code | Severity | Rule | Source |
 |------|----------|------|--------|
@@ -39,6 +40,8 @@ Descriptor, `VRC04x` animator controllers + animation clips, `VRC05x` PhysBones 
 | `VRC050` | warn | A PhysBone's root transform can't be resolved in the file — `rootTransform` (or, when unset, the transform on the PhysBone's own GameObject) doesn't point at a transform present here (e.g. stripped from a nested prefab) | [PhysBones](https://creators.vrchat.com/avatars/avatar-dynamics/physbones/) |
 | `VRC051` | warn | A PhysBone's root resolves but it moves **zero** transforms (no child bones under the root and no endpoint) — it simulates nothing | [PhysBones](https://creators.vrchat.com/avatars/avatar-dynamics/physbones/) |
 | `VRC052` | warn | A PhysBone's `colliders` list has slots but **every** slot is a null reference. A genuinely empty `colliders: []` is fine | [PhysBone colliders](https://creators.vrchat.com/avatars/avatar-dynamics/physbones/#colliders) |
+| `VRC060` | warn | A MonoBehaviour's `m_Script` is the null reference — Unity's "Missing (Mono Script)". The SDK's build validation refuses to upload with missing scripts present. Stripped prefab-instance placeholders and docs without an `m_Script` field are not counted | — |
+| `VRC061` | info | A material on one of the avatar's renderers uses a shader that is not in VRChat's Android/Quest mobile whitelist (`VRChat/Mobile/*`) — fine for a PC-only avatar (hence Info; the build target isn't knowable offline), blocks a Quest upload. Conservative: flags only positively-identified non-mobile shaders (built-in Unity shaders, or a project `.shader` whose declared name lacks the prefix); unresolvable guids (package shaders) are skipped | [Quest content limits](https://creators.vrchat.com/platforms/android/quest-content-limitations/) |
 
 ## How assets are identified
 
