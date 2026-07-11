@@ -80,6 +80,42 @@ jobs:
       - name: Build (release)
         run: cargo build --release --workspace
 
+  # -- Hosted-Runner Fallback ---------------------------------------------------
+  # The main `ci` job runs on the single self-hosted runner (the dev machine).
+  # This job is the redundancy: the same fmt/clippy/test gates on a GitHub-hosted
+  # runner, against the committed synthetic fixtures only (the env-gated
+  # real-sample tests self-skip). If the self-hosted runner is down, this still
+  # verifies every push.
+  ci-hosted:
+    name: Avatar CI (hosted fallback)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: github.event_name != 'pull_request'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        run: rustup show
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: hosted-cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+
+      - name: Format check
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        run: cargo clippy --all-targets --workspace -- -D warnings
+
+      - name: Test (synthetic fixtures only)
+        run: cargo test --workspace
+
   # -- Sample-Gated Test Suite ------------------------------------------------
   sample-test:
     name: Sample-Gated Tests

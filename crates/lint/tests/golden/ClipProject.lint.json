@@ -1,0 +1,43 @@
+{
+  "avatar_sdk_version": "3.7.0",
+  "clips": 2,
+  "controllers": 1,
+  "descriptors": 1,
+  "diagnostics": [
+    {
+      "code": "VRC046",
+      "file": "Assets/Avatar/FX.controller",
+      "hint": "The .anim (or the FBX carrying the clip) was moved or deleted; reassign the state's Motion.",
+      "message": "A state or blend tree references a motion missing from the project (guid baadf00d00000000000000000000dead)",
+      "severity": "Warn"
+    },
+    {
+      "code": "VRC047",
+      "file": "Assets/Avatar/Avatar.prefab",
+      "hint": "Move transform/muscle animation to Base/Additive/Gesture/Action; keep blendshape, toggle, and material curves on FX.",
+      "message": "FX-layer clip 'Wave' animates transform curves; the FX layer is for non-transform animation",
+      "severity": "Warn"
+    },
+    {
+      "code": "VRC049",
+      "file": "Assets/Avatar/Empty.anim",
+      "hint": "Add curves or delete the clip; a state playing it does nothing.",
+      "message": "Animation clip 'Empty' has no curves (it animates nothing)",
+      "severity": "Info"
+    }
+  ],
+  "menu_assets": 0,
+  "packages": [
+    {
+      "name": "com.vrchat.avatars",
+      "version": "3.7.0"
+    },
+    {
+      "name": "com.vrchat.base",
+      "version": "3.7.0"
+    }
+  ],
+  "parameter_assets": 0,
+  "project_root": "<ROOT>/fixtures/projects/ClipProject",
+  "unity_version": "2022.3.22f1"
+}

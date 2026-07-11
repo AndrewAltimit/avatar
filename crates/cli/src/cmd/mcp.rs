@@ -6,11 +6,12 @@
 //! domain-agnostic [`avatar_mcp`] crate; this module is just the *wiring*: it maps each tool name to
 //! the library call that produces its report.
 //!
-//! **Read-only by design.** Only the diagnose/inspect surface is exposed — nothing here writes to the
-//! filesystem. The generators (`anim-gen …`) and repairs (`armature fix`) stay on the explicit CLI
-//! behind [`WriteGuard`](crate::cmd::WriteGuard), so an agent can call every MCP tool freely with no
-//! risk of mutating assets. (Exposing generation as text-returning, non-writing tools is a clean
-//! follow-up.)
+//! **Non-writing by design.** Nothing here touches the filesystem for output. The diagnose/inspect
+//! tools read assets and return reports; the **generation tools** (`avatar_gen_*`) run the same
+//! generators as `avatar anim-gen …` / `avatar toggle` but return the generated YAML (and `.meta`
+//! sidecars) as *text in the report* — the agent host decides what, if anything, lands on disk.
+//! Repairs (`armature fix`) stay on the explicit CLI behind
+//! [`WriteGuard`](crate::cmd::WriteGuard).
 //!
 //! Each handler validates its path argument *up front* with an actionable message — "path does not
 //! exist", "expected an FBX file but … is a directory" — so a wrong argument comes back as guidance
@@ -115,6 +116,249 @@ pub fn build_server() -> Server {
             }),
         ))
         .tool(Tool::new(
+            "avatar_gen_clip",
+            "Generate a Unity .anim AnimationClip (blendshape and/or GameObject-active curves) and \
+             return its YAML as text — nothing is written to disk; write the `yaml` to a file \
+             yourself if wanted. Deterministic fileIDs.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "name": { "type": "string", "description": "Clip name (m_Name; also seeds the fileID)." },
+                    "blendshapes": spec_array("Blendshape curves as PATH:SHAPE:VALUE (e.g. Body:Smile:100)."),
+                    "toggles": spec_array("GameObject active-toggle curves, held on, by hierarchy PATH."),
+                },
+                "required": ["name"],
+                "additionalProperties": false
+            }),
+            Box::new(|args| {
+                let name = arg_str(args, "name")?;
+                let blendshapes = arg_str_array(args, "blendshapes")?;
+                let toggles = arg_str_array(args, "toggles")?;
+                if blendshapes.is_empty() && toggles.is_empty() {
+                    bail!("nothing to generate: pass at least one entry in `blendshapes` or `toggles`");
+                }
+                let mut clip = avatar_anim_gen::AnimationClip::new(name);
+                for spec in &blendshapes {
+                    let (path, shape, value) = crate::cmd::anim_gen::parse_blendshape_spec(spec)?;
+                    clip.add_float_curve(avatar_anim_gen::FloatCurve::blendshape(
+                        path,
+                        &shape,
+                        vec![avatar_anim_gen::Keyframe::flat(0.0, value)],
+                    ));
+                }
+                for path in &toggles {
+                    clip.add_float_curve(avatar_anim_gen::FloatCurve::game_object_active(
+                        path.clone(),
+                        vec![avatar_anim_gen::Keyframe::flat(0.0, 1.0)],
+                    ));
+                }
+                let mut ids = avatar_anim_gen::IdGen::new(name);
+                let clip_id = ids.alloc();
+                Ok(json!({
+                    "clip_file_id": clip_id,
+                    "suggested_file_name": format!("{name}.anim"),
+                    "yaml": clip.to_unity_yaml(clip_id),
+                })
+                .to_string())
+            }),
+        ))
+        .tool(Tool::new(
+            "avatar_gen_controller",
+            "Generate a complete FX AnimatorController (class 91) wrapping a 1D analog-gesture \
+             blend tree, returned as YAML text — nothing is written to disk. Child clips are \
+             referenced by their .anim asset guids.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "name": { "type": "string", "description": "Controller name (default FX)." },
+                    "layer": { "type": "string", "description": "Layer name (default 'Base Layer')." },
+                    "parameter": { "type": "string", "description": "Float blend parameter (default GestureLeftWeight)." },
+                    "clips": spec_array("Child clips as GUID@THRESHOLD (e.g. 1a2b…@0.0)."),
+                },
+                "required": ["clips"],
+                "additionalProperties": false
+            }),
+            Box::new(|args| {
+                let name = args.get("name").and_then(Value::as_str).unwrap_or("FX");
+                let layer = args.get("layer").and_then(Value::as_str).unwrap_or("Base Layer");
+                let parameter = args
+                    .get("parameter")
+                    .and_then(Value::as_str)
+                    .unwrap_or("GestureLeftWeight");
+                let clips = arg_str_array(args, "clips")?;
+                if clips.is_empty() {
+                    bail!("`clips` must contain at least one GUID@THRESHOLD entry");
+                }
+                let mut tree = avatar_anim_gen::BlendTree::analog_gesture(name, parameter);
+                for spec in &clips {
+                    let (guid, threshold) = crate::cmd::anim_gen::parse_clip_spec(spec)?;
+                    tree = tree.clip(guid, threshold);
+                }
+                let mut ids = avatar_anim_gen::IdGen::new(name);
+                Ok(json!({
+                    "parameter": parameter,
+                    "suggested_file_name": format!("{name}.controller"),
+                    "yaml": avatar_anim_gen::fx_blend_tree(name, layer, &tree, &mut ids),
+                })
+                .to_string())
+            }),
+        ))
+        .tool(Tool::new(
+            "avatar_gen_params",
+            "Generate a VRCExpressionParameters asset, returned as YAML text — nothing is written \
+             to disk. Reports the 256-bit sync-budget cost.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "name": { "type": "string", "description": "Asset name (default Parameters)." },
+                    "params": spec_array("Parameters as NAME:TYPE[:DEFAULT][:unsaved][:local]; TYPE is bool|int|float."),
+                },
+                "required": ["params"],
+                "additionalProperties": false
+            }),
+            Box::new(|args| {
+                let name = args.get("name").and_then(Value::as_str).unwrap_or("Parameters");
+                let specs = arg_str_array(args, "params")?;
+                if specs.is_empty() {
+                    bail!("`params` must contain at least one NAME:TYPE entry");
+                }
+                let mut asset = avatar_anim_gen::ExpressionParams::new(name);
+                for spec in &specs {
+                    asset = asset.parameter(crate::cmd::anim_gen::parse_param_spec(spec)?);
+                }
+                Ok(json!({
+                    "sync_bits": asset.synced_bits(),
+                    "suggested_file_name": format!("{name}.asset"),
+                    "yaml": asset.to_unity_yaml(avatar_anim_gen::expressions::EXPRESSIONS_MAIN_FILE_ID),
+                })
+                .to_string())
+            }),
+        ))
+        .tool(Tool::new(
+            "avatar_gen_menu",
+            "Generate a VRCExpressionsMenu asset (toggles, buttons, radial puppets, sub-menus; max \
+             8 controls), returned as YAML text — nothing is written to disk.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "name": { "type": "string", "description": "Asset name (default Menu)." },
+                    "toggles": spec_array("Toggle controls as LABEL:PARAM[:VALUE]."),
+                    "buttons": spec_array("Momentary button controls as LABEL:PARAM[:VALUE]."),
+                    "radials": spec_array("Radial-puppet controls as LABEL:PARAM (PARAM is the float axis)."),
+                    "submenus": spec_array("Sub-menu controls as LABEL:GUID (the child menu asset's guid)."),
+                },
+                "additionalProperties": false
+            }),
+            Box::new(|args| {
+                let name = args.get("name").and_then(Value::as_str).unwrap_or("Menu");
+                let mut asset = avatar_anim_gen::ExpressionsMenu::new(name);
+                for spec in &arg_str_array(args, "toggles")? {
+                    let (label, param, value) =
+                        crate::cmd::anim_gen::parse_control_spec(spec, "toggle")?;
+                    let mut c = avatar_anim_gen::MenuControlSpec::toggle(label, param);
+                    if let Some(v) = value {
+                        c = c.value(v);
+                    }
+                    asset = asset.control(c);
+                }
+                for spec in &arg_str_array(args, "buttons")? {
+                    let (label, param, value) =
+                        crate::cmd::anim_gen::parse_control_spec(spec, "button")?;
+                    let mut c = avatar_anim_gen::MenuControlSpec::button(label, param);
+                    if let Some(v) = value {
+                        c = c.value(v);
+                    }
+                    asset = asset.control(c);
+                }
+                for spec in &arg_str_array(args, "radials")? {
+                    let (label, param, _) =
+                        crate::cmd::anim_gen::parse_control_spec(spec, "radial")?;
+                    asset = asset.control(avatar_anim_gen::MenuControlSpec::radial(label, param));
+                }
+                for spec in &arg_str_array(args, "submenus")? {
+                    let (label, guid) = spec.split_once(':').with_context(|| {
+                        format!("submenu '{spec}' must be LABEL:GUID")
+                    })?;
+                    asset = asset.control(avatar_anim_gen::MenuControlSpec::sub_menu(
+                        label,
+                        avatar_anim_gen::ObjectRef::external(
+                            avatar_anim_gen::expressions::EXPRESSIONS_MAIN_FILE_ID,
+                            guid,
+                            2,
+                        ),
+                    ));
+                }
+                if asset.controls.is_empty() {
+                    bail!("pass at least one control in `toggles`/`buttons`/`radials`/`submenus`");
+                }
+                if asset.controls.len() > 8 {
+                    bail!(
+                        "a VRChat expressions menu holds at most 8 controls; got {}",
+                        asset.controls.len()
+                    );
+                }
+                Ok(json!({
+                    "controls": asset.controls.len(),
+                    "suggested_file_name": format!("{name}.asset"),
+                    "yaml": asset.to_unity_yaml(avatar_anim_gen::expressions::EXPRESSIONS_MAIN_FILE_ID),
+                })
+                .to_string())
+            }),
+        ))
+        .tool(Tool::new(
+            "avatar_gen_toggle",
+            "Generate the complete, internally-consistent toggle bundle: On/Off .anim clips, a \
+             two-state FX .controller on a Bool parameter, VRCExpressionParameters + \
+             VRCExpressionsMenu assets, and .meta sidecars pinning deterministic guids so the \
+             cross-references resolve on first import. Returns every file's name + content as text \
+             plus a wiring note — nothing is written to disk.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "name": { "type": "string", "description": "Bundle name; seeds file names, fileIDs, and guids (e.g. Hat)." },
+                    "toggles": spec_array("GameObjects to toggle, by hierarchy PATH."),
+                    "blendshapes": spec_array("Blendshapes to drive as PATH:SHAPE:VALUE (VALUE when on, 0 when off)."),
+                    "parameter": { "type": "string", "description": "The Bool parameter (defaults to the bundle name)." },
+                    "menu_label": { "type": "string", "description": "Menu control label (defaults to the bundle name)." },
+                    "default_on": { "type": "boolean", "description": "Start toggled on (default false)." },
+                    "saved": { "type": "boolean", "description": "Persist across avatar loads (default true)." },
+                },
+                "required": ["name"],
+                "additionalProperties": false
+            }),
+            Box::new(|args| {
+                let name = arg_str(args, "name")?;
+                let mut targets: Vec<avatar_anim_gen::ToggleTarget> = arg_str_array(args, "toggles")?
+                    .into_iter()
+                    .map(|path| avatar_anim_gen::ToggleTarget::GameObject { path })
+                    .collect();
+                for spec in &arg_str_array(args, "blendshapes")? {
+                    let (path, shape, on_value) = crate::cmd::anim_gen::parse_blendshape_spec(spec)?;
+                    targets.push(avatar_anim_gen::ToggleTarget::Blendshape { path, shape, on_value });
+                }
+                if targets.is_empty() {
+                    bail!("nothing to toggle: pass at least one entry in `toggles` or `blendshapes`");
+                }
+                let spec = avatar_anim_gen::ToggleSpec {
+                    name: name.to_string(),
+                    parameter: args
+                        .get("parameter")
+                        .and_then(Value::as_str)
+                        .unwrap_or(name)
+                        .to_string(),
+                    targets,
+                    saved: args.get("saved").and_then(Value::as_bool).unwrap_or(true),
+                    default_on: args.get("default_on").and_then(Value::as_bool).unwrap_or(false),
+                    menu_label: args
+                        .get("menu_label")
+                        .and_then(Value::as_str)
+                        .unwrap_or(name)
+                        .to_string(),
+                };
+                to_json(&avatar_anim_gen::generate_toggle(&spec))
+            }),
+        ))
+        .tool(Tool::new(
             "avatar_unitypackage_info",
             "Summarize a .unitypackage archive without extracting it: entry/size counts, size by \
              extension, detected VRChat SDK, and whether it looks like an avatar or a world. Use to \
@@ -177,6 +421,28 @@ fn path_schema(path_desc: &str) -> Value {
         "required": ["path"],
         "additionalProperties": false
     })
+}
+
+/// JSON Schema for an array-of-spec-strings argument, with a description of the spec format.
+fn spec_array(desc: &str) -> Value {
+    json!({ "type": "array", "items": { "type": "string" }, "description": desc })
+}
+
+/// Extract an optional array-of-strings argument (absent = empty). Non-string members error.
+fn arg_str_array(args: &Value, key: &str) -> Result<Vec<String>> {
+    let Some(v) = args.get(key) else {
+        return Ok(Vec::new());
+    };
+    let list = v
+        .as_array()
+        .with_context(|| format!("argument `{key}` must be an array of strings"))?;
+    list.iter()
+        .map(|e| {
+            e.as_str()
+                .map(str::to_string)
+                .with_context(|| format!("argument `{key}` must contain only strings"))
+        })
+        .collect()
 }
 
 /// Extract a required, non-empty string argument.
@@ -255,6 +521,11 @@ mod tests {
             "avatar_armature_check",
             "avatar_fbx_inspect",
             "avatar_unitypackage_info",
+            "avatar_gen_clip",
+            "avatar_gen_controller",
+            "avatar_gen_params",
+            "avatar_gen_menu",
+            "avatar_gen_toggle",
         ] {
             assert!(
                 names.contains(&expected),
@@ -265,6 +536,54 @@ mod tests {
         for t in server.tools() {
             assert_eq!(t.input_schema["type"], "object", "tool {} schema", t.name);
         }
+    }
+
+    /// Call a tool through the pure JSON-RPC dispatch and return the response value.
+    fn call(server: &Server, tool: &str, arguments: Value) -> Value {
+        server
+            .handle(&json!({
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": { "name": tool, "arguments": arguments },
+            }))
+            .expect("a request gets a response")
+    }
+
+    /// The generation tools return the generated YAML in their result and never touch the
+    /// filesystem: calling one must not create any file.
+    #[test]
+    fn gen_toggle_returns_bundle_without_writing() {
+        let server = build_server();
+        let resp = call(
+            &server,
+            "avatar_gen_toggle",
+            json!({ "name": "Hat", "toggles": ["Armature/Head/Hat"] }),
+        );
+        assert_ne!(
+            resp["result"]["isError"],
+            json!(true),
+            "call succeeds: {resp}"
+        );
+        let text = resp["result"]["content"][0]["text"]
+            .as_str()
+            .expect("text content");
+        let v: Value = serde_json::from_str(text).expect("result is JSON");
+        let files = v["files"].as_array().expect("bundle files present");
+        assert_eq!(files.len(), 10, "5 assets + 5 .meta sidecars");
+        assert!(v["wiring_note"].as_str().is_some_and(|s| !s.is_empty()));
+        // Nothing landed on disk under the current directory.
+        assert!(!Path::new("Hat_FX.controller").exists());
+        assert!(!Path::new("Hat_On.anim").exists());
+    }
+
+    #[test]
+    fn gen_clip_requires_a_curve() {
+        let server = build_server();
+        let resp = call(&server, "avatar_gen_clip", json!({ "name": "Empty" }));
+        assert_eq!(resp["result"]["isError"], json!(true));
+        let text = resp["result"]["content"][0]["text"].as_str().unwrap_or("");
+        assert!(text.contains("nothing to generate"), "got: {text}");
     }
 
     #[test]

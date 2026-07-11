@@ -31,6 +31,8 @@
 pub mod blendtree;
 pub mod clip;
 pub mod controller;
+pub mod expressions;
+pub mod toggle;
 pub mod yaml_emit;
 
 pub use blendtree::{BlendTree, ChildMotion};
@@ -38,6 +40,10 @@ pub use clip::{AnimationClip, ClipSettings, FloatCurve, Keyframe};
 pub use controller::{
     AnimatorController, AnimatorLayer, AnimatorParameter, ParamType, fx_blend_tree,
 };
+pub use expressions::{
+    ExpressionParamSpec, ExpressionParams, ExpressionValueType, ExpressionsMenu, MenuControlSpec,
+};
+pub use toggle::{GeneratedFile, ToggleBundle, ToggleSpec, ToggleTarget, generate_toggle};
 pub use yaml_emit::{Emitter, ObjectRef};
 
 /// A deterministic allocator of Unity local `fileID`s for one generated file.

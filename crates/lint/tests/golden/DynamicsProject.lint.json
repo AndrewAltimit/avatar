@@ -1,5 +1,6 @@
 {
   "avatar_sdk_version": "3.7.0",
+  "clips": 0,
   "controllers": 2,
   "descriptors": 1,
   "diagnostics": [
@@ -23,6 +24,20 @@
       "hint": "Use one Write Defaults setting for every state on every playable layer (VRChat's templates use Off).",
       "message": "Write Defaults is inconsistent across the avatar's playable-layer controllers (1 states on, 1 off)",
       "severity": "Warn"
+    },
+    {
+      "code": "VRC048",
+      "file": "Assets/Avatar/FX.controller",
+      "hint": "Empty states are sometimes intentional (a buffer/rest state); assign a clip if not.",
+      "message": "1 state(s) have no Motion assigned (they play nothing)",
+      "severity": "Info"
+    },
+    {
+      "code": "VRC048",
+      "file": "Assets/Avatar/Gesture.controller",
+      "hint": "Empty states are sometimes intentional (a buffer/rest state); assign a clip if not.",
+      "message": "1 state(s) have no Motion assigned (they play nothing)",
+      "severity": "Info"
     },
     {
       "code": "VRC050",

@@ -155,15 +155,62 @@ let tree_doc = format!("{}{}", yaml_emit::UNITY_PREAMBLE, e.into_string());
 println!("{}", tree.wiring_note(110600000));
 ```
 
+### 4. Expression Parameters & Expressions Menu (`.asset`, class id 114)
+
+`VRCExpressionParameters` and `VRCExpressionsMenu` are plain MonoBehaviour ScriptableObjects with
+no internal fileID graph, so generation is a single-document emit (`expressions` module). The
+contract points:
+
+- **Script GUIDs.** `m_Script` points at the SDK script. The SDK's GUIDs have been stable since
+  SDK3 launched; `VRC_EXPRESSION_PARAMETERS_SCRIPT_GUID` / `VRC_EXPRESSIONS_MENU_SCRIPT_GUID` are
+  the defaults and `.script_guid(g)` (CLI `--script-guid`) overrides them — a future SDK relocation
+  is a flag, not a code change (`PLAN.md` risk 3).
+- **Main-object fileID.** Both emit at Unity's ScriptableObject convention `&11400000`
+  (`EXPRESSIONS_MAIN_FILE_ID`), which cross-asset references (`expressionsMenu:` on the descriptor,
+  `subMenu:` on a control) expect.
+- `ExpressionParams::new(name).parameter(ExpressionParamSpec::bool("Hat"))` /
+  `ExpressionsMenu::new(name).control(MenuControlSpec::toggle("Hat", "Hat"))` are the builders;
+  `ExpressionParamSpec` carries `valueType`/`saved`/`networkSynced`/`defaultValue`, and
+  `MenuControlSpec::{toggle,button,sub_menu,radial}` cover control types 102/101/103/203.
+  `ExpressionParams::synced_bits()` reports the 256-bit-budget cost before Unity is involved.
+
+**Round-trip validation** is through `avatar-vrc-descriptor`'s *structural* reader — the same
+classifier `avatar lint` trusts — so a generated asset is proven to read back as a Parameters/Menu
+asset with the expected budget and controls.
+
+### 5. The toggle bundle (`avatar toggle`) — the end-to-end composite
+
+A working in-game toggle needs five cooperating assets; the `toggle` module assembles all of them
+as one internally-consistent bundle (`generate_toggle(ToggleSpec) -> ToggleBundle`):
+
+| File | Content |
+|------|---------|
+| `<N>_On.anim` / `<N>_Off.anim` | every target held at its on-value / written back to 0 (authoritative both ways under Write Defaults OFF) |
+| `<N>_FX.controller` | a `Bool` parameter + a two-state layer: `Off` (default) ⇄ `On`, instant transitions (`m_HasExitTime: 0`, duration 0) conditioned `If`/`IfNot` on the parameter |
+| `<N>_Params.asset` | the `Bool` expression parameter (1 sync bit) |
+| `<N>_Menu.asset` | a Toggle control driving it |
+| `*.meta` sidecars | **deterministic GUIDs** (`deterministic_guid`, double-FNV-1a, first char forced to a letter — see the `CLAUDE.md` all-digit-guid gotcha) so the controller's clip references resolve on first import: Unity adopts an existing `.meta`'s guid instead of minting one |
+
+Targets are GameObject-active paths (`ToggleTarget::GameObject`) and/or blendshape weights
+(`ToggleTarget::Blendshape`); `default_on` flips both the layer's default state and the parameter's
+default value. The bundle's `wiring_note` walks the user (or agent) through descriptor hookup and
+merging into existing params/menu assets.
+
 ## CLI surface
 
-Three subcommands in `avatar-cli` (`cmd/anim_gen.rs`) drive the builders above:
+Six subcommands in `avatar-cli` (`cmd/anim_gen.rs`, `cmd/toggle.rs`) drive the builders above:
 
 | Command | Emits | Key flags |
 |---------|-------|-----------|
 | `avatar anim-gen clip --name N [--blendshape PATH:SHAPE:VALUE]… [--toggle PATH]…` | a `.anim` AnimationClip | — |
 | `avatar anim-gen blendtree --name N [--parameter P] [--clip GUID@THRESHOLD]… [--tree-only]` | the blend-tree fragment (state-machine trio, or `--tree-only` the bare 206 doc) | — |
 | `avatar anim-gen controller --name N [--layer L] [--parameter P] [--clip GUID@THRESHOLD]…` | a complete FX `.controller` (`fx_blend_tree`) | — |
+| `avatar anim-gen params --param NAME:TYPE[:DEFAULT][:unsaved][:local]…` | a `VRCExpressionParameters` `.asset` | `--script-guid` |
+| `avatar anim-gen menu [--toggle L:P[:V]]… [--button L:P[:V]]… [--radial L:P]… [--submenu L:GUID]…` | a `VRCExpressionsMenu` `.asset` (≤ 8 controls enforced) | `--script-guid` |
+| `avatar toggle --name N [--toggle PATH]… [--blendshape PATH:SHAPE:VALUE]… -o DIR` | the ten-file toggle bundle above | `--param`, `--menu-label`, `--unsaved`, `--default-on` |
+
+`avatar toggle` writes into a *directory* (`-o DIR`, created if missing); the overwrite check runs
+across the whole bundle before any file is written, so a partial bundle is never left behind.
 
 Shared flags on all three:
 

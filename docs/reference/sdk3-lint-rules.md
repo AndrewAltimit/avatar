@@ -4,7 +4,8 @@ Rules emitted by `avatar lint <project>` (the `avatar-lint` crate). Errors are t
 will reject or that break the avatar; warnings are likely-but-not-certain problems.
 
 Codes are grouped: `VRC00x` project, `VRC01x` parameters, `VRC02x` menus, `VRC03x` Avatar
-Descriptor, `VRC04x` animator controllers, `VRC05x` PhysBones / Avatar Dynamics.
+Descriptor, `VRC04x` animator controllers + animation clips, `VRC05x` PhysBones / Avatar Dynamics,
+`VRC06x` project hygiene / Android (Quest).
 
 | Code | Severity | Rule | Source |
 |------|----------|------|--------|
@@ -25,15 +26,22 @@ Descriptor, `VRC04x` animator controllers, `VRC05x` PhysBones / Avatar Dynamics.
 | `VRC036` | warn | An Expression Parameter is used by none of the avatar's (resolvable, non-default) playable-layer animator controllers — likely a forgotten wiring, unless driven by OSC/contacts/Modular Avatar/VRCFury. Default-layer params (`VRCEmote`, `VRCFaceBlendH/V`) and built-ins are excluded | — |
 | `VRC037` | warn | An Expression Parameter shares a name with an animator parameter but has an incompatible type (Int↔Int, Float↔Float, Bool↔Bool) | — |
 | `VRC038` | warn | When lip-sync uses viseme blend shapes and the entry count is correct (15), a viseme entry is empty/`-none-`, or two entries name the same blend shape — complements `VRC033` (which only checks the mesh + count) | [lip sync](https://creators.vrchat.com/avatars/avatar-descriptor/#lipsync) |
+| `VRC039` | warn | A viseme blendshape name doesn't exist on the viseme mesh's **source FBX** (its morph channels) — the cross-layer descriptor↔mesh check; silently broken lip-sync in-game. Resolves descriptor → SkinnedMeshRenderer → `m_Mesh` guid → `.fbx`; every unresolvable step (unassigned mesh = `VRC033`, missing guid, non-FBX mesh) returns quietly | [lip sync](https://creators.vrchat.com/avatars/avatar-descriptor/#lipsync) |
 | `VRC040` | warn | A transition condition references an animator parameter not declared in that controller (Unity requires the parameter to exist, so the transition silently never fires) | [animator](https://docs.unity3d.com/Manual/class-AnimatorController.html) |
 | `VRC041` | warn | A blend tree reads an animator parameter not declared in that controller (respects blend type: 1D reads X, 2D reads X+Y, Direct reads each child's direct parameter) | [blend trees](https://docs.unity3d.com/Manual/class-BlendTree.html) |
 | `VRC042` | warn | A state machine has child states but no default state set (it never enters any state) | [animator](https://docs.unity3d.com/Manual/class-AnimatorController.html) |
 | `VRC043` | warn | Duplicate animator parameter name within a controller | — |
 | `VRC044` | warn | States in **one** controller mix Write Defaults on and off — a common cause of broken/sticky VRChat animations | [write defaults](https://creators.vrchat.com/avatars/best-practices/migrating-existing-avatars-to-write-defaults-off/) |
 | `VRC045` | warn | Write Defaults is inconsistent **across** the avatar's resolvable, non-default playable-layer controllers (e.g. one layer all-on, another all-off) — the avatar-level counterpart to `VRC044`. Needs ≥2 resolvable controllers | [write defaults](https://creators.vrchat.com/avatars/best-practices/migrating-existing-avatars-to-write-defaults-off/) |
+| `VRC046` | warn | A state's `m_Motion` (or a blend-tree child's) references a motion by a guid not present in the project — the clip was moved or deleted, so the state silently plays nothing | — |
+| `VRC047` | warn | A clip played by the avatar's **FX** playable layer animates transform (position/rotation/scale) or humanoid-muscle curves; the FX layer is for non-transform animation (blendshapes, toggles, materials). Only standalone `.anim` assets are inspectable; FBX-embedded clips are skipped | [playable layers](https://creators.vrchat.com/avatars/playable-layers/) |
+| `VRC048` | info | A state has no Motion assigned at all (plays nothing). Advisory — empty states are a common intentional idiom (e.g. a Write-Defaults-off buffer state) | — |
+| `VRC049` | info | An animation clip has **no curves** — a no-op asset, usually an authoring slip | — |
 | `VRC050` | warn | A PhysBone's root transform can't be resolved in the file — `rootTransform` (or, when unset, the transform on the PhysBone's own GameObject) doesn't point at a transform present here (e.g. stripped from a nested prefab) | [PhysBones](https://creators.vrchat.com/avatars/avatar-dynamics/physbones/) |
 | `VRC051` | warn | A PhysBone's root resolves but it moves **zero** transforms (no child bones under the root and no endpoint) — it simulates nothing | [PhysBones](https://creators.vrchat.com/avatars/avatar-dynamics/physbones/) |
 | `VRC052` | warn | A PhysBone's `colliders` list has slots but **every** slot is a null reference. A genuinely empty `colliders: []` is fine | [PhysBone colliders](https://creators.vrchat.com/avatars/avatar-dynamics/physbones/#colliders) |
+| `VRC060` | warn | A MonoBehaviour's `m_Script` is the null reference — Unity's "Missing (Mono Script)". The SDK's build validation refuses to upload with missing scripts present. Stripped prefab-instance placeholders and docs without an `m_Script` field are not counted | — |
+| `VRC061` | info | A material on one of the avatar's renderers uses a shader that is not in VRChat's Android/Quest mobile whitelist (`VRChat/Mobile/*`) — fine for a PC-only avatar (hence Info; the build target isn't knowable offline), blocks a Quest upload. Conservative: flags only positively-identified non-mobile shaders (built-in Unity shaders, or a project `.shader` whose declared name lacks the prefix); unresolvable guids (package shaders) are skipped | [Quest content limits](https://creators.vrchat.com/platforms/android/quest-content-limitations/) |
 
 ## How assets are identified
 
@@ -64,13 +72,15 @@ they don't need a built-in allow-list.
 ## Scope / not yet covered
 
 Current scope: Expression Parameters/Menus (`*.asset`); the VRC Avatar Descriptor in
-prefabs/scenes (expression + playable-layer references, viseme lip-sync incl. per-entry checks,
-eye-look config, a cross-check that expression parameters are actually wired to the avatar's
-animator controllers by name and type, and avatar-level Write-Defaults consistency); animator
+prefabs/scenes (expression + playable-layer references, viseme lip-sync incl. per-entry checks
+and the viseme↔source-FBX morph-channel cross-check, eye-look config, a cross-check that
+expression parameters are actually wired to the avatar's animator controllers by name and type,
+and avatar-level Write-Defaults consistency); animator
 controllers (`.controller`: parameter references, default states, Write Defaults consistency,
-duplicate parameters); and **PhysBones / Avatar Dynamics** in prefabs/scenes (`VRC05x`: root
-resolution, zero-transform PhysBones, unwired collider slots), plus project/VPM info. Not yet:
-animation-clip contents, or contacts. See `PLAN.md` for the roadmap.
+duplicate parameters); **animation clips** (`.anim`: missing/unassigned state motions, FX-layer
+transform/muscle curves, empty clips — `VRC046`–`VRC049`); and **PhysBones / Avatar Dynamics** in
+prefabs/scenes (`VRC05x`: root resolution, zero-transform PhysBones, unwired collider slots), plus
+project/VPM info. Not yet: contacts. See `PLAN.md` for the roadmap.
 
 ### PhysBone (Avatar-Dynamics) recognition (`VRC05x`)
 

@@ -10,6 +10,8 @@
 //!   - `avatar anim-gen blendtree …`      — generate an analog-gesture FX blend-tree (Unity YAML)
 //!   - `avatar anim-gen clip …`           — generate a `.anim` clip (blendshape / toggle curves)
 //!   - `avatar anim-gen controller …`     — generate a complete FX `.controller` (full M4 asset)
+//!   - `avatar anim-gen params|menu …`    — generate VRC expression parameters / menu `.asset`s
+//!   - `avatar toggle --name N …`         — generate a full toggle bundle (clips+FX+params+menu)
 //!   - `avatar asset set <file> …`        — surgically edit a value in a Unity YAML asset (round-trip)
 //!   - `avatar schema [name]`             — JSON Schema for a `--json` report type (output contract)
 //!   - `avatar mcp serve`                 — expose the read/diagnose tools over MCP (stdio JSON-RPC)
@@ -44,6 +46,7 @@ use cmd::osc::OscCommand;
 use cmd::render::{RenderArgs, ViewArgs};
 use cmd::schema::SchemaArgs;
 use cmd::stats::StatsArgs;
+use cmd::toggle::ToggleArgs;
 use cmd::unitypackage::UnitypackageCommand;
 
 #[derive(Parser, Debug)]
@@ -74,6 +77,8 @@ enum Command {
     /// Generate Unity animation assets (`.anim` clips, FX analog-gesture blend trees).
     #[command(subcommand, name = "anim-gen")]
     AnimGen(AnimGenCommand),
+    /// Generate a complete toggle bundle: On/Off clips, FX controller, expression params + menu.
+    Toggle(ToggleArgs),
     /// Surgically edit a value in a Unity YAML asset, preserving fileIDs/refs/formatting.
     #[command(subcommand)]
     Asset(AssetCommand),
@@ -126,6 +131,13 @@ fn run() -> Result<ExitCode> {
         Command::AnimGen(AnimGenCommand::Controller(args)) => {
             cmd::anim_gen::controller(&args).map(|()| ExitCode::SUCCESS)
         }
+        Command::AnimGen(AnimGenCommand::Params(args)) => {
+            cmd::anim_gen::params(&args).map(|()| ExitCode::SUCCESS)
+        }
+        Command::AnimGen(AnimGenCommand::Menu(args)) => {
+            cmd::anim_gen::menu(&args).map(|()| ExitCode::SUCCESS)
+        }
+        Command::Toggle(args) => cmd::toggle::toggle(&args).map(|()| ExitCode::SUCCESS),
         Command::Asset(AssetCommand::Set(args)) => {
             cmd::asset::set(&args).map(|()| ExitCode::SUCCESS)
         }

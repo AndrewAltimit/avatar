@@ -11,6 +11,8 @@ makes the corpus browsable in one place.
 | `projects/SampleProject/` | Synthetic Unity project: duplicate param, oversized menu, dangling menu ref. | `avatar-lint`, `avatar-stats` golden + assertion tests |
 | `projects/AvatarProject/` | Synthetic project with a VRC Avatar Descriptor prefab (missing FX controller, viseme/eye-look issues, parameter-wiring mismatches). | same |
 | `projects/DynamicsProject/` | Synthetic project exercising the PhysBone / Avatar-Dynamics rules (VRC050–052), avatar-level Write-Defaults (VRC045), viseme entries (VRC038). | same |
+| `projects/ClipProject/` | Synthetic project exercising the animation-clip rules (VRC046 missing motion, VRC047 FX transform curves, VRC049 empty clip). | same |
+| `projects/QuestProject/` | Synthetic project exercising the hygiene/Android rules (VRC060 missing script, VRC061 non-mobile shader vs a whitelisted `VRChat/Mobile/*` one). | same |
 
 There is deliberately **no committed FBX or `.unitypackage`** here. Two reasons:
 

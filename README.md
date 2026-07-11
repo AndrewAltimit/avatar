@@ -37,23 +37,23 @@ format and subsystem references.
 | Crate | Purpose |
 |-------|---------|
 | [`avatar-fbx`](crates/fbx/README.md) | Load **and write** binary FBX: extract the model/object graph + connections into a typed scene, edit/serialize it back (`FbxDocument`), and extract geometry + skin/bind data (`meshes()`) |
-| [`avatar-armature`](crates/armature/README.md) | Skeleton model, Unity-humanoid bone inference (hierarchy-aware), VRChat SDK3 rig validation, **and repair planning** (canonical renames applied; topology/scale/orientation flagged) |
+| [`avatar-armature`](crates/armature/README.md) | Skeleton model, Unity-humanoid bone inference (hierarchy-aware), VRChat SDK3 rig validation, **and repair planning** (canonical renames applied natively; topology/scale/orientation flagged + emitted as a headless-Blender repair script) |
 | [`avatar-mesh`](crates/mesh/README.md) | POD mesh + skin interchange (`RawMesh`); the format-agnostic hand-off between importers and the pose layer |
 | [`avatar-gltf`](crates/gltf/README.md) | glTF 2.0 importer → the same `RawMesh` + skeleton (a second rig source alongside FBX) |
 | [`avatar-pose`](crates/pose/README.md) | Runtime posing + skinning: `PosedSkeleton` → world matrices, GPU bone-matrix palette, CPU skinning, two-bone IK (renderer-agnostic) |
 | [`avatar-input`](crates/input/README.md) | Backend-agnostic VR tracker input (`TrackerState`/`TrackerSource`): mock + OSC backends, OpenXR planned |
 | [`avatar-unity-yaml`](crates/unity-yaml/README.md) | Reader **+ surgical editor** for Unity's YAML format (`.asset`/`.prefab`/`.unity`/`.meta`): `EditableUnityFile` span-splices value edits into an existing asset, preserving fileIDs/refs/formatting. Wired to `avatar asset set` |
-| [`avatar-unity-asset`](crates/unity-asset/README.md) | Typed Unity asset graphs over the YAML reader (the `AnimatorController` reader the controller lint rules consume) |
+| [`avatar-unity-asset`](crates/unity-asset/README.md) | Typed Unity asset graphs over the YAML reader (the `AnimatorController` + `AnimationClip` readers the controller/clip lint rules consume) |
 | [`avatar-unitypackage`](crates/unitypackage/README.md) | Read Unity's `.unitypackage` (gzip+tar): summarize, extract into a Unity project tree, and cross-check an avatar against a world/map for co-import GUID/path conflicts. Wired to `avatar unitypackage` |
 | [`avatar-vpm`](crates/vpm/README.md) | Discover a Unity/VPM project: manifest packages, editor version, asset paths |
 | [`avatar-vrc-descriptor`](crates/vrc-descriptor/README.md) | Typed extraction of the VRChat Avatar Descriptor, Expression Parameters & Menus + SDK3 rule constants |
-| [`avatar-lint`](crates/lint/README.md) | Diagnostics engine: SDK3 compliance rules over a project (params, menus, descriptor refs, visemes, Write Defaults, PhysBones/Avatar-Dynamics) |
+| [`avatar-lint`](crates/lint/README.md) | Diagnostics engine: SDK3 compliance rules over a project (params, menus, descriptor refs, visemes incl. the source-FBX cross-check, Write Defaults, animation clips, PhysBones/Avatar-Dynamics, missing scripts, Quest shaders) |
 | [`avatar-stats`](crates/stats/README.md) | Offline VRChat **performance ranking** (Excellent→Very Poor) from an FBX (geometry) or a project's avatars (components), against PC + Android limits |
-| [`avatar-anim-gen`](crates/anim-gen/README.md) | **Generate** Unity `.anim` clips + FX-layer analog-gesture blend trees, wrapped in a full FX `AnimatorController`, as Unity YAML (deterministic fileIDs) — the M4 asset-generation layer, wired to `avatar anim-gen` |
+| [`avatar-anim-gen`](crates/anim-gen/README.md) | **Generate** Unity `.anim` clips, FX-layer blend trees + full FX `AnimatorController`s, VRC expression parameters/menus, and the composite **toggle bundle**, as Unity YAML (deterministic fileIDs/GUIDs) — wired to `avatar anim-gen` / `avatar toggle` |
 | [`avatar-render`](crates/render/README.md) | **GPU preview** via wgpu: render an avatar (and a Unity world scene, with the avatar dropped at the world's spawn point) to a PNG, headless — plus an optional interactive **winit viewer** (orbit/zoom/walk). Wired to `avatar render` / `avatar view` |
 | [`avatar-osc`](crates/osc/README.md) | VRChat **OSC runtime**: `/avatar/parameters`, `/input`, `/avatar/change` codec + UDP client and OSCQuery avatar-config parsing — the M5 runtime foundation, wired to `avatar osc` |
 | [`avatar-osc-gestures`](crates/osc-gestures/README.md) | The **analog-gesture daemon** ("Vive advanced controls on any hardware"): controller trigger → `Gesture*`/`Gesture*Weight` over OSC, with deadzone + change detection. Wired to `avatar osc gestures` |
-| [`avatar-mcp`](crates/mcp/README.md) | A domain-agnostic **MCP server** (stdio JSON-RPC): exposes the read/diagnose surface as tools an agent host can discover + call. Wired to `avatar mcp serve` |
+| [`avatar-mcp`](crates/mcp/README.md) | A domain-agnostic **MCP server** (stdio JSON-RPC): exposes the read/diagnose surface plus text-returning generation tools an agent host can discover + call. Wired to `avatar mcp serve` |
 | [`avatar-cli`](crates/cli/README.md) | The `avatar` binary tying the above together |
 | [`avatar-testkit`](crates/testkit/README.md) | Test-only (`publish = false`): the golden-snapshot harness + in-code synthetic-FBX builders behind the workspace's fixture corpus |
 
@@ -73,12 +73,16 @@ cargo run -p avatar-cli -- fbx inspect path/to/model.fbx
 cargo run -p avatar-cli -- armature check path/to/model.fbx
 cargo run -p avatar-cli -- armature fix path/to/model.fbx              # dry run: print the repair plan
 cargo run -p avatar-cli -- armature fix path/to/model.fbx -o fixed.fbx # write a repaired FBX
+cargo run -p avatar-cli -- armature fix path/to/model.fbx --blender-script fix.py  # full repair incl. geometry, via headless Blender
 cargo run -p avatar-cli -- lint path/to/UnityProject                   # SDK3 compliance report
 cargo run -p avatar-cli -- lint path/to/UnityProject --deny-warnings   # also fail CI on warnings
 cargo run -p avatar-cli -- stats path/to/model.fbx                     # performance rank (geometry)
 cargo run -p avatar-cli -- stats path/to/UnityProject                  # performance rank (components)
 cargo run -p avatar-cli -- anim-gen clip --name Smile --blendshape Body:Smile:100 -o Smile.anim
 cargo run -p avatar-cli -- anim-gen controller --name FX --clip <guid>@0.0 --clip <guid>@1.0 -o FX.controller  # full FX controller
+cargo run -p avatar-cli -- anim-gen params --param Hat:bool --param Dim:float:0.5:local -o Params.asset  # VRCExpressionParameters
+cargo run -p avatar-cli -- anim-gen menu --toggle Hat:Hat --radial Dim:Dim -o Menu.asset      # VRCExpressionsMenu
+cargo run -p avatar-cli -- toggle --name Hat --toggle Armature/Head/Hat -o HatBundle/  # full toggle bundle: clips+FX+params+menu (+.metas)
 cargo run -p avatar-cli -- asset set Parameters.asset --path m_Name --value Params2   # surgical edit (round-trip-safe)
 cargo run -p avatar-cli -- schema describe                            # JSON Schema for a --json report type
 cargo run -p avatar-cli -- osc send VRCEmote 3                         # drive a running VRChat over OSC
@@ -123,7 +127,7 @@ overwritten without `--force`.
 | [`docs/tutorial.md`](docs/tutorial.md) | End-to-end walkthrough of the `avatar` CLI from FBX to lint to stats. |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Build/test/lint, conventions, and how to add a lint rule or crate. |
 | [`docs/reference/humanoid-bones.md`](docs/reference/humanoid-bones.md) | Unity humanoid bones + VRChat rig requirements. |
-| [`docs/reference/sdk3-lint-rules.md`](docs/reference/sdk3-lint-rules.md) | Every `avatar lint` rule (`VRC001`–`VRC052`) + encodings. |
+| [`docs/reference/sdk3-lint-rules.md`](docs/reference/sdk3-lint-rules.md) | Every `avatar lint` rule (`VRC001`–`VRC061`) + encodings. |
 | [`docs/reference/unity-asset.md`](docs/reference/unity-asset.md) | `avatar-unity-asset`: the typed AnimatorController (`.controller`) reader the controller lint rules consume. |
 | [`docs/reference/armature-repair.md`](docs/reference/armature-repair.md) | What `avatar armature fix` repairs, and the FBX writer. |
 | [`docs/reference/performance-stats.md`](docs/reference/performance-stats.md) | `avatar stats`: metrics (incl. particles & constraints), component recognition, and PC/Android threshold tables. |

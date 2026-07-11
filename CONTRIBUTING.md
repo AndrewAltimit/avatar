@@ -52,7 +52,9 @@ cargo run -p avatar-cli -- <subcommand>      # e.g. lint path/to/UnityProject
 CI runs `fmt --check` + `clippy --all-targets -D warnings` + `test --workspace` on a self-hosted
 runner (`.github/workflows/main-ci.yml`); all three must be green. Warnings are denied, so treat
 clippy lints as errors. The toolchain is pinned in `rust-toolchain.toml` (fbxcel + edition 2024 want
-a recent compiler) — let it select the version.
+a recent compiler) — let it select the version. A GitHub-hosted **fallback job** (`ci-hosted`) runs
+the same three gates against the committed synthetic fixtures only (the env-gated real-sample tests
+self-skip there), so a push is still verified when the self-hosted runner is down.
 
 ### Pre-commit hooks
 

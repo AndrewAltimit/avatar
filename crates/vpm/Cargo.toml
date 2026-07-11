@@ -12,3 +12,7 @@ path = "src/lib.rs"
 anyhow.workspace = true
 serde = { workspace = true }
 serde_json.workspace = true
+
+[dev-dependencies]
+# Shared fixture-corpus resolver (the committed synthetic Unity projects).
+avatar-testkit = { path = "../testkit" }

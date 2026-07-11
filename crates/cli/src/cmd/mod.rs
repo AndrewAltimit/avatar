@@ -12,6 +12,7 @@ pub mod osc;
 pub mod render;
 pub mod schema;
 pub mod stats;
+pub mod toggle;
 pub mod unitypackage;
 
 use std::path::Path;

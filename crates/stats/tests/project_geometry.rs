@@ -112,7 +112,9 @@ fn temp_project() -> PathBuf {
 #[test]
 fn resolves_triangles_and_bones_from_a_project() {
     let mesh_guid = "abcdef0123456789abcdef0123456789";
-    let root = temp_project();
+    // Own subdirectory: removing the shared `temp_project()` root would race the sibling tests'
+    // subdirectories under parallel test execution.
+    let root = temp_project().join("basic");
     let avatar_dir = root.join("Assets/Avatar");
     std::fs::create_dir_all(&avatar_dir).unwrap();
 

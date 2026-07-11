@@ -1,0 +1,36 @@
+{
+  "avatar_sdk_version": "3.7.0",
+  "clips": 0,
+  "controllers": 0,
+  "descriptors": 1,
+  "diagnostics": [
+    {
+      "code": "VRC060",
+      "file": "Assets/Avatar/Avatar.prefab",
+      "hint": "The script the component was created from no longer exists; remove the missing scripts (the SDK's builder refuses to upload with them present).",
+      "message": "1 component(s) have a missing script (m_Script is a null reference)",
+      "severity": "Warn"
+    },
+    {
+      "code": "VRC061",
+      "file": "Assets/Avatar/PC.mat",
+      "hint": "Fine for a PC-only avatar; a Quest/Android upload requires a VRChat/Mobile shader on every material.",
+      "message": "Material uses a built-in Unity shader, which is not in VRChat's Android/Quest mobile whitelist (VRChat/Mobile/*)",
+      "severity": "Info"
+    }
+  ],
+  "menu_assets": 0,
+  "packages": [
+    {
+      "name": "com.vrchat.avatars",
+      "version": "3.7.0"
+    },
+    {
+      "name": "com.vrchat.base",
+      "version": "3.7.0"
+    }
+  ],
+  "parameter_assets": 0,
+  "project_root": "<ROOT>/fixtures/projects/QuestProject",
+  "unity_version": "2022.3.22f1"
+}

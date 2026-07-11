@@ -10,7 +10,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::path::Path;
 
 use anyhow::{Context, Result};
-use avatar_unity_asset::AnimatorController;
+use avatar_unity_asset::{AnimationClip, AnimatorController};
 use avatar_unity_yaml::{UnityFile, Yaml, field_f64, field_i64, relative};
 use avatar_vpm::{AVATAR_SDK, UnityProject};
 use avatar_vrc_descriptor::{
@@ -71,6 +71,7 @@ pub struct LintReport {
     pub menu_assets: usize,
     pub descriptors: usize,
     pub controllers: usize,
+    pub clips: usize,
     pub diagnostics: Vec<Diagnostic>,
 }
 
@@ -118,6 +119,7 @@ pub fn run(path: &Path) -> Result<LintReport> {
     let mut menu_assets: Vec<(String, ExpressionsMenu)> = Vec::new();
     let mut descriptors: Vec<(String, AvatarDescriptor)> = Vec::new();
     let mut controllers: Vec<(String, AnimatorController)> = Vec::new();
+    let mut clips: Vec<(String, AnimationClip)> = Vec::new();
     // Prefab/scene files retained whole, so the Avatar-Dynamics (PhysBone) checks can read their
     // class-114 MonoBehaviour bodies + class-4 transforms (which `extract` discards).
     let mut prefab_scene_files: Vec<(String, UnityFile)> = Vec::new();
@@ -183,6 +185,23 @@ pub fn run(path: &Path) -> Result<LintReport> {
                 controllers.push((rel, controller));
             }
         }
+
+        // Fourth pass: animation clips (`.anim`), for motion resolution + clip-content rules.
+        for path in &files {
+            if path.extension().is_none_or(|e| e != "anim") {
+                continue;
+            }
+            let rel = relative(&project.root, path);
+            let Ok(text) = std::fs::read_to_string(path) else {
+                continue;
+            };
+            let Ok(file) = UnityFile::parse(&text) else {
+                continue;
+            };
+            if let Some(clip) = AnimationClip::from_file(&file) {
+                clips.push((rel, clip));
+            }
+        }
     }
 
     // --- Parameter rules ---
@@ -217,6 +236,16 @@ pub fn run(path: &Path) -> Result<LintReport> {
         .iter()
         .filter_map(|(rel, c)| path_to_guid.get(rel).map(|g| (g.as_str(), c)))
         .collect();
+    let clips_by_guid: BTreeMap<&str, &AnimationClip> = clips
+        .iter()
+        .filter_map(|(rel, c)| path_to_guid.get(rel).map(|g| (g.as_str(), c)))
+        .collect();
+    // rel path -> the whole parsed prefab/scene file, so a descriptor's local (fileID-only)
+    // references — like the viseme SkinnedMeshRenderer — can be resolved within their own file.
+    let prefab_by_rel: BTreeMap<&str, &UnityFile> = prefab_scene_files
+        .iter()
+        .map(|(rel, f)| (rel.as_str(), f))
+        .collect();
     for (file, desc) in &descriptors {
         check_descriptor_refs(
             file,
@@ -228,6 +257,14 @@ pub fn run(path: &Path) -> Result<LintReport> {
         );
         check_descriptor_visemes(file, desc, &mut diagnostics);
         check_descriptor_viseme_entries(file, desc, &mut diagnostics);
+        check_descriptor_viseme_mesh_shapes(
+            file,
+            desc,
+            prefab_by_rel.get(file.as_str()).copied(),
+            &guid_to_path,
+            &project.root,
+            &mut diagnostics,
+        );
         check_descriptor_eyelook(file, desc, &mut diagnostics);
         check_descriptor_param_wiring(
             file,
@@ -237,6 +274,13 @@ pub fn run(path: &Path) -> Result<LintReport> {
             &mut diagnostics,
         );
         check_descriptor_write_defaults(file, desc, &controllers_by_guid, &mut diagnostics);
+        check_fx_clip_contents(
+            file,
+            desc,
+            &controllers_by_guid,
+            &clips_by_guid,
+            &mut diagnostics,
+        );
     }
     if descriptors.is_empty() && project.has_avatar_sdk() {
         diagnostics.push(Diagnostic {
@@ -254,7 +298,11 @@ pub fn run(path: &Path) -> Result<LintReport> {
     // --- Animator controller rules ---
     for (file, controller) in &controllers {
         check_controller(file, controller, &mut diagnostics);
+        check_controller_motions(file, controller, &guid_to_path, &mut diagnostics);
     }
+
+    // --- Animation-clip rules ---
+    check_empty_clips(&clips, &mut diagnostics);
 
     // --- Project-wide expression-parameter usage (VRC012) ---
     // A superset of the per-descriptor VRC036: a declared expression parameter whose name appears
@@ -269,6 +317,26 @@ pub fn run(path: &Path) -> Result<LintReport> {
     // --- Avatar-Dynamics (PhysBone) rules ---
     for (file, parsed) in &prefab_scene_files {
         check_physbones(file, parsed, &mut diagnostics);
+    }
+
+    // --- Project hygiene / Android (VRC06x) ---
+    for (file, parsed) in &prefab_scene_files {
+        check_missing_scripts(file, parsed, &mut diagnostics);
+    }
+    // Mobile-shader advisory: only over files that actually declare an avatar, and each material
+    // reported once no matter how many renderers use it.
+    let mut reported_materials: BTreeSet<String> = BTreeSet::new();
+    let descriptor_files: BTreeSet<&str> = descriptors.iter().map(|(f, _)| f.as_str()).collect();
+    for (file, parsed) in &prefab_scene_files {
+        if descriptor_files.contains(file.as_str()) {
+            check_mobile_shaders(
+                parsed,
+                &guid_to_path,
+                &project.root,
+                &mut reported_materials,
+                &mut diagnostics,
+            );
+        }
     }
 
     Ok(LintReport {
@@ -287,6 +355,7 @@ pub fn run(path: &Path) -> Result<LintReport> {
         menu_assets: menu_assets.len(),
         descriptors: descriptors.len(),
         controllers: controllers.len(),
+        clips: clips.len(),
         diagnostics,
     })
 }
@@ -586,6 +655,80 @@ fn check_descriptor_viseme_entries(file: &str, desc: &AvatarDescriptor, out: &mu
 }
 
 /// Eye-look sanity checks (only when eye look is enabled).
+/// VRC039: the descriptor's viseme blendshape names must actually exist on the viseme mesh —
+/// the cross-layer check between the Unity descriptor and the source **FBX**. VRC033/VRC038
+/// validate the descriptor's own consistency (mesh assigned, 15 entries, no dupes); this one
+/// resolves the viseme SkinnedMeshRenderer → its `m_Mesh` guid → the source `.fbx`, reads the
+/// FBX's morph channels (the names Unity imports as blendshapes), and flags viseme entries that
+/// name a shape the mesh doesn't have — which silently breaks lip-sync in-game.
+///
+/// Every unresolvable step returns quietly: an unassigned mesh is VRC033's finding, a missing
+/// asset guid is not this rule's job, and a non-FBX (baked) mesh isn't inspectable offline.
+fn check_descriptor_viseme_mesh_shapes(
+    file: &str,
+    desc: &AvatarDescriptor,
+    prefab: Option<&UnityFile>,
+    guid_to_path: &BTreeMap<String, String>,
+    project_root: &Path,
+    out: &mut Vec<Diagnostic>,
+) {
+    if !desc.uses_viseme_blendshapes() || desc.viseme_blendshapes.is_empty() {
+        return;
+    }
+    // The viseme mesh is a local (fileID-only) reference into the descriptor's own prefab/scene;
+    // a cross-prefab (guid-carrying) reference can't be resolved to a renderer here.
+    if desc.viseme_mesh.file_id == 0 || desc.viseme_mesh.guid.is_some() {
+        return;
+    }
+    let Some(prefab) = prefab else { return };
+    // SkinnedMeshRenderer is Unity class 137.
+    let Some(renderer) = prefab
+        .documents
+        .iter()
+        .find(|d| d.class_id == 137 && d.file_id == desc.viseme_mesh.file_id)
+    else {
+        return;
+    };
+    let Some(mesh_guid) = renderer.body["m_Mesh"]["guid"].as_str() else {
+        return;
+    };
+    let Some(rel) = guid_to_path.get(mesh_guid) else {
+        return;
+    };
+    if !rel.to_ascii_lowercase().ends_with(".fbx") {
+        return;
+    }
+    let Ok(scene) = avatar_fbx::FbxScene::load(&project_root.join(rel)) else {
+        return;
+    };
+    let available: BTreeSet<String> = scene
+        .blendshape_channels()
+        .into_iter()
+        .map(|c| c.name)
+        .collect();
+    let missing: Vec<String> = desc
+        .viseme_blendshapes
+        .iter()
+        .filter(|n| !n.is_empty() && n.as_str() != "-none-" && !available.contains(n.as_str()))
+        .map(|n| format!("'{n}'"))
+        .collect();
+    if !missing.is_empty() {
+        out.push(Diagnostic {
+            severity: Severity::Warn,
+            code: "VRC039",
+            message: format!(
+                "Viseme blendshape(s) {} not found among the {} morph channel(s) of the viseme mesh's source FBX ({rel})",
+                missing.join(", "),
+                available.len(),
+            ),
+            file: Some(file.to_string()),
+            hint: Some(
+                "The mesh's FBX has no morph channels by these names; re-select the visemes on the descriptor or re-export the mesh with the shapes.".into(),
+            ),
+        });
+    }
+}
+
 fn check_descriptor_eyelook(file: &str, desc: &AvatarDescriptor, out: &mut Vec<Diagnostic>) {
     if !desc.enable_eye_look {
         return;
@@ -895,6 +1038,132 @@ fn check_controller(file: &str, c: &AnimatorController, out: &mut Vec<Diagnostic
     }
 }
 
+/// VRC046 + VRC048: state and blend-tree motion references. VRC046 flags an external motion guid
+/// that resolves to no asset in the project (the clip was moved or deleted — the state silently
+/// plays nothing in-game); VRC048 flags states with no motion at all, which is advisory because
+/// empty states are a common intentional idiom (e.g. a Write-Defaults-off buffer state).
+fn check_controller_motions(
+    file: &str,
+    c: &AnimatorController,
+    guid_to_path: &BTreeMap<String, String>,
+    out: &mut Vec<Diagnostic>,
+) {
+    let mut reported: BTreeSet<&str> = BTreeSet::new();
+    let state_guids = c.states.iter().filter_map(|s| s.motion.guid.as_deref());
+    let tree_guids = c.blend_tree_motion_guids.iter().map(String::as_str);
+    for guid in state_guids.chain(tree_guids) {
+        if !guid_to_path.contains_key(guid) && reported.insert(guid) {
+            out.push(Diagnostic {
+                severity: Severity::Warn,
+                code: "VRC046",
+                message: format!(
+                    "A state or blend tree references a motion missing from the project (guid {guid})"
+                ),
+                file: Some(file.to_string()),
+                hint: Some(
+                    "The .anim (or the FBX carrying the clip) was moved or deleted; reassign the state's Motion.".into(),
+                ),
+            });
+        }
+    }
+
+    let motionless = c.states.iter().filter(|s| !s.motion.is_set()).count();
+    if motionless > 0 {
+        out.push(Diagnostic {
+            severity: Severity::Info,
+            code: "VRC048",
+            message: format!("{motionless} state(s) have no Motion assigned (they play nothing)"),
+            file: Some(file.to_string()),
+            hint: Some(
+                "Empty states are sometimes intentional (a buffer/rest state); assign a clip if not.".into(),
+            ),
+        });
+    }
+}
+
+/// VRC047: clips played by the avatar's **FX** playable layer should not animate transforms or
+/// humanoid muscles. VRChat's FX layer is for non-transform animation (blendshapes, toggles,
+/// material properties); transform/muscle curves there fight the other layers and IK.
+fn check_fx_clip_contents(
+    file: &str,
+    desc: &AvatarDescriptor,
+    controllers_by_guid: &BTreeMap<&str, &AnimatorController>,
+    clips_by_guid: &BTreeMap<&str, &AnimationClip>,
+    out: &mut Vec<Diagnostic>,
+) {
+    /// VRChat `AnimLayerType::FX`.
+    const FX_LAYER: i64 = 4;
+    let mut reported: BTreeSet<&str> = BTreeSet::new();
+    for layer in desc.animation_layers() {
+        if layer.layer_type != FX_LAYER || layer.is_default {
+            continue;
+        }
+        let Some(controller) = layer
+            .controller
+            .guid
+            .as_deref()
+            .and_then(|g| controllers_by_guid.get(g))
+        else {
+            continue;
+        };
+        let state_guids = controller
+            .states
+            .iter()
+            .filter_map(|s| s.motion.guid.as_deref());
+        let tree_guids = controller
+            .blend_tree_motion_guids
+            .iter()
+            .map(String::as_str);
+        for guid in state_guids.chain(tree_guids) {
+            // Only clips we parsed as standalone `.anim` assets are inspectable; FBX-embedded
+            // clips (a guid resolving to a model file) are skipped.
+            let Some(clip) = clips_by_guid.get(guid) else {
+                continue;
+            };
+            if (clip.animates_transforms() || clip.animates_muscles()) && reported.insert(guid) {
+                let what = match (clip.animates_transforms(), clip.animates_muscles()) {
+                    (true, true) => "transform and humanoid-muscle",
+                    (true, false) => "transform",
+                    _ => "humanoid-muscle",
+                };
+                out.push(Diagnostic {
+                    severity: Severity::Warn,
+                    code: "VRC047",
+                    message: format!(
+                        "FX-layer clip '{}' animates {what} curves; the FX layer is for non-transform animation",
+                        clip.name.as_deref().unwrap_or("<unnamed>")
+                    ),
+                    file: Some(file.to_string()),
+                    hint: Some(
+                        "Move transform/muscle animation to Base/Additive/Gesture/Action; keep blendshape, toggle, and material curves on FX.".into(),
+                    ),
+                });
+            }
+        }
+    }
+}
+
+/// VRC049: a clip that animates nothing at all. Advisory — an empty clip in a state is a no-op
+/// that usually indicates an authoring slip (curves deleted, wrong asset saved).
+fn check_empty_clips(clips: &[(String, AnimationClip)], out: &mut Vec<Diagnostic>) {
+    for (file, clip) in clips {
+        if clip.is_empty() {
+            out.push(Diagnostic {
+                severity: Severity::Info,
+                code: "VRC049",
+                message: format!(
+                    "Animation clip '{}' has no curves (it animates nothing)",
+                    clip.name.as_deref().unwrap_or("<unnamed>")
+                ),
+                file: Some(file.to_string()),
+                hint: Some(
+                    "Add curves or delete the clip; a state playing it does nothing.".into(),
+                ),
+            });
+        }
+    }
+}
+
 /// VRC012: a declared expression parameter that nothing in the *whole project* uses — no menu
 /// control, no animator transition condition, no blend tree, anywhere. A superset of VRC036 (which
 /// is per-descriptor and only sees the controllers a single descriptor's playable layers resolve),
@@ -1144,6 +1413,136 @@ fn check_physbones(file: &str, parsed: &UnityFile, out: &mut Vec<Diagnostic>) {
 }
 
 /// Files we parse as Unity YAML looking for VRChat assets.
+/// VRC060: a MonoBehaviour whose `m_Script` is the null reference — Unity's
+/// "Missing (Mono Script)" state. The component's data is dead weight and the VRChat SDK's
+/// build-time validation refuses to upload an avatar carrying one. Stripped prefab-instance
+/// placeholders and MonoBehaviours that don't serialize `m_Script` at all are not counted.
+fn check_missing_scripts(file: &str, parsed: &UnityFile, out: &mut Vec<Diagnostic>) {
+    let missing = parsed
+        .documents
+        .iter()
+        .filter(|d| d.is_monobehaviour() && !d.stripped)
+        .filter(|d| {
+            let script = &d.body["m_Script"];
+            !script.is_badvalue()
+                && field_i64(script, "fileID") == Some(0)
+                && script["guid"].as_str().is_none()
+        })
+        .count();
+    if missing > 0 {
+        out.push(Diagnostic {
+            severity: Severity::Warn,
+            code: "VRC060",
+            message: format!(
+                "{missing} component(s) have a missing script (m_Script is a null reference)"
+            ),
+            file: Some(file.to_string()),
+            hint: Some(
+                "The script the component was created from no longer exists; remove the missing scripts (the SDK's builder refuses to upload with them present).".into(),
+            ),
+        });
+    }
+}
+
+/// The guid Unity uses for its built-in (always-included) shader set.
+const UNITY_BUILTIN_SHADER_GUID: &str = "0000000000000000f000000000000000";
+/// The prefix of VRChat's Android/Quest-whitelisted avatar shaders.
+const MOBILE_SHADER_PREFIX: &str = "VRChat/Mobile/";
+
+/// VRC061 (advisory): a material on one of the avatar's renderers uses a shader that is not in
+/// VRChat's Android/Quest mobile whitelist (`VRChat/Mobile/*`). Fine for a PC-only avatar —
+/// which is why this is Info — but it blocks a Quest upload, and the build target isn't knowable
+/// offline. Detection is deliberately conservative: a shader is flagged only when it is
+/// *positively* identifiable as non-mobile — a built-in Unity shader, or a `.shader` asset in
+/// the project whose declared name lacks the mobile prefix. Shaders whose guid doesn't resolve
+/// (e.g. SDK/package shaders outside `Assets/`) are skipped.
+fn check_mobile_shaders(
+    parsed: &UnityFile,
+    guid_to_path: &BTreeMap<String, String>,
+    project_root: &Path,
+    reported: &mut BTreeSet<String>,
+    out: &mut Vec<Diagnostic>,
+) {
+    for doc in &parsed.documents {
+        // SkinnedMeshRenderer (137) and MeshRenderer (23) carry m_Materials directly.
+        if !matches!(doc.class_id, 137 | 23) {
+            continue;
+        }
+        let Some(materials) = doc.body["m_Materials"].as_vec() else {
+            continue;
+        };
+        for mat_ref in materials {
+            let Some(guid) = mat_ref["guid"].as_str() else {
+                continue;
+            };
+            let Some(rel) = guid_to_path.get(guid) else {
+                continue;
+            };
+            if !reported.insert(rel.clone()) {
+                continue;
+            }
+            let Some(shader) =
+                material_shader_name(&project_root.join(rel), guid_to_path, project_root)
+            else {
+                continue;
+            };
+            let is_mobile = shader
+                .as_deref()
+                .is_some_and(|n| n.starts_with(MOBILE_SHADER_PREFIX));
+            if is_mobile {
+                continue;
+            }
+            let which = match shader.as_deref() {
+                Some(name) => format!("shader '{name}'"),
+                None => "a built-in Unity shader".to_string(),
+            };
+            out.push(Diagnostic {
+                severity: Severity::Info,
+                code: "VRC061",
+                message: format!(
+                    "Material uses {which}, which is not in VRChat's Android/Quest mobile whitelist (VRChat/Mobile/*)"
+                ),
+                file: Some(rel.clone()),
+                hint: Some(
+                    "Fine for a PC-only avatar; a Quest/Android upload requires a VRChat/Mobile shader on every material.".into(),
+                ),
+            });
+        }
+    }
+}
+
+/// Resolve a material asset to its shader's declared name. Returns `None` when nothing can be
+/// said (unreadable material, shader guid outside the project, non-`.shader` target);
+/// `Some(None)` for a built-in Unity shader (no name, definitely not mobile); `Some(Some(name))`
+/// for a `.shader` asset whose `Shader "<name>"` declaration was found.
+fn material_shader_name(
+    mat_path: &Path,
+    guid_to_path: &BTreeMap<String, String>,
+    project_root: &Path,
+) -> Option<Option<String>> {
+    let text = std::fs::read_to_string(mat_path).ok()?;
+    let file = UnityFile::parse(&text).ok()?;
+    // Material is Unity class 21.
+    let mat = file.documents.iter().find(|d| d.class_id == 21)?;
+    let shader_ref = &mat.body["m_Shader"];
+    let guid = shader_ref["guid"].as_str()?;
+    if guid == UNITY_BUILTIN_SHADER_GUID {
+        return Some(None);
+    }
+    let rel = guid_to_path.get(guid)?;
+    if !rel.to_ascii_lowercase().ends_with(".shader") {
+        return None;
+    }
+    // `.shader` is ShaderLab text, not YAML: the declaration line is `Shader "Name" {`.
+    let shader_text = std::fs::read_to_string(project_root.join(rel)).ok()?;
+    let name = shader_text.lines().find_map(|l| {
+        let rest = l.trim_start().strip_prefix("Shader")?.trim_start();
+        let rest = rest.strip_prefix('"')?;
+        Some(rest.split('"').next()?.to_string())
+    })?;
+    Some(Some(name))
+}
+
 fn is_yaml_asset(path: &Path) -> bool {
     matches!(
         path.extension().and_then(|e| e.to_str()),

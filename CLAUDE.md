@@ -21,8 +21,8 @@ VRChat upload step is not. For what's built and the roadmap, see [Status](#statu
 | [`docs/README.md`](docs/README.md) | Index of the `docs/` directory. |
 | [`docs/overview.md`](docs/overview.md) | The layered architecture in brief, with external references. |
 | [`docs/reference/humanoid-bones.md`](docs/reference/humanoid-bones.md) | Unity humanoid bones + VRChat rig requirements. |
-| [`docs/reference/sdk3-lint-rules.md`](docs/reference/sdk3-lint-rules.md) | Every `avatar lint` rule (`VRC001`–`VRC052`) + encodings. |
-| [`docs/reference/unity-asset.md`](docs/reference/unity-asset.md) | `avatar-unity-asset`: the typed AnimatorController (`.controller`) reader the controller lint rules consume. |
+| [`docs/reference/sdk3-lint-rules.md`](docs/reference/sdk3-lint-rules.md) | Every `avatar lint` rule (`VRC001`–`VRC061`) + encodings. |
+| [`docs/reference/unity-asset.md`](docs/reference/unity-asset.md) | `avatar-unity-asset`: the typed AnimatorController (`.controller`) + AnimationClip (`.anim`) readers the controller/clip lint rules consume. |
 | [`docs/reference/armature-repair.md`](docs/reference/armature-repair.md) | What `avatar armature fix` repairs, and the FBX writer. |
 | [`docs/reference/rig-runtime.md`](docs/reference/rig-runtime.md) | Runtime rig layer: skin/bind extraction, posing + bone-matrix palette, two-bone IK, tracker input. |
 | [`docs/reference/performance-stats.md`](docs/reference/performance-stats.md) | `avatar stats`: performance-rank metrics (incl. particles & constraints), component recognition, PC/Android threshold tables. |
@@ -123,15 +123,19 @@ The roadmap of record (what each milestone covers, decisions, risks) is [`PLAN.m
 per-subsystem behaviour is in the [documentation map](#documentation-map) above and the per-crate
 READMEs. What exists today, with its doc:
 
-- **Diagnose / lint** — `avatar lint <project>` (SDK3 rules `VRC001`–`VRC052`,
+- **Diagnose / lint** — `avatar lint <project>` (SDK3 rules `VRC001`–`VRC061`, incl. animation-clip
+  contents, the viseme↔source-FBX cross-check, and Android/hygiene checks;
   [`sdk3-lint-rules.md`](docs/reference/sdk3-lint-rules.md)); `avatar stats` offline VRChat
   performance ranking ([`performance-stats.md`](docs/reference/performance-stats.md)); `avatar
   describe` one-shot consolidated snapshot.
-- **FBX** — read + native binary write-back (`avatar_fbx::FbxDocument`); `avatar armature check|fix`
-  — canonical humanoid renames applied, topology/scale/orientation only *flagged*
-  ([`armature-repair.md`](docs/reference/armature-repair.md)).
-- **Generate (M4)** — `avatar anim-gen clip|blendtree|controller`: Unity-YAML `.anim` + a full FX
-  `AnimatorController`, deterministic fileIDs ([`anim-gen.md`](docs/reference/anim-gen.md)).
+- **FBX** — read (incl. blendshape channels) + native binary write-back (`avatar_fbx::FbxDocument`);
+  `avatar armature check|fix` — canonical humanoid renames applied natively;
+  topology/scale/orientation flagged **and** emitted as a headless-Blender repair script
+  (`--blender-script`, [`armature-repair.md`](docs/reference/armature-repair.md)).
+- **Generate (M4)** — `avatar anim-gen clip|blendtree|controller|params|menu`: Unity-YAML `.anim`,
+  a full FX `AnimatorController`, and VRC expression parameters/menu assets, deterministic fileIDs;
+  plus the composite **`avatar toggle`** — the full ten-file toggle bundle (clips + two-state FX
+  controller + params + menu + guid-pinning `.meta`s) ([`anim-gen.md`](docs/reference/anim-gen.md)).
 - **Edit** — `avatar asset set` / `avatar_unity_yaml::EditableUnityFile`: surgical, round-trip-safe
   value edits to an *existing* Unity asset (scalars, reference re-targets, flow-map subfields) by
   span-splicing raw text — fileIDs/refs/key-order/formatting preserved
@@ -142,13 +146,14 @@ READMEs. What exists today, with its doc:
   ([`unitypackage.md`](docs/reference/unitypackage.md)); `avatar render` / `avatar view` wgpu preview
   ([`render.md`](docs/reference/render.md)).
 - **Agent surface** — `--json` across the read/generate commands, `avatar schema`, and `avatar mcp
-  serve` (read-only MCP server, [`mcp.md`](docs/reference/mcp.md)). Generators/repairs stay on the
-  CLI behind a dry-run-safe `WriteGuard`.
+  serve` (non-writing MCP server incl. text-returning `avatar_gen_*` generation tools,
+  [`mcp.md`](docs/reference/mcp.md)). Disk writes/repairs stay on the CLI behind a dry-run-safe
+  `WriteGuard`.
 - **Runtime rig** — `mesh`/`pose`/`input` + `gltf`, the renderer-agnostic VR-spectator foundation
   ([`rig-runtime.md`](docs/reference/rig-runtime.md)).
 
-In flight: the OpenXR on-device input backend for the gesture daemon; geometry-aware armature
-reparent/scale (needs a Blender pass — currently only flagged, not applied). See [`PLAN.md`](PLAN.md).
+In flight: the OpenXR on-device input backend for the gesture daemon; live OSCQuery (HTTP/mDNS)
+discovery; running the generated Blender repair script under CI. See [`PLAN.md`](PLAN.md).
 
 ## Gotchas
 

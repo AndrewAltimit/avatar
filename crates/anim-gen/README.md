@@ -34,15 +34,23 @@ output back** in tests.
   `fx_blend_tree(name, layer_name, &BlendTree, &mut IdGen)` convenience — emit a full FX
   `AnimatorController` (class 91: `m_AnimatorParameters` + `m_AnimatorLayers` + state machine)
   wrapping a blend-tree layer.
+- `expressions`: `ExpressionParams`/`ExpressionParamSpec` + `ExpressionsMenu`/`MenuControlSpec` —
+  emit `VRCExpressionParameters` / `VRCExpressionsMenu` MonoBehaviour assets (stable SDK script
+  GUIDs as overridable defaults; validated by `avatar-vrc-descriptor`'s structural reader).
+- `toggle`: `generate_toggle(ToggleSpec) -> ToggleBundle` — the five-asset toggle composite
+  (On/Off clips, two-state FX controller, params, menu) plus `.meta` sidecars carrying
+  `deterministic_guid` GUIDs so cross-references resolve on first import.
 - `IdGen::new(seed)` + `.alloc()` — deterministic (FNV-1a–seeded) `fileID` allocation; no randomness.
 - `yaml_emit`: `Emitter`, `ObjectRef`, `fmt_f32` — the low-level Unity-YAML emitter.
 
 ## Status
 
-Built: **M4**. Covers `.anim` float-curve clips, 1D analog-gesture blend trees, and full FX
-`AnimatorController` emission (the layer list / class-91 object, via `controller::fx_blend_tree`).
-All three are driven from the CLI (`avatar anim-gen clip|blendtree|controller`, each with `--json`
-+ write-safe `--dry-run`/`--force`). They round-trip through `avatar-unity-asset`'s reader in-repo,
+Built: **M4** + the expression/toggle layer. Covers `.anim` float-curve clips, 1D analog-gesture
+blend trees, full FX `AnimatorController` emission, `VRCExpressionParameters` / `VRCExpressionsMenu`
+assets, and the composite toggle bundle. Driven from the CLI (`avatar anim-gen
+clip|blendtree|controller|params|menu`, `avatar toggle`, each with `--json` + write-safe
+`--dry-run`/`--force`) and as text-returning MCP tools (`avatar_gen_*`). Everything round-trips
+through the repo's own readers in-repo,
 **and** — when a `UNITY_LICENSE` is configured — CLI-generated `.anim`/`.controller` assets are
 imported into a real editor by the Unity-acceptance workflow (`GeneratedAssetAcceptance.cs`), so the
 "live Unity import" gap is closed in CI. Out of scope for now: transform (position/scale/rotation)
