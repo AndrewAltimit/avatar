@@ -25,8 +25,10 @@ capability, and answers `ping` with an empty result.
 
 ## Tools
 
-All tools are **read-only** — nothing here writes to the filesystem. Each takes a single `path` string
-(except `avatar_schema`) and returns the same JSON report the corresponding `--json` CLI flag emits.
+All tools are **non-writing** — nothing here touches the filesystem for output. The diagnose tools
+take a single `path` string and return the same JSON report the corresponding `--json` CLI flag
+emits; the generation tools (`avatar_gen_*`) return the generated YAML (and `.meta` sidecars) as
+*text inside the result* — the agent host decides what, if anything, lands on disk.
 
 | Tool | Input | Returns |
 |------|-------|---------|
@@ -37,15 +39,23 @@ All tools are **read-only** — nothing here writes to the filesystem. Each take
 | `avatar_fbx_inspect` | `path` (FBX) | `InspectSummary` (structure counts + unit/orientation flags) |
 | `avatar_unitypackage_info` | `path` (`.unitypackage`) | Package summary (counts, SDK, avatar/world traits) |
 | `avatar_schema` | `name?` | JSON Schema for a report type (omit `name` to list; `all` for every) — only under the `schema` feature |
+| `avatar_gen_clip` | `name`, `blendshapes[]?`, `toggles[]?` | A `.anim` AnimationClip as YAML text (+ suggested file name, fileID) |
+| `avatar_gen_controller` | `clips[]`, `name?`, `layer?`, `parameter?` | A complete FX `.controller` (analog-gesture blend tree) as YAML text |
+| `avatar_gen_params` | `params[]`, `name?` | A `VRCExpressionParameters` `.asset` as YAML text + its sync-bit cost |
+| `avatar_gen_menu` | `toggles[]?`, `buttons[]?`, `radials[]?`, `submenus[]?`, `name?` | A `VRCExpressionsMenu` `.asset` as YAML text (≤ 8 controls enforced) |
+| `avatar_gen_toggle` | `name`, `toggles[]?`, `blendshapes[]?`, `parameter?`, `menu_label?`, `default_on?`, `saved?` | The full ten-file toggle bundle (every file name + content, pinned guids, wiring note) |
 
 The output shapes are published as JSON Schemas (`avatar_schema` / `avatar schema`), so a consumer can
 introspect the contract instead of inferring it.
 
-### Why read-only
+### Why non-writing
 
-The generators (`anim-gen …`) and repairs (`armature fix`) stay on the explicit CLI behind the
-`WriteGuard` (`--dry-run`/`--force`), so an agent can call every MCP tool freely with no risk of
-mutating assets. Exposing generation as text-returning, non-writing tools is a clean follow-up.
+Every MCP tool can be called freely with no risk of mutating assets: the diagnose tools only read,
+and the generation tools run the same generators as `avatar anim-gen …` / `avatar toggle` but hand
+the output back as text instead of writing it. Spec-string formats (`PATH:SHAPE:VALUE`,
+`GUID@THRESHOLD`, `NAME:TYPE[:DEFAULT][:unsaved][:local]`, `LABEL:PARAM[:VALUE]`) match the CLI
+flags exactly. Actual disk writes stay on the explicit CLI behind the `WriteGuard`
+(`--dry-run`/`--force`), as do the repairs (`armature fix`).
 
 ## Errors are two-layered
 

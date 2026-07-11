@@ -284,7 +284,7 @@ pub fn menu(args: &MenuArgs) -> Result<()> {
 }
 
 /// Parse a `NAME:TYPE[:DEFAULT][:unsaved][:local]` expression-parameter spec.
-fn parse_param_spec(spec: &str) -> Result<ExpressionParamSpec> {
+pub(crate) fn parse_param_spec(spec: &str) -> Result<ExpressionParamSpec> {
     let mut parts = spec.split(':');
     let name = parts.next().unwrap_or_default();
     let ty = parts.next().unwrap_or_default();
@@ -315,7 +315,7 @@ fn parse_param_spec(spec: &str) -> Result<ExpressionParamSpec> {
 }
 
 /// Parse a `LABEL:PARAM[:VALUE]` menu-control spec.
-fn parse_control_spec(spec: &str, kind: &str) -> Result<(String, String, Option<f32>)> {
+pub(crate) fn parse_control_spec(spec: &str, kind: &str) -> Result<(String, String, Option<f32>)> {
     let fail = || format!("{kind} '{spec}' must be LABEL:PARAM[:VALUE], e.g. Hat:Hat");
     let mut parts = spec.splitn(3, ':');
     let label = parts.next().unwrap_or_default();
@@ -513,7 +513,7 @@ pub fn clip(args: &ClipArgs) -> Result<()> {
 }
 
 /// Parse a `GUID@THRESHOLD` child-clip spec. The guid is hex (no `@`), so split on the last `@`.
-fn parse_clip_spec(spec: &str) -> Result<(String, f32)> {
+pub(crate) fn parse_clip_spec(spec: &str) -> Result<(String, f32)> {
     let (guid, thr) = spec
         .rsplit_once('@')
         .with_context(|| format!("clip '{spec}' must be GUID@THRESHOLD, e.g. 1a2b...@0.0"))?;
