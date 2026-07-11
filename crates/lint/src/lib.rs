@@ -240,6 +240,12 @@ pub fn run(path: &Path) -> Result<LintReport> {
         .iter()
         .filter_map(|(rel, c)| path_to_guid.get(rel).map(|g| (g.as_str(), c)))
         .collect();
+    // rel path -> the whole parsed prefab/scene file, so a descriptor's local (fileID-only)
+    // references — like the viseme SkinnedMeshRenderer — can be resolved within their own file.
+    let prefab_by_rel: BTreeMap<&str, &UnityFile> = prefab_scene_files
+        .iter()
+        .map(|(rel, f)| (rel.as_str(), f))
+        .collect();
     for (file, desc) in &descriptors {
         check_descriptor_refs(
             file,
@@ -251,6 +257,14 @@ pub fn run(path: &Path) -> Result<LintReport> {
         );
         check_descriptor_visemes(file, desc, &mut diagnostics);
         check_descriptor_viseme_entries(file, desc, &mut diagnostics);
+        check_descriptor_viseme_mesh_shapes(
+            file,
+            desc,
+            prefab_by_rel.get(file.as_str()).copied(),
+            &guid_to_path,
+            &project.root,
+            &mut diagnostics,
+        );
         check_descriptor_eyelook(file, desc, &mut diagnostics);
         check_descriptor_param_wiring(
             file,
@@ -621,6 +635,80 @@ fn check_descriptor_viseme_entries(file: &str, desc: &AvatarDescriptor, out: &mu
 }
 
 /// Eye-look sanity checks (only when eye look is enabled).
+/// VRC039: the descriptor's viseme blendshape names must actually exist on the viseme mesh —
+/// the cross-layer check between the Unity descriptor and the source **FBX**. VRC033/VRC038
+/// validate the descriptor's own consistency (mesh assigned, 15 entries, no dupes); this one
+/// resolves the viseme SkinnedMeshRenderer → its `m_Mesh` guid → the source `.fbx`, reads the
+/// FBX's morph channels (the names Unity imports as blendshapes), and flags viseme entries that
+/// name a shape the mesh doesn't have — which silently breaks lip-sync in-game.
+///
+/// Every unresolvable step returns quietly: an unassigned mesh is VRC033's finding, a missing
+/// asset guid is not this rule's job, and a non-FBX (baked) mesh isn't inspectable offline.
+fn check_descriptor_viseme_mesh_shapes(
+    file: &str,
+    desc: &AvatarDescriptor,
+    prefab: Option<&UnityFile>,
+    guid_to_path: &BTreeMap<String, String>,
+    project_root: &Path,
+    out: &mut Vec<Diagnostic>,
+) {
+    if !desc.uses_viseme_blendshapes() || desc.viseme_blendshapes.is_empty() {
+        return;
+    }
+    // The viseme mesh is a local (fileID-only) reference into the descriptor's own prefab/scene;
+    // a cross-prefab (guid-carrying) reference can't be resolved to a renderer here.
+    if desc.viseme_mesh.file_id == 0 || desc.viseme_mesh.guid.is_some() {
+        return;
+    }
+    let Some(prefab) = prefab else { return };
+    // SkinnedMeshRenderer is Unity class 137.
+    let Some(renderer) = prefab
+        .documents
+        .iter()
+        .find(|d| d.class_id == 137 && d.file_id == desc.viseme_mesh.file_id)
+    else {
+        return;
+    };
+    let Some(mesh_guid) = renderer.body["m_Mesh"]["guid"].as_str() else {
+        return;
+    };
+    let Some(rel) = guid_to_path.get(mesh_guid) else {
+        return;
+    };
+    if !rel.to_ascii_lowercase().ends_with(".fbx") {
+        return;
+    }
+    let Ok(scene) = avatar_fbx::FbxScene::load(&project_root.join(rel)) else {
+        return;
+    };
+    let available: BTreeSet<String> = scene
+        .blendshape_channels()
+        .into_iter()
+        .map(|c| c.name)
+        .collect();
+    let missing: Vec<String> = desc
+        .viseme_blendshapes
+        .iter()
+        .filter(|n| !n.is_empty() && n.as_str() != "-none-" && !available.contains(n.as_str()))
+        .map(|n| format!("'{n}'"))
+        .collect();
+    if !missing.is_empty() {
+        out.push(Diagnostic {
+            severity: Severity::Warn,
+            code: "VRC039",
+            message: format!(
+                "Viseme blendshape(s) {} not found among the {} morph channel(s) of the viseme mesh's source FBX ({rel})",
+                missing.join(", "),
+                available.len(),
+            ),
+            file: Some(file.to_string()),
+            hint: Some(
+                "The mesh's FBX has no morph channels by these names; re-select the visemes on the descriptor or re-export the mesh with the shapes.".into(),
+            ),
+        });
+    }
+}
+
 fn check_descriptor_eyelook(file: &str, desc: &AvatarDescriptor, out: &mut Vec<Diagnostic>) {
     if !desc.enable_eye_look {
         return;

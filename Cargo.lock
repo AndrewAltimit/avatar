@@ -283,11 +283,13 @@ name = "avatar-lint"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "avatar-fbx",
  "avatar-testkit",
  "avatar-unity-asset",
  "avatar-unity-yaml",
  "avatar-vpm",
  "avatar-vrc-descriptor",
+ "fbxcel",
  "schemars",
  "serde",
  "serde_json",

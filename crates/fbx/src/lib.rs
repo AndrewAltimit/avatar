@@ -145,6 +145,47 @@ impl FbxScene {
             .find(|c| c.kind == "OO" && c.child == child)
             .map(|c| c.parent)
     }
+
+    /// Every blendshape channel in the scene: the shape names Unity imports as the mesh's
+    /// blendshapes, each traced back to the mesh it deforms.
+    ///
+    /// FBX serializes morph targets as a chain
+    /// `Geometry(Shape) → Deformer(BlendShapeChannel) → Deformer(BlendShape) → Geometry(Mesh)
+    /// → Model`; the **channel** name is what Unity surfaces (`blendShape.<name>` in animation
+    /// bindings, the descriptor's viseme list, …). Channels are matched by their
+    /// `BlendShapeChannel` subclass alone — the node and class attributes vary by exporter
+    /// (`Deformer` vs `SubDeformer`), the subclass does not.
+    pub fn blendshape_channels(&self) -> Vec<BlendshapeChannel> {
+        self.objects
+            .iter()
+            .filter(|o| o.subclass == "BlendShapeChannel")
+            .map(|ch| {
+                let deformer_id = self.parent_of(ch.id);
+                let geometry_id = deformer_id.and_then(|d| self.parent_of(d));
+                let mesh_model_name = geometry_id
+                    .and_then(|g| self.parent_of(g))
+                    .and_then(|m| self.object(m))
+                    .filter(|o| o.is_model())
+                    .map(|o| o.name.clone());
+                BlendshapeChannel {
+                    name: ch.name.clone(),
+                    geometry_id,
+                    mesh_model_name,
+                }
+            })
+            .collect()
+    }
+}
+
+/// One blendshape channel found in a scene — see [`FbxScene::blendshape_channels`].
+#[derive(Debug, Clone)]
+pub struct BlendshapeChannel {
+    /// The channel name — the blendshape name Unity imports.
+    pub name: String,
+    /// The mesh `Geometry` the channel deforms, when the deformer chain resolves.
+    pub geometry_id: Option<i64>,
+    /// The name of the `Model` carrying that geometry (the mesh's scene name), when resolvable.
+    pub mesh_model_name: Option<String>,
 }
 
 /// Maximum FBX node nesting depth we will accept. Real avatar FBX hierarchies are shallow (a
@@ -723,6 +764,55 @@ mod tests {
     fn rename_unknown_id_errors() {
         let mut d = doc();
         assert!(d.rename_object(999, "Nope").is_err());
+    }
+
+    /// Blendshape channels resolve through the full FBX morph chain
+    /// (`Shape → BlendShapeChannel → BlendShape → Geometry → Model`), matching on the
+    /// `BlendShapeChannel` subclass the way real exporters (Blender, Maya) serialize it.
+    #[test]
+    fn extracts_blendshape_channels() {
+        let tree = tree_v7400! {
+            Objects: {
+                Model: [10i64, "Body\u{0}\u{1}Model", "Mesh"] {},
+                Geometry: [20i64, "Body\u{0}\u{1}Geometry", "Mesh"] {
+                    Vertices: [vec![0.0f64, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0]] {},
+                    PolygonVertexIndex: [vec![0i32, 1, -3]] {},
+                },
+                // The morph deformer and its two channels (Blender-style: node name `Deformer`,
+                // class `SubDeformer`, subclass `BlendShapeChannel`).
+                Deformer: [40i64, "\u{0}\u{1}Deformer", "BlendShape"] {},
+                Deformer: [50i64, "Smile\u{0}\u{1}SubDeformer", "BlendShapeChannel"] {},
+                Deformer: [51i64, "vrc.v_aa\u{0}\u{1}SubDeformer", "BlendShapeChannel"] {},
+                // The morph target geometries themselves (ignored by the channel walk).
+                Geometry: [60i64, "Smile\u{0}\u{1}Geometry", "Shape"] {},
+                Geometry: [61i64, "vrc.v_aa\u{0}\u{1}Geometry", "Shape"] {},
+            },
+            Connections: {
+                C: ["OO", 20i64, 10i64] {}, // Geometry -> mesh Model
+                C: ["OO", 40i64, 20i64] {}, // BlendShape -> Geometry
+                C: ["OO", 50i64, 40i64] {}, // channel Smile -> BlendShape
+                C: ["OO", 51i64, 40i64] {}, // channel vrc.v_aa -> BlendShape
+                C: ["OO", 60i64, 50i64] {}, // Shape -> channel
+                C: ["OO", 61i64, 51i64] {},
+            },
+        };
+        let scene = FbxDocument::from_bytes(&to_fbx_bytes(&tree))
+            .unwrap()
+            .scene();
+        let channels = scene.blendshape_channels();
+        assert_eq!(channels.len(), 2);
+        let names: Vec<&str> = channels.iter().map(|c| c.name.as_str()).collect();
+        assert_eq!(names, vec!["Smile", "vrc.v_aa"]);
+        for ch in &channels {
+            assert_eq!(
+                ch.geometry_id,
+                Some(20),
+                "chain resolves to the mesh geometry"
+            );
+            assert_eq!(ch.mesh_model_name.as_deref(), Some("Body"));
+        }
+        // A scene without morphs has none.
+        assert!(doc().scene().blendshape_channels().is_empty());
     }
 
     /// A minimal skinned mesh: one quad (4 control points) skinned to two bones, each cluster

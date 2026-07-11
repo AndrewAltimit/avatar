@@ -12,6 +12,7 @@ path = "src/lib.rs"
 anyhow.workspace = true
 serde = { workspace = true }
 schemars = { workspace = true, optional = true }
+avatar-fbx = { path = "../fbx" }
 avatar-unity-yaml = { path = "../unity-yaml" }
 avatar-unity-asset = { path = "../unity-asset" }
 avatar-vpm = { path = "../vpm" }
@@ -22,6 +23,9 @@ avatar-vrc-descriptor = { path = "../vrc-descriptor" }
 schema = ["dep:schemars"]
 
 [dev-dependencies]
+# Used only to synthesize binary FBX (with morph channels) in-memory for the viseme cross-check
+# tests — no committed asset needed.
+fbxcel = { version = "0.9", features = ["tree", "writer"] }
 # Golden-snapshot harness + the shared fixture corpus resolver.
 avatar-testkit = { path = "../testkit" }
 serde_json.workspace = true

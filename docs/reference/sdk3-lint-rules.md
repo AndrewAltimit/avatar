@@ -25,6 +25,7 @@ Descriptor, `VRC04x` animator controllers + animation clips, `VRC05x` PhysBones 
 | `VRC036` | warn | An Expression Parameter is used by none of the avatar's (resolvable, non-default) playable-layer animator controllers — likely a forgotten wiring, unless driven by OSC/contacts/Modular Avatar/VRCFury. Default-layer params (`VRCEmote`, `VRCFaceBlendH/V`) and built-ins are excluded | — |
 | `VRC037` | warn | An Expression Parameter shares a name with an animator parameter but has an incompatible type (Int↔Int, Float↔Float, Bool↔Bool) | — |
 | `VRC038` | warn | When lip-sync uses viseme blend shapes and the entry count is correct (15), a viseme entry is empty/`-none-`, or two entries name the same blend shape — complements `VRC033` (which only checks the mesh + count) | [lip sync](https://creators.vrchat.com/avatars/avatar-descriptor/#lipsync) |
+| `VRC039` | warn | A viseme blendshape name doesn't exist on the viseme mesh's **source FBX** (its morph channels) — the cross-layer descriptor↔mesh check; silently broken lip-sync in-game. Resolves descriptor → SkinnedMeshRenderer → `m_Mesh` guid → `.fbx`; every unresolvable step (unassigned mesh = `VRC033`, missing guid, non-FBX mesh) returns quietly | [lip sync](https://creators.vrchat.com/avatars/avatar-descriptor/#lipsync) |
 | `VRC040` | warn | A transition condition references an animator parameter not declared in that controller (Unity requires the parameter to exist, so the transition silently never fires) | [animator](https://docs.unity3d.com/Manual/class-AnimatorController.html) |
 | `VRC041` | warn | A blend tree reads an animator parameter not declared in that controller (respects blend type: 1D reads X, 2D reads X+Y, Direct reads each child's direct parameter) | [blend trees](https://docs.unity3d.com/Manual/class-BlendTree.html) |
 | `VRC042` | warn | A state machine has child states but no default state set (it never enters any state) | [animator](https://docs.unity3d.com/Manual/class-AnimatorController.html) |
@@ -68,9 +69,10 @@ they don't need a built-in allow-list.
 ## Scope / not yet covered
 
 Current scope: Expression Parameters/Menus (`*.asset`); the VRC Avatar Descriptor in
-prefabs/scenes (expression + playable-layer references, viseme lip-sync incl. per-entry checks,
-eye-look config, a cross-check that expression parameters are actually wired to the avatar's
-animator controllers by name and type, and avatar-level Write-Defaults consistency); animator
+prefabs/scenes (expression + playable-layer references, viseme lip-sync incl. per-entry checks
+and the viseme↔source-FBX morph-channel cross-check, eye-look config, a cross-check that
+expression parameters are actually wired to the avatar's animator controllers by name and type,
+and avatar-level Write-Defaults consistency); animator
 controllers (`.controller`: parameter references, default states, Write Defaults consistency,
 duplicate parameters); **animation clips** (`.anim`: missing/unassigned state motions, FX-layer
 transform/muscle curves, empty clips — `VRC046`–`VRC049`); and **PhysBones / Avatar Dynamics** in

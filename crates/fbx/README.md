@@ -19,7 +19,8 @@ clear error — re-export as binary.
 ## Key API
 
 - `FbxScene` — the read view: `load(path)`, `models()`, `object(id)`, `children_of(id)`,
-  `parent_of(id)`, plus `global_settings`, `objects`, `connections`.
+  `parent_of(id)`, `blendshape_channels()` (the morph-channel names Unity imports as blendshapes,
+  each traced to its mesh), plus `global_settings`, `objects`, `connections`.
 - `FbxDocument` — the writable document: `load(path)` / `from_bytes(&[u8])`, `scene()` (recomputed
   read view), and id-addressed mutators `rename_object`, `reparent_object`,
   `set_global_setting_f64/i32`, `scale_object`, then `to_bytes()` / `write(path)`.
