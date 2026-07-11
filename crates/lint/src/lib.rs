@@ -10,7 +10,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::path::Path;
 
 use anyhow::{Context, Result};
-use avatar_unity_asset::AnimatorController;
+use avatar_unity_asset::{AnimationClip, AnimatorController};
 use avatar_unity_yaml::{UnityFile, Yaml, field_f64, field_i64, relative};
 use avatar_vpm::{AVATAR_SDK, UnityProject};
 use avatar_vrc_descriptor::{
@@ -71,6 +71,7 @@ pub struct LintReport {
     pub menu_assets: usize,
     pub descriptors: usize,
     pub controllers: usize,
+    pub clips: usize,
     pub diagnostics: Vec<Diagnostic>,
 }
 
@@ -118,6 +119,7 @@ pub fn run(path: &Path) -> Result<LintReport> {
     let mut menu_assets: Vec<(String, ExpressionsMenu)> = Vec::new();
     let mut descriptors: Vec<(String, AvatarDescriptor)> = Vec::new();
     let mut controllers: Vec<(String, AnimatorController)> = Vec::new();
+    let mut clips: Vec<(String, AnimationClip)> = Vec::new();
     // Prefab/scene files retained whole, so the Avatar-Dynamics (PhysBone) checks can read their
     // class-114 MonoBehaviour bodies + class-4 transforms (which `extract` discards).
     let mut prefab_scene_files: Vec<(String, UnityFile)> = Vec::new();
@@ -183,6 +185,23 @@ pub fn run(path: &Path) -> Result<LintReport> {
                 controllers.push((rel, controller));
             }
         }
+
+        // Fourth pass: animation clips (`.anim`), for motion resolution + clip-content rules.
+        for path in &files {
+            if path.extension().is_none_or(|e| e != "anim") {
+                continue;
+            }
+            let rel = relative(&project.root, path);
+            let Ok(text) = std::fs::read_to_string(path) else {
+                continue;
+            };
+            let Ok(file) = UnityFile::parse(&text) else {
+                continue;
+            };
+            if let Some(clip) = AnimationClip::from_file(&file) {
+                clips.push((rel, clip));
+            }
+        }
     }
 
     // --- Parameter rules ---
@@ -217,6 +236,10 @@ pub fn run(path: &Path) -> Result<LintReport> {
         .iter()
         .filter_map(|(rel, c)| path_to_guid.get(rel).map(|g| (g.as_str(), c)))
         .collect();
+    let clips_by_guid: BTreeMap<&str, &AnimationClip> = clips
+        .iter()
+        .filter_map(|(rel, c)| path_to_guid.get(rel).map(|g| (g.as_str(), c)))
+        .collect();
     for (file, desc) in &descriptors {
         check_descriptor_refs(
             file,
@@ -237,6 +260,13 @@ pub fn run(path: &Path) -> Result<LintReport> {
             &mut diagnostics,
         );
         check_descriptor_write_defaults(file, desc, &controllers_by_guid, &mut diagnostics);
+        check_fx_clip_contents(
+            file,
+            desc,
+            &controllers_by_guid,
+            &clips_by_guid,
+            &mut diagnostics,
+        );
     }
     if descriptors.is_empty() && project.has_avatar_sdk() {
         diagnostics.push(Diagnostic {
@@ -254,7 +284,11 @@ pub fn run(path: &Path) -> Result<LintReport> {
     // --- Animator controller rules ---
     for (file, controller) in &controllers {
         check_controller(file, controller, &mut diagnostics);
+        check_controller_motions(file, controller, &guid_to_path, &mut diagnostics);
     }
+
+    // --- Animation-clip rules ---
+    check_empty_clips(&clips, &mut diagnostics);
 
     // --- Project-wide expression-parameter usage (VRC012) ---
     // A superset of the per-descriptor VRC036: a declared expression parameter whose name appears
@@ -287,6 +321,7 @@ pub fn run(path: &Path) -> Result<LintReport> {
         menu_assets: menu_assets.len(),
         descriptors: descriptors.len(),
         controllers: controllers.len(),
+        clips: clips.len(),
         diagnostics,
     })
 }
@@ -892,6 +927,132 @@ fn check_controller(file: &str, c: &AnimatorController, out: &mut Vec<Diagnostic
                 "Set Write Defaults the same way on every state (VRChat's templates use Off).".into(),
             ),
         });
+    }
+}
+
+/// VRC046 + VRC048: state and blend-tree motion references. VRC046 flags an external motion guid
+/// that resolves to no asset in the project (the clip was moved or deleted — the state silently
+/// plays nothing in-game); VRC048 flags states with no motion at all, which is advisory because
+/// empty states are a common intentional idiom (e.g. a Write-Defaults-off buffer state).
+fn check_controller_motions(
+    file: &str,
+    c: &AnimatorController,
+    guid_to_path: &BTreeMap<String, String>,
+    out: &mut Vec<Diagnostic>,
+) {
+    let mut reported: BTreeSet<&str> = BTreeSet::new();
+    let state_guids = c.states.iter().filter_map(|s| s.motion.guid.as_deref());
+    let tree_guids = c.blend_tree_motion_guids.iter().map(String::as_str);
+    for guid in state_guids.chain(tree_guids) {
+        if !guid_to_path.contains_key(guid) && reported.insert(guid) {
+            out.push(Diagnostic {
+                severity: Severity::Warn,
+                code: "VRC046",
+                message: format!(
+                    "A state or blend tree references a motion missing from the project (guid {guid})"
+                ),
+                file: Some(file.to_string()),
+                hint: Some(
+                    "The .anim (or the FBX carrying the clip) was moved or deleted; reassign the state's Motion.".into(),
+                ),
+            });
+        }
+    }
+
+    let motionless = c.states.iter().filter(|s| !s.motion.is_set()).count();
+    if motionless > 0 {
+        out.push(Diagnostic {
+            severity: Severity::Info,
+            code: "VRC048",
+            message: format!("{motionless} state(s) have no Motion assigned (they play nothing)"),
+            file: Some(file.to_string()),
+            hint: Some(
+                "Empty states are sometimes intentional (a buffer/rest state); assign a clip if not.".into(),
+            ),
+        });
+    }
+}
+
+/// VRC047: clips played by the avatar's **FX** playable layer should not animate transforms or
+/// humanoid muscles. VRChat's FX layer is for non-transform animation (blendshapes, toggles,
+/// material properties); transform/muscle curves there fight the other layers and IK.
+fn check_fx_clip_contents(
+    file: &str,
+    desc: &AvatarDescriptor,
+    controllers_by_guid: &BTreeMap<&str, &AnimatorController>,
+    clips_by_guid: &BTreeMap<&str, &AnimationClip>,
+    out: &mut Vec<Diagnostic>,
+) {
+    /// VRChat `AnimLayerType::FX`.
+    const FX_LAYER: i64 = 4;
+    let mut reported: BTreeSet<&str> = BTreeSet::new();
+    for layer in desc.animation_layers() {
+        if layer.layer_type != FX_LAYER || layer.is_default {
+            continue;
+        }
+        let Some(controller) = layer
+            .controller
+            .guid
+            .as_deref()
+            .and_then(|g| controllers_by_guid.get(g))
+        else {
+            continue;
+        };
+        let state_guids = controller
+            .states
+            .iter()
+            .filter_map(|s| s.motion.guid.as_deref());
+        let tree_guids = controller
+            .blend_tree_motion_guids
+            .iter()
+            .map(String::as_str);
+        for guid in state_guids.chain(tree_guids) {
+            // Only clips we parsed as standalone `.anim` assets are inspectable; FBX-embedded
+            // clips (a guid resolving to a model file) are skipped.
+            let Some(clip) = clips_by_guid.get(guid) else {
+                continue;
+            };
+            if (clip.animates_transforms() || clip.animates_muscles()) && reported.insert(guid) {
+                let what = match (clip.animates_transforms(), clip.animates_muscles()) {
+                    (true, true) => "transform and humanoid-muscle",
+                    (true, false) => "transform",
+                    _ => "humanoid-muscle",
+                };
+                out.push(Diagnostic {
+                    severity: Severity::Warn,
+                    code: "VRC047",
+                    message: format!(
+                        "FX-layer clip '{}' animates {what} curves; the FX layer is for non-transform animation",
+                        clip.name.as_deref().unwrap_or("<unnamed>")
+                    ),
+                    file: Some(file.to_string()),
+                    hint: Some(
+                        "Move transform/muscle animation to Base/Additive/Gesture/Action; keep blendshape, toggle, and material curves on FX.".into(),
+                    ),
+                });
+            }
+        }
+    }
+}
+
+/// VRC049: a clip that animates nothing at all. Advisory — an empty clip in a state is a no-op
+/// that usually indicates an authoring slip (curves deleted, wrong asset saved).
+fn check_empty_clips(clips: &[(String, AnimationClip)], out: &mut Vec<Diagnostic>) {
+    for (file, clip) in clips {
+        if clip.is_empty() {
+            out.push(Diagnostic {
+                severity: Severity::Info,
+                code: "VRC049",
+                message: format!(
+                    "Animation clip '{}' has no curves (it animates nothing)",
+                    clip.name.as_deref().unwrap_or("<unnamed>")
+                ),
+                file: Some(file.to_string()),
+                hint: Some(
+                    "Add curves or delete the clip; a state playing it does nothing.".into(),
+                ),
+            });
+        }
     }
 }
 

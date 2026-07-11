@@ -1,0 +1,22 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &100000
+GameObject:
+  m_Name: ClipAvatar
+  m_Component:
+  - component: {fileID: 114000}
+--- !u!114 &114000
+MonoBehaviour:
+  m_GameObject: {fileID: 100000}
+  m_Script: {fileID: 11500000, guid: 67cc4cb7839cd3741b63733d5adf0442, type: 3}
+  m_Name: ClipAvatar
+  ViewPosition: {x: 0, y: 1.5, z: 0}
+  lipSync: 0
+  VisemeSkinnedMesh: {fileID: 0}
+  customExpressions: 0
+  baseAnimationLayers:
+  - isEnabled: 1
+    type: 4
+    animatorController: {fileID: 9100000, guid: f1d0aaaaaaaaaaaaaaaaaaaaaaaaaaaa, type: 2}
+    isDefault: 0
+  specialAnimationLayers: []

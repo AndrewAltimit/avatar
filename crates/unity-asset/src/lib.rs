@@ -1,6 +1,7 @@
-//! Typed reading of Unity asset graphs over `avatar-unity-yaml`. Currently this covers the
+//! Typed reading of Unity asset graphs over `avatar-unity-yaml`. This covers the
 //! **AnimatorController** (`.controller`) — the structure VRChat avatars drive through their
-//! playable layers (FX, Gesture, Action, …).
+//! playable layers (FX, Gesture, Action, …) — and the **AnimationClip** (`.anim`) those
+//! controllers play.
 //!
 //! A `.controller` file is a multi-document Unity YAML stream: one `AnimatorController` object
 //! (class 91) plus the state machines (1107), states (1102), transitions (1101 / 1109) and blend
@@ -9,6 +10,10 @@
 //! to rebuild the full graph; we aggregate the relevant fields across the file's documents by
 //! their Unity class id. This is robust to SDK version drift, since the field names are stable
 //! Unity serialization, not VRChat specifics.
+//!
+//! A `.anim` file is a single class-74 document; [`AnimationClip`] reads its curve *bindings*
+//! (what each curve animates — path, attribute, target class), not the keyframe data, which is
+//! all the clip-content lint rules need.
 //!
 //! Reference: <https://docs.unity3d.com/Manual/class-AnimatorController.html>.
 
@@ -22,6 +27,10 @@ const ANIMATOR_STATE_TRANSITION: u32 = 1101;
 const ANIMATOR_TRANSITION: u32 = 1109;
 const ANIMATOR_STATE_MACHINE: u32 = 1107;
 const BLEND_TREE: u32 = 206;
+// The `.anim` document class.
+const ANIMATION_CLIP: u32 = 74;
+// The class a humanoid muscle curve binds to (`Animator`).
+const ANIMATOR_COMPONENT: i64 = 95;
 
 // `m_BlendType` values on a BlendTree.
 const BLEND_TYPE_1D: i64 = 0;
@@ -100,6 +109,40 @@ pub struct StateMachineInfo {
     pub has_default_state: bool,
 }
 
+/// A motion reference (`m_Motion` on a state, `m_Motion` on a blend-tree child): a local fileID,
+/// optionally into another asset by guid. `{fileID: 0}` (no guid) is Unity's null motion.
+#[derive(Debug, Clone, Serialize)]
+pub struct MotionRef {
+    pub file_id: i64,
+    pub guid: Option<String>,
+}
+
+impl MotionRef {
+    fn parse(node: &Yaml) -> Self {
+        MotionRef {
+            file_id: field_i64(node, "fileID").unwrap_or(0),
+            guid: node["guid"]
+                .as_str()
+                .filter(|s| !s.is_empty())
+                .map(str::to_string),
+        }
+    }
+
+    /// True if this points at anything (a local object or an external asset).
+    pub fn is_set(&self) -> bool {
+        self.file_id != 0 || self.guid.is_some()
+    }
+}
+
+/// One `AnimatorState` (class 1102): its name and what it plays.
+#[derive(Debug, Clone, Serialize)]
+pub struct StateInfo {
+    pub name: Option<String>,
+    pub write_defaults: bool,
+    /// The state's `m_Motion` — a local blend tree, an external clip (guid), or null.
+    pub motion: MotionRef,
+}
+
 /// An AnimatorController parsed from a `.controller` file.
 #[derive(Debug, Clone, Serialize)]
 pub struct AnimatorController {
@@ -117,6 +160,10 @@ pub struct AnimatorController {
     pub write_defaults: Vec<bool>,
     /// Number of `AnimatorState` (class 1102) documents.
     pub state_count: usize,
+    /// Every state (class 1102) with its name and motion reference, in document order.
+    pub states: Vec<StateInfo>,
+    /// Every external motion guid referenced by a blend-tree child (`m_Childs[].m_Motion`).
+    pub blend_tree_motion_guids: Vec<String>,
 }
 
 impl AnimatorController {
@@ -148,17 +195,34 @@ impl AnimatorController {
         let mut state_machines = Vec::new();
         let mut write_defaults = Vec::new();
         let mut state_count = 0;
+        let mut states = Vec::new();
+        let mut blend_tree_motion_guids = Vec::new();
 
         for doc in &file.documents {
             match doc.class_id {
                 ANIMATOR_STATE_TRANSITION | ANIMATOR_TRANSITION => {
                     collect_conditions(&doc.body, &mut conditions);
                 }
-                BLEND_TREE => blend_trees.push(parse_blend_tree(&doc.body)),
+                BLEND_TREE => {
+                    blend_trees.push(parse_blend_tree(&doc.body));
+                    if let Some(children) = doc.body["m_Childs"].as_vec() {
+                        for c in children {
+                            let m = MotionRef::parse(&c["m_Motion"]);
+                            if let Some(g) = m.guid {
+                                blend_tree_motion_guids.push(g);
+                            }
+                        }
+                    }
+                }
                 ANIMATOR_STATE => {
                     state_count += 1;
-                    write_defaults
-                        .push(field_bool(&doc.body, "m_WriteDefaultValues").unwrap_or(true));
+                    let wd = field_bool(&doc.body, "m_WriteDefaultValues").unwrap_or(true);
+                    write_defaults.push(wd);
+                    states.push(StateInfo {
+                        name: doc.name().map(str::to_string),
+                        write_defaults: wd,
+                        motion: MotionRef::parse(&doc.body["m_Motion"]),
+                    });
                 }
                 ANIMATOR_STATE_MACHINE => state_machines.push(parse_state_machine(&doc.body)),
                 _ => {}
@@ -173,6 +237,8 @@ impl AnimatorController {
             state_machines,
             write_defaults,
             state_count,
+            states,
+            blend_tree_motion_guids,
         })
     }
 
@@ -231,6 +297,93 @@ fn parse_state_machine(body: &Yaml) -> StateMachineInfo {
     StateMachineInfo {
         child_state_count,
         has_default_state,
+    }
+}
+
+/// One float-curve binding in an AnimationClip: what the curve animates, not its keyframes.
+#[derive(Debug, Clone, Serialize)]
+pub struct FloatCurveBinding {
+    /// Hierarchy path of the animated object, relative to the animator root (empty for curves on
+    /// the root itself — e.g. humanoid muscle curves).
+    pub path: String,
+    /// The animated property (`blendShape.Smile`, `m_IsActive`, a muscle name, …).
+    pub attribute: String,
+    /// The Unity class the curve binds to (137 SkinnedMeshRenderer, 1 GameObject, 95 Animator).
+    pub class_id: i64,
+}
+
+impl FloatCurveBinding {
+    /// True if this is a humanoid muscle / root-motion curve (bound to the `Animator`, class 95).
+    pub fn is_muscle(&self) -> bool {
+        self.class_id == ANIMATOR_COMPONENT
+    }
+}
+
+/// An AnimationClip (`.anim`, class 74) parsed down to its curve bindings — what the clip
+/// animates, which is what the clip-content lint rules need. Keyframe values are not read.
+#[derive(Debug, Clone, Serialize)]
+pub struct AnimationClip {
+    /// The clip's `m_Name`, if present.
+    pub name: Option<String>,
+    /// Every `m_FloatCurves` binding (blendshapes, GameObject toggles, material floats, muscles).
+    pub float_curves: Vec<FloatCurveBinding>,
+    /// Total entries across the transform-curve collections (`m_PositionCurves`,
+    /// `m_RotationCurves`, `m_EulerCurves`, `m_ScaleCurves`).
+    pub transform_curves: usize,
+    /// Entries in `m_PPtrCurves` (object-reference curves, e.g. material swaps).
+    pub pptr_curves: usize,
+}
+
+impl AnimationClip {
+    /// Parse the first AnimationClip document out of a Unity file. Returns `None` if the file
+    /// contains no class-74 document.
+    pub fn from_file(file: &UnityFile) -> Option<Self> {
+        let doc = file
+            .documents
+            .iter()
+            .find(|d| d.class_id == ANIMATION_CLIP)?;
+        let body = &doc.body;
+
+        let float_curves = body["m_FloatCurves"]
+            .as_vec()
+            .map(|v| {
+                v.iter()
+                    .map(|c| FloatCurveBinding {
+                        path: field_str(c, "path").unwrap_or_default().to_string(),
+                        attribute: field_str(c, "attribute").unwrap_or_default().to_string(),
+                        class_id: field_i64(c, "classID").unwrap_or(0),
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        let count = |key: &str| body[key].as_vec().map(Vec::len).unwrap_or(0);
+        let transform_curves = count("m_PositionCurves")
+            + count("m_RotationCurves")
+            + count("m_EulerCurves")
+            + count("m_ScaleCurves");
+
+        Some(AnimationClip {
+            name: doc.name().map(str::to_string),
+            float_curves,
+            transform_curves,
+            pptr_curves: count("m_PPtrCurves"),
+        })
+    }
+
+    /// True if the clip animates nothing at all (no float, transform, or PPtr curves).
+    pub fn is_empty(&self) -> bool {
+        self.float_curves.is_empty() && self.transform_curves == 0 && self.pptr_curves == 0
+    }
+
+    /// True if the clip animates transforms (position/rotation/euler/scale curves).
+    pub fn animates_transforms(&self) -> bool {
+        self.transform_curves > 0
+    }
+
+    /// True if the clip drives humanoid muscle / Animator curves (class-95 float bindings).
+    pub fn animates_muscles(&self) -> bool {
+        self.float_curves.iter().any(FloatCurveBinding::is_muscle)
     }
 }
 
@@ -310,5 +463,82 @@ AnimatorStateTransition:
         assert_eq!(c.state_machines.len(), 1);
         assert!(c.state_machines[0].has_default_state);
         assert_eq!(c.state_machines[0].child_state_count, 1);
+
+        // Per-state motion refs: the Fist state plays the local blend tree; the blend tree's
+        // child references an external clip guid.
+        assert_eq!(c.states.len(), 1);
+        assert_eq!(c.states[0].name.as_deref(), Some("Fist"));
+        assert!(c.states[0].motion.is_set());
+        assert_eq!(c.states[0].motion.file_id, 110600000);
+        assert_eq!(c.states[0].motion.guid, None);
+        assert_eq!(
+            c.blend_tree_motion_guids,
+            vec!["1234567890abcdef1234567890abcdef"]
+        );
+    }
+
+    const CLIP: &str = "\
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!74 &7400000
+AnimationClip:
+  m_Name: Wave
+  m_PositionCurves:
+  - path: Armature/Hips/Arm
+    curve:
+      m_Curve: []
+  m_RotationCurves: []
+  m_EulerCurves: []
+  m_ScaleCurves: []
+  m_FloatCurves:
+  - curve:
+      m_Curve: []
+    attribute: blendShape.Smile
+    path: Body
+    classID: 137
+    script: {fileID: 0}
+  - curve:
+      m_Curve: []
+    attribute: LeftHand.Index.1 Stretched
+    path:
+    classID: 95
+    script: {fileID: 0}
+  m_PPtrCurves: []
+";
+
+    #[test]
+    fn parses_animation_clip_bindings() {
+        let file = UnityFile::parse(CLIP).unwrap();
+        let clip = AnimationClip::from_file(&file).expect("clip");
+
+        assert_eq!(clip.name.as_deref(), Some("Wave"));
+        assert_eq!(clip.float_curves.len(), 2);
+        assert_eq!(clip.float_curves[0].attribute, "blendShape.Smile");
+        assert_eq!(clip.float_curves[0].path, "Body");
+        assert!(!clip.float_curves[0].is_muscle());
+        assert!(clip.float_curves[1].is_muscle());
+        assert_eq!(clip.transform_curves, 1);
+        assert!(clip.animates_transforms());
+        assert!(clip.animates_muscles());
+        assert!(!clip.is_empty());
+    }
+
+    #[test]
+    fn empty_clip_is_empty() {
+        let yaml = "\
+--- !u!74 &7400000
+AnimationClip:
+  m_Name: Empty
+  m_FloatCurves: []
+  m_PositionCurves: []
+  m_PPtrCurves: []
+";
+        let file = UnityFile::parse(yaml).unwrap();
+        let clip = AnimationClip::from_file(&file).unwrap();
+        assert!(clip.is_empty());
+        assert!(!clip.animates_transforms());
+        assert!(!clip.animates_muscles());
+        // A controller reader on a clip file finds nothing.
+        assert!(AnimatorController::from_file(&file).is_none());
     }
 }

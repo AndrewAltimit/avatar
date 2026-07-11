@@ -41,3 +41,8 @@ fn golden_avatar_project() {
 fn golden_dynamics_project() {
     snapshot("DynamicsProject");
 }
+
+#[test]
+fn golden_clip_project() {
+    snapshot("ClipProject");
+}

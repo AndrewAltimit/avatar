@@ -1,5 +1,6 @@
 {
   "avatar_sdk_version": "3.7.0",
+  "clips": 0,
   "controllers": 1,
   "descriptors": 1,
   "diagnostics": [
@@ -93,6 +94,13 @@
       "hint": "Set Write Defaults the same way on every state (VRChat's templates use Off).",
       "message": "Mixed Write Defaults across states (1 on, 1 off); VRChat recommends a consistent setting",
       "severity": "Warn"
+    },
+    {
+      "code": "VRC048",
+      "file": "Assets/Avatar/Hands.controller",
+      "hint": "Empty states are sometimes intentional (a buffer/rest state); assign a clip if not.",
+      "message": "1 state(s) have no Motion assigned (they play nothing)",
+      "severity": "Info"
     }
   ],
   "menu_assets": 1,

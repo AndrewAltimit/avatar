@@ -4,7 +4,7 @@ Rules emitted by `avatar lint <project>` (the `avatar-lint` crate). Errors are t
 will reject or that break the avatar; warnings are likely-but-not-certain problems.
 
 Codes are grouped: `VRC00x` project, `VRC01x` parameters, `VRC02x` menus, `VRC03x` Avatar
-Descriptor, `VRC04x` animator controllers, `VRC05x` PhysBones / Avatar Dynamics.
+Descriptor, `VRC04x` animator controllers + animation clips, `VRC05x` PhysBones / Avatar Dynamics.
 
 | Code | Severity | Rule | Source |
 |------|----------|------|--------|
@@ -31,6 +31,10 @@ Descriptor, `VRC04x` animator controllers, `VRC05x` PhysBones / Avatar Dynamics.
 | `VRC043` | warn | Duplicate animator parameter name within a controller | — |
 | `VRC044` | warn | States in **one** controller mix Write Defaults on and off — a common cause of broken/sticky VRChat animations | [write defaults](https://creators.vrchat.com/avatars/best-practices/migrating-existing-avatars-to-write-defaults-off/) |
 | `VRC045` | warn | Write Defaults is inconsistent **across** the avatar's resolvable, non-default playable-layer controllers (e.g. one layer all-on, another all-off) — the avatar-level counterpart to `VRC044`. Needs ≥2 resolvable controllers | [write defaults](https://creators.vrchat.com/avatars/best-practices/migrating-existing-avatars-to-write-defaults-off/) |
+| `VRC046` | warn | A state's `m_Motion` (or a blend-tree child's) references a motion by a guid not present in the project — the clip was moved or deleted, so the state silently plays nothing | — |
+| `VRC047` | warn | A clip played by the avatar's **FX** playable layer animates transform (position/rotation/scale) or humanoid-muscle curves; the FX layer is for non-transform animation (blendshapes, toggles, materials). Only standalone `.anim` assets are inspectable; FBX-embedded clips are skipped | [playable layers](https://creators.vrchat.com/avatars/playable-layers/) |
+| `VRC048` | info | A state has no Motion assigned at all (plays nothing). Advisory — empty states are a common intentional idiom (e.g. a Write-Defaults-off buffer state) | — |
+| `VRC049` | info | An animation clip has **no curves** — a no-op asset, usually an authoring slip | — |
 | `VRC050` | warn | A PhysBone's root transform can't be resolved in the file — `rootTransform` (or, when unset, the transform on the PhysBone's own GameObject) doesn't point at a transform present here (e.g. stripped from a nested prefab) | [PhysBones](https://creators.vrchat.com/avatars/avatar-dynamics/physbones/) |
 | `VRC051` | warn | A PhysBone's root resolves but it moves **zero** transforms (no child bones under the root and no endpoint) — it simulates nothing | [PhysBones](https://creators.vrchat.com/avatars/avatar-dynamics/physbones/) |
 | `VRC052` | warn | A PhysBone's `colliders` list has slots but **every** slot is a null reference. A genuinely empty `colliders: []` is fine | [PhysBone colliders](https://creators.vrchat.com/avatars/avatar-dynamics/physbones/#colliders) |
@@ -68,9 +72,10 @@ prefabs/scenes (expression + playable-layer references, viseme lip-sync incl. pe
 eye-look config, a cross-check that expression parameters are actually wired to the avatar's
 animator controllers by name and type, and avatar-level Write-Defaults consistency); animator
 controllers (`.controller`: parameter references, default states, Write Defaults consistency,
-duplicate parameters); and **PhysBones / Avatar Dynamics** in prefabs/scenes (`VRC05x`: root
-resolution, zero-transform PhysBones, unwired collider slots), plus project/VPM info. Not yet:
-animation-clip contents, or contacts. See `PLAN.md` for the roadmap.
+duplicate parameters); **animation clips** (`.anim`: missing/unassigned state motions, FX-layer
+transform/muscle curves, empty clips — `VRC046`–`VRC049`); and **PhysBones / Avatar Dynamics** in
+prefabs/scenes (`VRC05x`: root resolution, zero-transform PhysBones, unwired collider slots), plus
+project/VPM info. Not yet: contacts. See `PLAN.md` for the roadmap.
 
 ### PhysBone (Avatar-Dynamics) recognition (`VRC05x`)
 

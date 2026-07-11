@@ -1,10 +1,11 @@
-# AnimatorController reading (`avatar-unity-asset`)
+# AnimatorController + AnimationClip reading (`avatar-unity-asset`)
 
 `avatar-unity-asset` is the **typed** layer over `avatar-unity-yaml`: where that crate splits a Unity
 file into class-tagged documents of raw YAML, this one reads a specific asset *graph* into Rust
-structs. Today it covers the **AnimatorController** (`.controller`) — the asset VRChat avatars drive
-through their playable layers (FX, Gesture, Action, …). It is the reader the `avatar lint` rules use
-to check a controller's parameters, default states, Write Defaults consistency, and blend trees
+structs. It covers the **AnimatorController** (`.controller`) — the asset VRChat avatars drive
+through their playable layers (FX, Gesture, Action, …) — and the **AnimationClip** (`.anim`) those
+controllers play. It is the reader the `avatar lint` rules use to check a controller's parameters,
+default states, Write Defaults consistency, blend trees, and clip contents
 (`avatar-lint` consumes the structs below; lint codes live in
 [`sdk3-lint-rules.md`](sdk3-lint-rules.md)).
 
@@ -20,9 +21,9 @@ owns a graph of further objects, linked by local `fileID`s:
 |----------|--------|-------------------------------|
 | `91` | `AnimatorController` | name, declared parameters (`m_AnimatorParameters`) |
 | `1107` | `AnimatorStateMachine` | child-state count, whether `m_DefaultState` resolves |
-| `1102` | `AnimatorState` | `m_WriteDefaultValues` (one per state) |
+| `1102` | `AnimatorState` | `m_WriteDefaultValues` and the `m_Motion` reference (one per state) |
 | `1101` / `1109` | `AnimatorStateTransition` / `AnimatorTransition` | each `m_Conditions` entry |
-| `206` | `BlendTree` | blend type, blend parameter(s), per-child direct parameters |
+| `206` | `BlendTree` | blend type, blend parameter(s), per-child direct parameters + external child-motion guids |
 
 ### Aggregate, not full graph
 
@@ -54,6 +55,23 @@ somehow held more, the owned objects are attributed to the controller as a whole
   names dropped).
 - **`StateMachineInfo { child_state_count, has_default_state }`** — `has_default_state` is `true`
   only when `m_DefaultState` points at a real state (non-zero `fileID`).
+- **`StateInfo { name, write_defaults, motion }`** — one per `AnimatorState`, in document order
+  (`states` on the controller). `motion` is a **`MotionRef { file_id, guid }`**: a local blend
+  tree (`fileID` only), an external clip (`guid` set), or null (`is_set()` false).
+  `blend_tree_motion_guids` collects every external guid a blend-tree child references.
+
+## AnimationClip (`.anim`, class 74)
+
+`AnimationClip::from_file(&UnityFile) -> Option<Self>` reads a clip down to its curve
+**bindings** — what each curve animates, not the keyframe data, which is all the clip-content
+lint rules need:
+
+- **`float_curves: Vec<FloatCurveBinding { path, attribute, class_id }>`** — every
+  `m_FloatCurves` entry (blendshapes bind class 137, GameObject toggles class 1, humanoid muscle
+  curves class 95 with an empty path; `is_muscle()` tests the latter).
+- **`transform_curves`** — total entries across `m_PositionCurves` / `m_RotationCurves` /
+  `m_EulerCurves` / `m_ScaleCurves`; **`pptr_curves`** — `m_PPtrCurves` entries (material swaps).
+- Predicates: `is_empty()` (no curves at all), `animates_transforms()`, `animates_muscles()`.
 
 ## Usage
 
@@ -83,6 +101,7 @@ if let Some(controller) = AnimatorController::from_file(&file) {
 
 ## Status
 
-Built (**M2**). AnimatorController reading only; other typed asset graphs (descriptor, menus,
-parameters) are read elsewhere — see [`avatar-vrc-descriptor`](../../crates/vrc-descriptor/README.md)
-and the [lint rules](sdk3-lint-rules.md).
+Built (**M2**, AnimationClip added post-M5). AnimatorController + AnimationClip reading; other
+typed asset graphs (descriptor, menus, parameters) are read elsewhere — see
+[`avatar-vrc-descriptor`](../../crates/vrc-descriptor/README.md) and the
+[lint rules](sdk3-lint-rules.md). Material / scene typing is still to come (`PLAN.md` M4).
