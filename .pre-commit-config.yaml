@@ -6,12 +6,15 @@
 #   Run manually:           pre-commit run --all-files
 #
 # Byte-sensitive trees are excluded globally so the hygiene/JSON hooks never
-# rewrite them: the lint crate's test fixtures (Unity YAML + vpm manifests) and
-# the Unity acceptance project are parsed/compared verbatim by tests, and
-# Cargo.lock is machine-generated.
+# rewrite them: the shared fixture corpus (Unity YAML + vpm manifests, parsed —
+# and for the round-trip tests compared — verbatim), the golden snapshots (byte-
+# compared against the harness's own serialization), the Unity acceptance
+# project, and machine-generated Cargo.lock.
 exclude: |
   (?x)^(
+    fixtures/.*|
     crates/.*/tests/fixtures/.*|
+    crates/.*/tests/golden/.*|
     acceptance/.*|
     Cargo\.lock
   )$

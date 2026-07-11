@@ -24,12 +24,15 @@ repairs to make a non-standard rig import cleanly.
 - `repair::{plan_repairs, apply_plan, RepairPlan, RepairEdit}` — diagnose a scene into discrete
   edits (canonical renames, applied; topology reparents + scale/orientation, flagged only) and apply
   the native ones (renames) to an `FbxDocument`.
+- `blender::blender_script(&RepairPlan, input, output)` — render the *whole* plan (flagged geometry
+  repairs included) as a headless-Blender Python script (`avatar armature fix --blender-script`).
 
 ## Status
 
 Diagnosis + hierarchy-aware mapping: **M1**. Repair planning + apply: **M3** — canonical bone
 **renames** are applied (the only native repair); topology reparents and scale/orientation are
-**flagged, not applied** (they need a geometry transform, not a metadata relabel).
+**flagged, not applied** natively (they need a geometry transform, not a metadata relabel) and are
+instead emitted as a **headless-Blender repair script** covering the full plan.
 
 ## Features
 

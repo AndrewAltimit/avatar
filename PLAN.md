@@ -172,7 +172,10 @@ Locked to the `legend-of-legaia-re` style — see `CLAUDE.md`. Addition vs. Lega
   menu/animator), `VRC022` (empty menu control), `VRC038` (duplicate/empty viseme blendshape),
   `VRC045` (Write Defaults inconsistent across the avatar's playable-layer controllers), and a
   PhysBones/Avatar-Dynamics group `VRC050`–`052` (unresolvable root, moves zero transforms, collider
-  slots but none wired). M2 gaps closed. Next: animation-clip checks (or M3).
+  slots but none wired). M2 gaps closed. Since extended again: **animation-clip rules** (`VRC046`–`VRC049`: missing/absent
+  state motions, FX-layer transform/muscle curves, empty clips), the **viseme↔source-FBX morph-channel
+  cross-check** (`VRC039`, the first cross-layer rule), and a **hygiene/Android group** (`VRC060`
+  missing scripts, `VRC061` non-mobile shaders). Next: contacts.
 - **M3 — Armature repair.** ✅ `avatar armature fix <model.fbx>` plans repairs and (with `-o`) writes
   a corrected binary FBX via `avatar-fbx`'s `FbxDocument`. The one native repair is canonical
   humanoid bone **renames** (id-safe; what makes Unity auto-map). Mis-wired parent **topology** and
@@ -180,8 +183,10 @@ Locked to the `legend-of-legaia-re` style — see `CLAUDE.md`. Addition vs. Lega
   (→ Blender territory), not a metadata relabel — re-pointing a bone's `OO` connection without
   recomposing its local transform would move its rest/bind pose. Dry-run by default. The
   native-FBX-write risk (§8) is resolved. Rules/behaviour: `docs/reference/armature-repair.md`.
-  Next: geometry-aware reparent + scale/orientation via headless Blender, or M4.
-- **M4 — Asset generation.** 🟡 *Library + CLI landed.* `avatar-anim-gen` generates Unity-YAML
+  The headless-Blender fallback is now *emitted*: `--blender-script` renders the whole plan
+  (renames + rest-pose-preserving reparents + transform baking) as a Blender Python script
+  (`avatar_armature::blender_script`); running it under CI is the remaining step.
+- **M4 — Asset generation.** 🟡 *Library + CLI landed; expression assets + the toggle composite since.* `avatar-anim-gen` generates Unity-YAML
   `.anim` clips (`AnimationClip`: blendshape-weight + GameObject-active curves) and FX-layer
   analog-gesture blend trees (`BlendTree`), with a faithful YAML emitter, deterministic FNV-seeded
   fileIDs, and a reader-validated round-trip — driven by `avatar anim-gen blendtree` / `… clip` /
@@ -191,8 +196,12 @@ Locked to the `legend-of-legaia-re` style — see `CLAUDE.md`. Addition vs. Lega
   Unity-acceptance workflow now imports CLI-generated `.anim`/`.controller` assets into a real editor
   (`GeneratedAssetAcceptance.cs`) and asserts they parse into the expected object types with no
   import errors — closing the "live Unity import" gap for M4 (gated on a `UNITY_LICENSE` secret).
-  Remaining: typed `AnimationClip`/material/scene in `avatar-unity-asset`. Behaviour:
-  `docs/reference/anim-gen.md`.
+  Since extended with **expression-asset generation** (`VRCExpressionParameters` /
+  `VRCExpressionsMenu`, `avatar anim-gen params|menu`) and the composite **`avatar toggle`** bundle
+  (On/Off clips + two-state FX controller + params + menu + guid-pinning `.meta` sidecars — the
+  end-to-end authoring loop), all also exposed as non-writing MCP tools (`avatar_gen_*`). The typed
+  `AnimationClip` reader landed in `avatar-unity-asset` (feeding lint's clip rules `VRC046`–`VRC049`).
+  Remaining: typed material/scene in `avatar-unity-asset`. Behaviour: `docs/reference/anim-gen.md`.
 - **M5 — OSC runtime.** 🟡 *Library + CLI landed.* `avatar-osc` implements VRChat's OSC parameter
   protocol (`/avatar/parameters`, `/input`, `/avatar/change`) as a pure codec + non-blocking UDP
   `ParamClient`, plus offline OSCQuery avatar-config parsing — driven by `avatar osc

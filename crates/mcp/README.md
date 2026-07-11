@@ -36,6 +36,7 @@ where a handler's actionable context (which path was wrong, what was expected) r
 
 ## Status
 
-Built. Pure-dispatch core covered by unit tests; the avatar tool registry and a stdio handshake
-smoke test live in the cli (`crates/cli/src/cmd/mcp.rs`). Deps: `anyhow` + `serde` + `serde_json`
+Built. Pure-dispatch core covered by unit tests; the avatar tool registry (read/diagnose +
+text-returning `avatar_gen_*` generation tools) and a stdio handshake smoke test live in the cli
+(`crates/cli/src/cmd/mcp.rs`). Deps: `anyhow` + `serde` + `serde_json`
 only — no async runtime.

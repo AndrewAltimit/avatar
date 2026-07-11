@@ -19,11 +19,17 @@ Unity serialization, not VRChat specifics.
 
 - `AnimatorController::from_file(&UnityFile) -> Option<Self>` — aggregate a parsed `.controller`.
 - Exposes `parameters`, `conditions`, `blend_trees` (with `referenced_parameters()` respecting blend
-  type), `state_machines` (default-state presence), and `write_defaults` per state.
+  type), `state_machines` (default-state presence), `write_defaults` per state, `states` (name +
+  `MotionRef`), and `blend_tree_motion_guids`.
+- `AnimationClip::from_file(&UnityFile) -> Option<Self>` — a `.anim`'s curve *bindings*
+  (`float_curves`, `transform_curves`, `pptr_curves`; `is_empty()` / `animates_transforms()` /
+  `animates_muscles()`).
 
 ## Status
 
-Built: **AnimatorController (M2)**. Animation-clip / material / scene typing is planned for **M4**.
+Built: **AnimatorController (M2)** + **AnimationClip** (curve bindings: float/transform/PPtr
+counts, muscle detection, per-state `MotionRef`s on the controller side). Material / scene typing
+is still planned (**M4**).
 
 ## See also
 
