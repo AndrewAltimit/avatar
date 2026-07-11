@@ -8,6 +8,7 @@
 //!
 //! References: <https://creators.vrchat.com/avatars/rig-requirements/>.
 
+pub mod blender;
 pub mod humanoid;
 pub mod repair;
 
@@ -16,6 +17,7 @@ use std::collections::{BTreeMap, HashSet};
 use avatar_fbx::FbxScene;
 use serde::Serialize;
 
+pub use blender::blender_script;
 pub use humanoid::{BoneCategory, HumanBone, NameInfo, Requirement, Side};
 pub use repair::{RepairEdit, RepairPlan, apply_plan, plan_repairs};
 

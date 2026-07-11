@@ -73,6 +73,7 @@ cargo run -p avatar-cli -- fbx inspect path/to/model.fbx
 cargo run -p avatar-cli -- armature check path/to/model.fbx
 cargo run -p avatar-cli -- armature fix path/to/model.fbx              # dry run: print the repair plan
 cargo run -p avatar-cli -- armature fix path/to/model.fbx -o fixed.fbx # write a repaired FBX
+cargo run -p avatar-cli -- armature fix path/to/model.fbx --blender-script fix.py  # full repair incl. geometry, via headless Blender
 cargo run -p avatar-cli -- lint path/to/UnityProject                   # SDK3 compliance report
 cargo run -p avatar-cli -- lint path/to/UnityProject --deny-warnings   # also fail CI on warnings
 cargo run -p avatar-cli -- stats path/to/model.fbx                     # performance rank (geometry)

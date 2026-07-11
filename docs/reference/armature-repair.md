@@ -65,6 +65,34 @@ import at the wrong size or lying on its side). A correct fix re-transforms the 
 the kind of mutation that belongs in a Blender headless pass (see `PLAN.md` §8), not a metadata
 edit. So `fix` surfaces these as flags and leaves them for you to resolve in your DCC tool.
 
+## The Blender-script route (`--blender-script`)
+
+The flagged repairs aren't a dead end: `avatar armature fix model.fbx --blender-script fix.py`
+emits a **headless Blender Python script** that applies the *whole* plan — renames, geometry-aware
+reparents, and scale/orientation baking — in one pass (`avatar_armature::blender_script`, the
+PLAN §7 **[decided]** fallback). Run it with:
+
+```sh
+blender --background --python fix.py
+```
+
+Why Blender can apply what the FBX writer only flags:
+
+- **Reparents** — Blender edit-bones store *absolute* rest transforms, so setting
+  `edit_bones[b].parent` preserves the bone's world rest pose by construction; that is exactly the
+  "recompose the local transform against the new parent" a bare `OO` connection edit cannot do.
+- **Scale / orientation** — the importer normalizes into Blender's meter/Z-up world;
+  `transform_apply` bakes that conversion into the data (emitted only when a normalization flag is
+  present), and the export uses Unity-friendly settings (`FBX_SCALE_ALL`, no leaf bones).
+- **Renames** run first inside the script (Blender propagates them to skin vertex groups), so the
+  script is self-contained on the *original* FBX — no prior `-o` pass needed — and the reparent
+  list can use canonical humanoid names.
+
+`--blender-output OUT.fbx` sets the script's export path (default `<input>.fixed.fbx`). The script
+is deterministic text and is never executed by the tool; like the native writer, its final
+acceptance (the exported FBX importing as a valid humanoid) is the Unity/Blender manual step or
+the Unity-acceptance workflow.
+
 ## The FBX writer
 
 `FbxDocument` (in `avatar-fbx`) retains `fbxcel`'s mutable node `Tree`, applies edits by object id,

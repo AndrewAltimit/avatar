@@ -4,7 +4,7 @@ use std::collections::HashSet;
 use std::path::Path;
 use std::process::ExitCode;
 
-use anyhow::{Result, bail};
+use anyhow::{Context as _, Result, bail};
 use avatar_armature::{RepairPlan, apply_plan, plan_repairs};
 use avatar_fbx::{FbxDocument, FbxScene};
 use clap::{Args, Subcommand};
@@ -36,6 +36,14 @@ pub struct FixArgs {
     /// Emit a machine-readable JSON plan instead of human-readable text.
     #[arg(long)]
     json: bool,
+    /// Also write a headless-Blender Python script here that applies the WHOLE plan — including
+    /// the flagged geometry repairs (reparents, scale/orientation) this tool won't apply natively.
+    /// Run it with `blender --background --python <script>`.
+    #[arg(long, value_name = "SCRIPT.py")]
+    blender_script: Option<std::path::PathBuf>,
+    /// Output FBX path the Blender script exports to (default: `<input>.fixed.fbx`).
+    #[arg(long, value_name = "OUT.fbx", requires = "blender_script")]
+    blender_output: Option<std::path::PathBuf>,
 }
 
 #[derive(Args, Debug)]
@@ -191,6 +199,41 @@ pub fn armature_fix(args: &FixArgs) -> Result<()> {
         println!("{}", serde_json::to_string_pretty(&plan)?);
     } else {
         print_plan(&args.path, &plan);
+    }
+
+    // The Blender-script route covers the whole plan (including the flagged geometry repairs),
+    // so it is independent of -o: emitting a script is not a write to the FBX.
+    if let Some(script_path) = &args.blender_script {
+        let default_out = args.path.with_extension("fixed.fbx");
+        let blender_out = args.blender_output.as_deref().unwrap_or(&default_out);
+        match avatar_armature::blender_script(
+            &plan,
+            &args.path.display().to_string(),
+            &blender_out.display().to_string(),
+        ) {
+            Some(script) => {
+                if script_path.exists() && !args.force {
+                    bail!(
+                        "refusing to overwrite existing file {} (pass --force to overwrite)",
+                        script_path.display()
+                    );
+                }
+                std::fs::write(script_path, script)
+                    .with_context(|| format!("writing {}", script_path.display()))?;
+                if !args.json {
+                    println!(
+                        "\n  wrote Blender repair script {} — run: blender --background --python {}",
+                        script_path.display(),
+                        script_path.display()
+                    );
+                }
+            }
+            None => {
+                if !args.json {
+                    println!("\n  no Blender script written — the plan has no repairs at all");
+                }
+            }
+        }
     }
 
     match &args.output {
