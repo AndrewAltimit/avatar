@@ -66,6 +66,12 @@ pub struct PhysBoneRootSpec {
     /// GameObjects whose (converted) colliders the chain collides with; empty = every collider
     /// converted from a Unity CapsuleCollider.
     pub colliders: Vec<String>,
+    /// Gather the chain's children (the root's children minus `ignore`) under a new empty child
+    /// of the root with this name and root the PhysBone *there*. This is what you want when the
+    /// root is a humanoid bone (`Hips`): the PhysBone then owns only the chain, and colliders that
+    /// live under the humanoid bone (leg capsules) are no longer inside its own hierarchy — which
+    /// VRChat's PhysBone scheduler flags as a cyclic dependency.
+    pub group: Option<String>,
     /// Tuning overrides; `None` = the skirt-ish defaults in [`MigrateOptions::default_skirt`].
     pub pull: Option<f64>,
     pub spring: Option<f64>,
@@ -77,7 +83,7 @@ pub struct PhysBoneRootSpec {
 }
 
 impl PhysBoneRootSpec {
-    /// Parse the CLI form `root|ignore1,ignore2|collider1,collider2` (later parts optional).
+    /// Parse the CLI form `root|ignore1,ignore2|collider1,collider2|group` (later parts optional).
     pub fn parse(s: &str) -> Result<Self> {
         let mut parts = s.split('|');
         let root = parts.next().unwrap_or("").trim().to_string();
@@ -97,6 +103,10 @@ impl PhysBoneRootSpec {
             root,
             ignore: list(parts.next()),
             colliders: list(parts.next()),
+            group: parts
+                .next()
+                .map(|g| g.trim().to_string())
+                .filter(|g| !g.is_empty()),
             pull: None,
             spring: None,
             stiffness: None,
@@ -578,7 +588,7 @@ pub fn migrate(opts: &MigrateOptions) -> Result<MigrationReport> {
             .transform_by_path(&pr.root)
             .with_context(|| format!("PhysBone root '{}'", pr.root))?;
         let go = scene.transforms[&root_t].game_object;
-        let mut ignore = Vec::new();
+        let mut ignore: Vec<i64> = Vec::new();
         for i in &pr.ignore {
             let t = scene
                 .transform_by_path(i)
@@ -610,7 +620,103 @@ pub fn migrate(opts: &MigrateOptions) -> Result<MigrationReport> {
             }
             v
         };
-        let mut spec = MigrateOptions::default_skirt(go, root_t);
+        // The chain roots are the root's remaining *bone-only* children (Transform and nothing
+        // else). Children carrying components — collider holders, renderers, props — are not part
+        // of a chain: they are left in place when grouping and auto-ignored otherwise, so the
+        // simulation never moves a collider or a prop hanging off a humanoid bone.
+        let (chain, non_bone): (Vec<i64>, Vec<i64>) = scene.transforms[&root_t]
+            .children
+            .iter()
+            .copied()
+            .filter(|c| !ignore.contains(c) && !stripped_transforms.contains(c))
+            .partition(|c| {
+                scene
+                    .transforms
+                    .get(c)
+                    .and_then(|t| scene.game_objects.get(&t.game_object))
+                    .is_some_and(|g| g.components.iter().all(|comp| *comp == *c))
+            });
+        if pr.group.is_none() {
+            for nb in &non_bone {
+                if !ignore.contains(nb) {
+                    ignore.push(*nb);
+                }
+            }
+        }
+        if !non_bone.is_empty() {
+            rw.log.push(format!(
+                "PhysBone '{}': left {} component-bearing child(ren) out of the chain ({})",
+                pr.root,
+                non_bone.len(),
+                non_bone
+                    .iter()
+                    .map(|t| scene.name_of_transform(*t).to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
+        }
+        let (pb_go, pb_root, ignore) = match &pr.group {
+            Some(name) => {
+                if chain.is_empty() {
+                    bail!(
+                        "PhysBone root '{}': nothing left to group after ignores",
+                        pr.root
+                    );
+                }
+                let (ggo, gtr) = rw.add_child_game_object(root_t, name)?;
+                for c in &chain {
+                    rw.reparent(*c, gtr)?;
+                }
+                rw.log.push(format!(
+                    "grouped {} chain root(s) under '{}/{name}'",
+                    chain.len(),
+                    scene.path_of(root_t)
+                ));
+                (ggo, 0, Vec::new())
+            }
+            None => (go, root_t, ignore),
+        };
+        // Cyclic-dependency check: a collider inside the PhysBone's own hierarchy. Grouped, the
+        // hierarchy is just the chain; ungrouped it is the whole root subtree minus the ignores.
+        let owned: Vec<i64> = if pr.group.is_some() {
+            chain.iter().flat_map(|c| scene.descendants(*c)).collect()
+        } else {
+            let ignored: Vec<i64> = ignore.iter().flat_map(|i| scene.descendants(*i)).collect();
+            scene
+                .descendants(root_t)
+                .into_iter()
+                .filter(|t| *t != root_t && !ignored.contains(t))
+                .collect()
+        };
+        for c in &colliders {
+            if let Some(ct) = scene.transform_of_component(*c)
+                && owned.contains(&ct)
+            {
+                warnings.push(format!(
+                    "PhysBone on '{}': collider on '{}' is inside the chain's own hierarchy — VRChat reports a cyclic dependency; regroup the chain (`|GROUP` on --physbone) or drop that collider",
+                    pr.root,
+                    scene.path_of(ct)
+                ));
+            }
+        }
+        // Ungrouped on a humanoid root: colliders under the root's ignored children still trip
+        // VRChat's scheduler (it walks the root's full hierarchy), so say so.
+        if pr.group.is_none() {
+            let under_root = scene.descendants(root_t);
+            for c in &colliders {
+                if let Some(ct) = scene.transform_of_component(*c)
+                    && under_root.contains(&ct)
+                    && !owned.contains(&ct)
+                {
+                    warnings.push(format!(
+                        "PhysBone on '{}': collider on '{}' is under the root's hierarchy (an ignored branch) — VRChat's scheduler still reports a cyclic dependency; regroup the chain with `|GROUP` on --physbone",
+                        pr.root,
+                        scene.path_of(ct)
+                    ));
+                }
+            }
+        }
+        let mut spec = MigrateOptions::default_skirt(pb_go, pb_root);
         spec.ignore_transforms = ignore;
         spec.colliders = colliders;
         if let Some(v) = pr.pull {
@@ -635,7 +741,7 @@ pub fn migrate(opts: &MigrateOptions) -> Result<MigrationReport> {
             spec.max_angle_x = v;
         }
         let id = rw.add_component(
-            go,
+            pb_go,
             MONO_BEHAVIOUR,
             &spec.to_body(),
             &format!("physbone/{}", pr.root),
@@ -644,11 +750,17 @@ pub fn migrate(opts: &MigrateOptions) -> Result<MigrationReport> {
             .push(format!("added VRCPhysBone chain rooted at '{}'", pr.root));
         added.push(ComponentChange {
             what: format!(
-                "VRCPhysBone chain (ignoring {} children, {} colliders)",
-                spec.ignore_transforms.len(),
+                "VRCPhysBone chain ({}, {} colliders)",
+                match &pr.group {
+                    Some(g) => format!("chain regrouped under '{g}'"),
+                    None => format!("ignoring {} children", spec.ignore_transforms.len()),
+                },
                 spec.colliders.len()
             ),
-            object_path: scene.path_of(root_t),
+            object_path: match &pr.group {
+                Some(g) => format!("{}/{g}", scene.path_of(root_t)),
+                None => scene.path_of(root_t),
+            },
             file_id: id,
         });
     }

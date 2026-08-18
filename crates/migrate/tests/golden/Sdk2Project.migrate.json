@@ -2,8 +2,8 @@
   "added": [
     {
       "file_id": 8120638631262054030,
-      "object_path": "Armature/Hips",
-      "what": "VRCPhysBone chain (ignoring 2 children, 1 colliders)"
+      "object_path": "Armature/Hips/Skirt",
+      "what": "VRCPhysBone chain (chain regrouped under 'Skirt', 1 colliders)"
     }
   ],
   "assets_copied": 14,
@@ -238,6 +238,8 @@
     "CapsuleCollider -> VRCPhysBoneCollider on 'Armature/Hips/Left leg/L cap'",
     "DynamicBoneCollider -> VRCPhysBoneCollider on 'Armature/Hips/Spine/Head'",
     "DynamicBone -> VRCPhysBone on 'Armature/Hips/Spine/Head/Hair'",
+    "added empty GameObject 'Skirt' under 'Armature/Hips'",
+    "grouped 1 chain root(s) under 'Armature/Hips/Skirt'",
     "added VRCPhysBone chain rooted at 'Hips'",
     "VRC_AvatarDescriptor (SDK2) -> VRCAvatarDescriptor (SDK3)",
     "PipelineManager -> SDK3 PipelineManager (blueprint cleared)"

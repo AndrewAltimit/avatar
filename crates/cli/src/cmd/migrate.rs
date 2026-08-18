@@ -38,9 +38,12 @@ pub struct MigrateSdk3Args {
     /// Retype Unity `CapsuleCollider`s (Cloth support) as `VRCPhysBoneCollider`s.
     #[arg(long)]
     capsules_to_physbone_colliders: bool,
-    /// Add a PhysBone chain: `ROOT|IGNORE1,IGNORE2|COLLIDER_OBJ1,COLLIDER_OBJ2` (names or
-    /// paths; ignore/collider parts optional — no collider list = every converted capsule).
-    /// Repeatable. Example: `Hips|Spine,Left leg,Right leg` for a skirt hanging off Hips.
+    /// Add a PhysBone chain: `ROOT|IGNORE1,IGNORE2|COLLIDER_OBJ1,COLLIDER_OBJ2|GROUP` (names or
+    /// paths; later parts optional — no collider list = every converted capsule). With `GROUP`,
+    /// the chain's bone-only children are gathered under a new empty child of ROOT with that
+    /// name and the PhysBone is rooted there — the right shape for a skirt on `Hips`, whose leg
+    /// colliders would otherwise sit inside the PhysBone's own hierarchy (a VRChat "cyclic
+    /// dependency"). Repeatable. Example: `Hips|Spine,Left leg,Right leg|L cap,R cap|SkirtRoot`.
     #[arg(long = "physbone", value_name = "SPEC")]
     physbones: Vec<String>,
     /// Eye bones as `LEFT,RIGHT` (names or paths) — enables SDK3 eye look derived from the rig.

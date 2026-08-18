@@ -329,7 +329,6 @@ Transform:
 GameObject:
   m_Component:
   - component: {fileID: 402}
-  - component: {fileID: 8120638631262054030}
   m_Name: Hips
   m_IsActive: 1
 --- !u!4 &402
@@ -341,7 +340,7 @@ Transform:
   m_Children:
   - {fileID: 403}
   - {fileID: 410}
-  - {fileID: 412}
+  - {fileID: 9060632056042483034}
   m_Father: {fileID: 401}
 --- !u!1 &103
 GameObject:
@@ -688,7 +687,7 @@ Transform:
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_Children:
   - {fileID: 413}
-  m_Father: {fileID: 402}
+  m_Father: {fileID: 9060632056042483034}
 --- !u!1 &113
 GameObject:
   m_Component:
@@ -768,13 +767,45 @@ Transform:
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_Children: []
   m_Father: {fileID: 404}
+--- !u!1 &6306902950879683274
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 9060632056042483034}
+  - component: {fileID: 8120638631262054030}
+  m_Layer: 0
+  m_Name: Skirt
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &9060632056042483034
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6306902950879683274}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_Children:
+  - {fileID: 412}
+  m_Father: {fileID: 402}
+  m_RootOrder: 4
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &8120638631262054030
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 102}
+  m_GameObject: {fileID: 6306902950879683274}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 1661641543, guid: 2a2c05204084d904aa4945ccff20d8e5, type: 3}
@@ -790,10 +821,8 @@ MonoBehaviour:
   foldout_gizmos: 0
   version: 1
   integrationType: 0
-  rootTransform: {fileID: 402}
-  ignoreTransforms:
-  - {fileID: 403}
-  - {fileID: 410}
+  rootTransform: {fileID: 0}
+  ignoreTransforms: []
   endpointPosition: {x: 0, y: 0, z: 0}
   multiChildType: 0
   pull: 0.25

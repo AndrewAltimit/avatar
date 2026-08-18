@@ -162,6 +162,102 @@ impl PrefabRewriter {
         Ok(id)
     }
 
+    /// Create a new, empty GameObject named `name` as the last child of Transform `parent`
+    /// (identity local transform). Returns `(game_object_id, transform_id)`.
+    pub fn add_child_game_object(&mut self, parent: i64, name: &str) -> Result<(i64, i64)> {
+        let parent_tr = self
+            .scene
+            .transforms
+            .get(&parent)
+            .with_context(|| format!("no Transform {parent}"))?;
+        let root_order = parent_tr.children.len();
+        let mut go_id = derive_file_id(&format!("go/{name}/{parent}"));
+        while self.file.doc_by_file_id(go_id).is_some() {
+            go_id += 1;
+        }
+        let mut tr_id = derive_file_id(&format!("transform/{name}/{parent}"));
+        while self.file.doc_by_file_id(tr_id).is_some() || tr_id == go_id {
+            tr_id += 1;
+        }
+        let go_body = format!(
+            "GameObject:\n  m_ObjectHideFlags: 0\n  m_CorrespondingSourceObject: {{fileID: 0}}\n  m_PrefabInstance: {{fileID: 0}}\n  m_PrefabAsset: {{fileID: 0}}\n  serializedVersion: 6\n  m_Component:\n  - component: {{fileID: {tr_id}}}\n  m_Layer: 0\n  m_Name: {name}\n  m_TagString: Untagged\n  m_Icon: {{fileID: 0}}\n  m_NavMeshLayer: 0\n  m_StaticEditorFlags: 0\n  m_IsActive: 1\n"
+        );
+        let tr_body = format!(
+            "Transform:\n  m_ObjectHideFlags: 0\n  m_CorrespondingSourceObject: {{fileID: 0}}\n  m_PrefabInstance: {{fileID: 0}}\n  m_PrefabAsset: {{fileID: 0}}\n  m_GameObject: {{fileID: {go_id}}}\n  m_LocalRotation: {{x: 0, y: 0, z: 0, w: 1}}\n  m_LocalPosition: {{x: 0, y: 0, z: 0}}\n  m_LocalScale: {{x: 1, y: 1, z: 1}}\n  m_Children: []\n  m_Father: {{fileID: {parent}}}\n  m_RootOrder: {root_order}\n  m_LocalEulerAnglesHint: {{x: 0, y: 0, z: 0}}\n"
+        );
+        self.file.append_document(1, go_id, &go_body)?;
+        self.file.append_document(4, tr_id, &tr_body)?;
+        let pidx = self.doc(parent)?;
+        self.file.append_sequence_item(
+            pidx,
+            &parse_path("m_Children"),
+            &format!("{{fileID: {tr_id}}}"),
+        )?;
+        // Keep the snapshot usable for later ops on the new objects.
+        self.scene.transforms.insert(
+            tr_id,
+            crate::scene::Transform {
+                file_id: tr_id,
+                game_object: go_id,
+                parent,
+                children: Vec::new(),
+                local: crate::math::Trs::default(),
+            },
+        );
+        self.scene.game_objects.insert(
+            go_id,
+            crate::scene::GameObject {
+                file_id: go_id,
+                name: name.to_string(),
+                transform: tr_id,
+                components: vec![tr_id],
+                active: true,
+            },
+        );
+        if let Some(p) = self.scene.transforms.get_mut(&parent) {
+            p.children.push(tr_id);
+        }
+        self.log.push(format!(
+            "added empty GameObject '{name}' under '{}'",
+            self.scene.path_of(parent)
+        ));
+        Ok((go_id, tr_id))
+    }
+
+    /// Move Transform `transform` under `new_parent` (appended as its last child), keeping its
+    /// *local* transform — so the caller wants a new parent whose local pose is identity relative
+    /// to the old one, or accepts the world-space change.
+    pub fn reparent(&mut self, transform: i64, new_parent: i64) -> Result<()> {
+        let old_parent = self
+            .scene
+            .transforms
+            .get(&transform)
+            .with_context(|| format!("no Transform {transform}"))?
+            .parent;
+        if old_parent != 0 {
+            self.remove_list_ref(old_parent, "m_Children", transform)?;
+        }
+        let pidx = self.doc(new_parent)?;
+        self.file.append_sequence_item(
+            pidx,
+            &parse_path("m_Children"),
+            &format!("{{fileID: {transform}}}"),
+        )?;
+        let tidx = self.doc(transform)?;
+        self.file
+            .set_reference(tidx, &parse_path("m_Father"), new_parent, None, 0)?;
+        if let Some(op) = self.scene.transforms.get_mut(&old_parent) {
+            op.children.retain(|c| *c != transform);
+        }
+        if let Some(np) = self.scene.transforms.get_mut(&new_parent) {
+            np.children.push(transform);
+        }
+        if let Some(t) = self.scene.transforms.get_mut(&transform) {
+            t.parent = new_parent;
+        }
+        Ok(())
+    }
+
     /// Set a scalar field on document `file_id` (e.g. `m_ApplyRootMotion` = 0).
     pub fn set_scalar(&mut self, file_id: i64, path: &str, value: Scalar) -> Result<()> {
         let idx = self.doc(file_id)?;
@@ -317,6 +413,33 @@ Transform:
         // Hips untouched.
         assert!(t.contains("m_Name: Hips"));
         UnityFile::parse(t).unwrap();
+    }
+
+    #[test]
+    fn add_child_and_reparent_keep_lists_consistent() {
+        let mut rw = PrefabRewriter::new(PREFAB).unwrap();
+        // Group Hips (402) under a new child of the root (400).
+        let (go, tr) = rw.add_child_game_object(400, "Group").unwrap();
+        assert!(rw.text().contains(&format!("--- !u!1 &{go}\nGameObject:")));
+        assert!(rw.text().contains("  m_Name: Group\n"));
+        assert!(rw.text().contains(&format!(
+            "  - {{fileID: 402}}\n  - {{fileID: {tr}}}\n  m_Father: {{fileID: 0}}\n"
+        )));
+        rw.reparent(402, tr).unwrap();
+        // Root's children: 401 (Vest) then the group; Hips now under the group.
+        assert!(rw.text().contains(&format!(
+            "  m_Children:\n  - {{fileID: 401}}\n  - {{fileID: {tr}}}\n  m_Father: {{fileID: 0}}\n"
+        )));
+        assert!(
+            rw.text()
+                .contains("  m_Children:\n  - {fileID: 402}\n  m_Father: {fileID: 400}\n")
+        );
+        assert!(
+            rw.text()
+                .contains(&format!("  m_Children: []\n  m_Father: {{fileID: {tr}}}\n"))
+        );
+        assert_eq!(rw.scene().path_of(402), "Group/Hips");
+        UnityFile::parse(rw.text()).unwrap();
     }
 
     #[test]

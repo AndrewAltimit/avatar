@@ -31,7 +31,7 @@ fn options(out: &Path) -> MigrateOptions {
     opts.strip = vec!["Vest".into()];
     opts.drop_cloth = true;
     opts.capsules_to_physbone_colliders = true;
-    opts.physbone_roots = vec![PhysBoneRootSpec::parse("Hips|Spine,Left leg").unwrap()];
+    opts.physbone_roots = vec![PhysBoneRootSpec::parse("Hips|Spine,Left leg|L cap|Skirt").unwrap()];
     opts.eye_bones = Some(("Eye_L".into(), "Eye_R".into()));
     opts.relink_locked_shaders = true;
     opts
@@ -139,6 +139,41 @@ fn golden_sdk2_project_migration() {
         "vest subtree stripped"
     );
     assert!(prefab.contains("m_ApplyRootMotion: 0"));
+    // The skirt chain was regrouped: a new 'Skirt' object under Hips owns Skirt_0, and the
+    // PhysBone sits on it with no ignore list (its collider is on the leg, outside the chain).
+    let out_file = UnityFile::parse(&prefab).unwrap();
+    let skirt_go = out_file
+        .documents
+        .iter()
+        .find(|d| d.class_id == 1 && d.name() == Some("Skirt"))
+        .expect("Skirt group object");
+    let skirt_tr = skirt_go.body["m_Component"][0]["component"]["fileID"]
+        .as_i64()
+        .unwrap();
+    let skirt_0 = out_file
+        .documents
+        .iter()
+        .find(|d| d.class_id == 4 && d.body["m_GameObject"]["fileID"].as_i64() == Some(112))
+        .unwrap();
+    assert_eq!(skirt_0.body["m_Father"]["fileID"].as_i64(), Some(skirt_tr));
+    let skirt_pb = out_file
+        .documents
+        .iter()
+        .find(|d| {
+            d.class_id == 114
+                && d.body["m_Script"]["fileID"].as_i64() == Some(1661641543)
+                && d.body["m_GameObject"]["fileID"].as_i64() == Some(skirt_go.file_id)
+        })
+        .expect("PhysBone on the Skirt group");
+    assert_eq!(
+        skirt_pb.body["ignoreTransforms"].as_vec().map(Vec::len),
+        Some(0)
+    );
+    assert!(
+        report.warnings.iter().all(|w| !w.contains("cyclic")),
+        "{:?}",
+        report.warnings
+    );
     // Untouched objects are byte-identical to the source.
     let src = fs::read_to_string(corpus("projects/Sdk2Project/Assets/Avatar.prefab")).unwrap();
     let hair_1 = "--- !u!4 &408\nTransform:\n  m_GameObject: {fileID: 108}\n";
@@ -208,4 +243,21 @@ fn unknown_strip_target_is_an_error() {
     opts.dry_run = true;
     let err = format!("{:#}", migrate(&opts).unwrap_err());
     assert!(err.contains("NoSuchObject"), "{err}");
+}
+
+#[test]
+fn ungrouped_chain_with_collider_under_the_root_warns_about_the_cycle() {
+    let out = fresh_out_dir("cycle");
+    let mut opts = options(&out);
+    opts.physbone_roots = vec![PhysBoneRootSpec::parse("Hips|Spine,Left leg|L cap").unwrap()];
+    opts.dry_run = true;
+    let report = migrate(&opts).expect("dry run");
+    assert!(
+        report
+            .warnings
+            .iter()
+            .any(|w| w.contains("cyclic dependency")),
+        "{:?}",
+        report.warnings
+    );
 }

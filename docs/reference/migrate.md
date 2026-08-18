@@ -10,7 +10,7 @@ error-prone Unity session. Everything except the final Unity/VCC open + SDK uplo
 ```sh
 avatar migrate sdk3 <extracted-project> -o <out-dir> --name MyAvatar \
   --strip BhapticsVRC_Vest --drop-cloth --capsules-to-physbone-colliders \
-  --physbone "Hips|Spine,Left leg,Right leg,ButtTail1|L cap,R cap" \
+  --physbone "Hips|Spine,Left leg,Right leg,ButtTail1|L cap,R cap|SkirtRoot" \
   --eyes "Eye_L,Eye_R" --exclude Assets/Bhaptics --exclude Assets/Avatar/DynamicBone \
   --vpm-package com.poiyomi.toon-9.3.64.zip --relink-locked-shaders [--dry-run] [--json]
 ```
@@ -26,7 +26,7 @@ avatar migrate sdk3 <extracted-project> -o <out-dir> --name MyAvatar \
 | `DynamicBoneCollider` | `VRCPhysBoneCollider` | Retyped in place: capsule if `height > 2·radius` else sphere; `m_Direction` X → 90° about local Z, Z → 90° about local X; `insideBounds` from `m_Bound`; `bonesAsSpheres: 1`. Because fileIDs are kept, converted PhysBones' `colliders` lists resolve without rewriting. |
 | Unity `Cloth` (`--drop-cloth`) | — | Removed; the mesh falls back to its skinning. |
 | Unity `CapsuleCollider` (`--capsules-to-physbone-colliders`) | `VRCPhysBoneCollider` (capsule) | Retyped in place (class 136 → 114). One that shares a GameObject with a DynamicBoneCollider is removed instead (the DBC conversion covers it). |
-| — (`--physbone ROOT|IGNORE…|COLLIDERS…`) | new `VRCPhysBone` | Added on `ROOT` (`multiChildType: Ignore`, so a humanoid root like `Hips` stays put), `ignoreTransforms` = the named children (the humanoid chains), `colliders` = the named objects' converted colliders (default: every converted capsule). Skirt-ish defaults: pull 0.25, spring 0.5, stiffness 0.15, gravity 0.03 (falloff 0.5), immobile 0.3 (world), radius 0.03, Angle limit 55°, no grab/pose. |
+| — (`--physbone ROOT|IGNORE…|COLLIDERS…|GROUP`) | new `VRCPhysBone` | The chain roots are `ROOT`'s remaining **bone-only** children (children carrying components — collider holders, props — are never simulated: left in place when grouping, auto-ignored otherwise). With `GROUP`, a new empty child of `ROOT` named so is created, the chain roots are re-parented under it (identity local pose, so nothing moves; skinning references bones by fileID, so it is unaffected) and the PhysBone is rooted **there** with no ignore list. Without it, the PhysBone sits on `ROOT` (`multiChildType: Ignore`) with `ignoreTransforms` = the ignored + component-bearing children — but if any collider lives under `ROOT` (leg capsules under `Hips`), VRChat's PhysBone scheduler reports a **cyclic dependency**, so the tool warns and you should use `GROUP`. `colliders` = the named objects' converted colliders (default: every converted capsule). Skirt-ish defaults: pull 0.25, spring 0.5, stiffness 0.15, gravity 0.03 (falloff 0.5), immobile 0.3 (world), radius 0.03, Angle limit 55°, no grab/pose. |
 | `--strip NAME` subtrees | — | Every GameObject/Transform/component under it removed and the parent's `m_Children` entry dropped (a haptics vest with cameras and its own Animator, say). |
 | `CustomStandingAnims` gesture slots | FX layer | See *FX*, below. |
 | `CustomStandingAnims` locomotion / emote slots, `CustomSittingAnims` | — | **Reported, not migrated.** SDK3 Base/Action/Sitting layers are a different design (blend trees, root-motion-free locomotion) and an SDK2 idle/walk/prone clip dropped into them is the source of the drift bugs the migration exists to remove. |
