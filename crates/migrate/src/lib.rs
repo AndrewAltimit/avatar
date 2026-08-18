@@ -301,6 +301,20 @@ pub fn migrate(opts: &MigrateOptions) -> Result<MigrationReport> {
             .is_some_and(|g| stripped_transforms.contains(&g.transform))
     };
 
+    // ---- 1b. Root GameObject name: SDK2's upload pipeline leaves `prefab-id-v1_avtr_…`; the
+    // migrated avatar is named after itself.
+    if root_name != opts.avatar_name {
+        rw.set_scalar(
+            sdk2.root_game_object,
+            "m_Name",
+            Scalar::Str(&opts.avatar_name),
+        )?;
+        rw.log.push(format!(
+            "renamed root '{}' -> '{}'",
+            root_name, opts.avatar_name
+        ));
+    }
+
     // ---- 2. Animator: root motion off, controller cleared
     match &sdk2.animator {
         Some(a) => {

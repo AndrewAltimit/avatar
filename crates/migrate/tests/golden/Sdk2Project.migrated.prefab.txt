@@ -8,7 +8,7 @@ GameObject:
   - component: {fileID: 9500}
   - component: {fileID: 11400}
   - component: {fileID: 11401}
-  m_Name: MikuFixture
+  m_Name: Fixture
   m_IsActive: 1
 --- !u!4 &400
 Transform:

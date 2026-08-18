@@ -230,6 +230,7 @@
   "output_project": "<out>",
   "prefab_log": [
     "stripped subtree 'Vest' (6 objects)",
+    "renamed root 'MikuFixture' -> 'Fixture'",
     "removed Cloth from 'skirt'",
     "CapsuleCollider -> VRCPhysBoneCollider on 'Armature/Hips/Left leg/L cap'",
     "DynamicBoneCollider -> VRCPhysBoneCollider on 'Armature/Hips/Spine/Head'",
