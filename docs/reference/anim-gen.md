@@ -161,10 +161,15 @@ println!("{}", tree.wiring_note(110600000));
 no internal fileID graph, so generation is a single-document emit (`expressions` module). The
 contract points:
 
-- **Script GUIDs.** `m_Script` points at the SDK script. The SDK's GUIDs have been stable since
-  SDK3 launched; `VRC_EXPRESSION_PARAMETERS_SCRIPT_GUID` / `VRC_EXPRESSIONS_MENU_SCRIPT_GUID` are
-  the defaults and `.script_guid(g)` (CLI `--script-guid`) overrides them — a future SDK relocation
-  is a flag, not a code change (`PLAN.md` risk 3).
+- **Script references.** `m_Script` points at the SDK class. Both classes are compiled into the
+  SDK's `VRCSDK3A.dll` (GUID `67cc4cb7839cd3741b63733d5adf0442`), so the reference is
+  `{fileID: <class hash>, guid: <dll guid>, type: 3}` — `-1506855854` for `VRCExpressionParameters`,
+  `-340790334` for `VRCExpressionsMenu` (read off the SDK's own `DefaultExpressionParameters.asset`
+  / `DefaultExpressionsMenu.asset` in `com.vrchat.avatars` 3.10.4; stable since SDK3 launched).
+  `VRC_EXPRESSION_PARAMETERS_SCRIPT` / `VRC_EXPRESSIONS_MENU_SCRIPT` are the defaults;
+  `.script(ScriptRef)` overrides both halves and `.script_guid(g)` (CLI `--script-guid`) treats
+  the override as a loose `.cs` script (`11500000`) — a future SDK relocation is a flag, not a
+  code change (`PLAN.md` risk 3).
 - **Main-object fileID.** Both emit at Unity's ScriptableObject convention `&11400000`
   (`EXPRESSIONS_MAIN_FILE_ID`), which cross-asset references (`expressionsMenu:` on the descriptor,
   `subMenu:` on a control) expect.
@@ -245,7 +250,8 @@ accidentally collide if later combined), and the counter guarantees uniqueness w
 
 The canonical fixed ids Unity uses for sub-asset references are reproduced where they are
 load-bearing: a `.anim`'s AnimationClip is referenced from a blend tree as local fileID `7400000`,
-and a MonoBehaviour script as `11500000`.
+and a loose `.cs` MonoBehaviour script as `11500000` (a class inside a DLL uses Unity's per-class
+hash instead — see the expression assets above).
 
 ## How the YAML is emitted
 

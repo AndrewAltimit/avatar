@@ -110,7 +110,8 @@ pub struct ParamsArgs {
     /// Repeatable.
     #[arg(long = "param", value_name = "SPEC", required = true)]
     params: Vec<String>,
-    /// Override the SDK `VRCExpressionParameters` script GUID.
+    /// Override the SDK `VRCExpressionParameters` script GUID (treated as a loose `.cs` script,
+    /// fileID 11500000; the default is the class inside `VRCSDK3A.dll`).
     #[arg(long)]
     script_guid: Option<String>,
     /// Write the generated `.asset` YAML here instead of stdout.
@@ -141,7 +142,8 @@ pub struct MenuArgs {
     /// A sub-menu control as `LABEL:GUID` (the child menu asset's guid). Repeatable.
     #[arg(long = "submenu", value_name = "LABEL:GUID")]
     submenus: Vec<String>,
-    /// Override the SDK `VRCExpressionsMenu` script GUID.
+    /// Override the SDK `VRCExpressionsMenu` script GUID (treated as a loose `.cs` script,
+    /// fileID 11500000; the default is the class inside `VRCSDK3A.dll`).
     #[arg(long)]
     script_guid: Option<String>,
     /// Write the generated `.asset` YAML here instead of stdout.

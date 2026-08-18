@@ -43,6 +43,7 @@ pub use controller::{
 };
 pub use expressions::{
     ExpressionParamSpec, ExpressionParams, ExpressionValueType, ExpressionsMenu, MenuControlSpec,
+    ScriptRef, VRC_EXPRESSION_PARAMETERS_SCRIPT, VRC_EXPRESSIONS_MENU_SCRIPT, VRCSDK3A_DLL_GUID,
 };
 pub use gesture::{GESTURE_NAMES, GestureHand, fx_gestures};
 pub use toggle::{GeneratedFile, ToggleBundle, ToggleSpec, ToggleTarget, generate_toggle};
