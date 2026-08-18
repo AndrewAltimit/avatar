@@ -29,6 +29,7 @@ VRChat upload step is not. For what's built and the roadmap, see [Status](#statu
 | [`docs/reference/anim-gen.md`](docs/reference/anim-gen.md) | `avatar-anim-gen`: `.anim` clip + analog-gesture blend-tree + FX `AnimatorController` generation (Unity-YAML emitter, deterministic fileIDs). |
 | [`docs/reference/unity-yaml-edit.md`](docs/reference/unity-yaml-edit.md) | `EditableUnityFile` / `avatar asset set`: surgical, round-trip-safe value **and structural** edits to an *existing* Unity asset by span-splicing raw text (fileIDs/refs/key-order/formatting preserved). |
 | [`docs/reference/migrate.md`](docs/reference/migrate.md) | `avatar-migrate` / `avatar migrate sdk3`: SDK2 → SDK3 migration — descriptor/PipelineManager retyped in place, DynamicBone → PhysBone by the SDK's own rules, Cloth → PhysBone skirt, subtree stripping, gesture overrides → FX layer, rig-derived eye look, output project layout, script references, limits. |
+| [`docs/reference/physbone.md`](docs/reference/physbone.md) | `avatar physbone list|set|split|stretch`: inspect + retune a prefab's `VRCPhysBone`s in place (values, per-chain curves, split chains onto own components, stretch chain offsets for a longer skirt/tail) + the `avatar render --stretch` preview. |
 | [`docs/reference/osc-runtime.md`](docs/reference/osc-runtime.md) | `avatar-osc`: VRChat OSC address space, codec, UDP client, OSCQuery avatar-config parsing; the analog-gesture daemon. |
 | [`docs/reference/unitypackage.md`](docs/reference/unitypackage.md) | `avatar-unitypackage`: reading the `.unitypackage` format, extracting to a Unity project tree, the avatar-in-world co-import testbed. |
 | [`docs/reference/render.md`](docs/reference/render.md) | `avatar-render` / `avatar render` + `avatar view`: offscreen wgpu preview pipeline, avatar rest-pose render (auto-upright), world-scene render, avatar-dropped-at-spawn-in-world, interactive winit viewer (orbit/zoom/walk) + limits. |
@@ -149,14 +150,17 @@ READMEs. What exists today, with its doc:
   `--strip` subtrees, gesture overrides → an either-hand FX layer, rig-derived eye look + blink) and
   assembles a VCC-openable project around it (`--vpm-package` bundles e.g. a shader package,
   `--relink-locked-shaders` re-points locked materials at their original shader); `--dry-run` / `--json`
-  ([`migrate.md`](docs/reference/migrate.md)).
+  ([`migrate.md`](docs/reference/migrate.md)). Post-migration **PhysBone tuning** — `avatar physbone
+  list|set|split|stretch` (typed `PhysBoneSpec` read-back + re-render, per-chain curves, split
+  chains onto own components, chain stretch for a longer skirt; `avatar render --stretch` previews
+  the stretch on the FBX) ([`physbone.md`](docs/reference/physbone.md)).
 - **OSC runtime (M5)** — `avatar osc send|input|monitor|change|query` + the analog-gesture daemon
   `avatar osc gestures` ([`osc-runtime.md`](docs/reference/osc-runtime.md)).
 - **Packaging / preview** — `avatar unitypackage info|list|extract|testbed`
   ([`unitypackage.md`](docs/reference/unitypackage.md)); `avatar render` / `avatar view` wgpu preview
   ([`render.md`](docs/reference/render.md)).
 - **Agent surface** — `--json` across the read/generate commands, `avatar schema`, and `avatar mcp
-  serve` (non-writing MCP server incl. text-returning `avatar_gen_*` generation tools,
+  serve` (non-writing MCP server incl. `avatar_physbone_list` and text-returning `avatar_gen_*` generation tools,
   [`mcp.md`](docs/reference/mcp.md)). Disk writes/repairs stay on the CLI behind a dry-run-safe
   `WriteGuard`.
 - **Runtime rig** — `mesh`/`pose`/`input` + `gltf`, the renderer-agnostic VR-spectator foundation

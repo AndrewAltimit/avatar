@@ -261,3 +261,104 @@ fn ungrouped_chain_with_collider_under_the_root_warns_about_the_cycle() {
         report.warnings
     );
 }
+
+/// Post-migration PhysBone work over the migrated fixture prefab: `list` (pinned), then `split`
+/// the bang chain off the hair component, retune the pigtail with per-chain curves, and stretch
+/// the skirt — the state after is pinned too, and everything untouched stays byte-identical.
+#[test]
+fn golden_physbone_list_split_set_stretch() {
+    use avatar_migrate::physbone::{self, Tuning};
+    use avatar_migrate::rewrite::PrefabRewriter;
+    use avatar_migrate::sdk3::{Curve, LimitType};
+
+    let out = fresh_out_dir("physbone");
+    let opts = options(&out);
+    migrate(&opts).expect("migration runs");
+    let prefab_path = out.join("Assets/Fixture_SDK3/Fixture.prefab");
+    let prefab = fs::read_to_string(&prefab_path).unwrap();
+    let mut rw = PrefabRewriter::new(&prefab).unwrap();
+
+    // ---- before
+    let before = physbone::list(rw.scene());
+    assert_eq!(before.len(), 2, "hair + skirt");
+    let hair = physbone::find(rw.scene(), "Hair").unwrap();
+    assert_eq!(hair, 11407, "the DynamicBone's fileID is kept");
+    let skirt = physbone::find(rw.scene(), "Skirt").unwrap();
+    golden::assert_json(
+        "tests/golden/Sdk2Project.physbones.json",
+        &serde_json::to_value(&before).unwrap(),
+    );
+
+    // ---- split the bang off, then calm the pigtail with curves, then lengthen the skirt
+    let split = physbone::split(
+        &mut rw,
+        hair,
+        &["Bang".into()],
+        &Tuning {
+            gravity: Some(0.0),
+            max_angle_x: Some(30.0),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(split.len(), 1);
+    assert_eq!(split[0].path, "Armature/Hips/Spine/Head/Hair/Bang");
+    let tuned = physbone::set(
+        &mut rw,
+        hair,
+        &Tuning {
+            pull: Some(0.3),
+            pull_curve: Some(Curve::parse("0:0.6,1:1").unwrap()),
+            spring: Some(0.3),
+            spring_curve: Some(Curve::parse("0:1,1:0.5").unwrap()),
+            stiffness: Some(0.2),
+            gravity: Some(0.15),
+            immobile: Some(0.4),
+            limit_type: Some(LimitType::Angle),
+            max_angle_x: Some(60.0),
+            ..Default::default()
+        },
+        &[],
+        &[],
+        &[],
+        &[],
+    )
+    .unwrap();
+    assert_eq!(tuned.ignore, vec!["Armature/Hips/Spine/Head/Hair/Bang"]);
+    assert_eq!(
+        tuned.chains.len(),
+        1,
+        "only the pigtail remains on the hair component"
+    );
+    let stretched = physbone::stretch(&mut rw, skirt, 1.5, 2).unwrap();
+    assert_eq!(
+        stretched.bones.len(),
+        1,
+        "Skirt_1 moves; Skirt_0 is the hinge"
+    );
+    // The chain is Skirt(group) -> Skirt_0 -> Skirt_1; only the Skirt_0 -> Skirt_1 offset
+    // (0.15 x the 0.75 root scale) grows, by half of itself.
+    let (_, b, a) = &stretched.chains[0];
+    assert!((a - b - 0.5 * 0.15 * 0.75).abs() < 1e-6, "{b} -> {a}");
+
+    // ---- after: re-parse the written text
+    let text = rw.into_string();
+    let after_rw = PrefabRewriter::new(&text).unwrap();
+    let after = physbone::list(after_rw.scene());
+    assert_eq!(after.len(), 3);
+    golden::assert_json(
+        "tests/golden/Sdk2Project.physbones.tuned.json",
+        &serde_json::to_value(&after).unwrap(),
+    );
+    // Untouched documents survive byte-for-byte (the descriptor, the pipeline manager, a bone).
+    let file = UnityFile::parse(&text).unwrap();
+    assert!(file.documents.iter().any(
+        |d| d.file_id == 542108242 || d.body["m_Script"]["fileID"].as_i64() == Some(542108242)
+    ));
+    let hair_2 = "--- !u!4 &409\nTransform:\n  m_GameObject: {fileID: 109}\n";
+    assert!(prefab.contains(hair_2) && text.contains(hair_2));
+    // The pull curve landed as linear keys.
+    assert!(text.contains("  pullCurve:\n    serializedVersion: 2\n    m_Curve:\n    - serializedVersion: 3\n      time: 0\n      value: 0.6\n      inSlope: 0.4\n      outSlope: 0.4\n"));
+
+    let _ = fs::remove_dir_all(&out);
+}

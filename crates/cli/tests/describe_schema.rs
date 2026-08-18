@@ -95,6 +95,7 @@ fn schema_lists_available_names() {
         "armature",
         "fbx-inspect",
         "migrate",
+        "physbone",
     ] {
         assert!(out.contains(name), "lists schema '{name}'");
     }
@@ -109,6 +110,7 @@ fn schema_emits_valid_json_schema_per_type() {
         "armature",
         "fbx-inspect",
         "migrate",
+        "physbone",
     ] {
         let (code, out) = run(&["schema", name]);
         assert_eq!(code, 0, "schema {name} exits 0");

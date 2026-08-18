@@ -340,7 +340,7 @@ Transform:
   m_Children:
   - {fileID: 403}
   - {fileID: 410}
-  - {fileID: 9060632056042483034}
+  - {fileID: 1060632056042483034}
   m_Father: {fileID: 401}
 --- !u!1 &103
 GameObject:
@@ -439,6 +439,7 @@ Transform:
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_Children:
   - {fileID: 408}
+  - {fileID: 433}
   m_Father: {fileID: 404}
 --- !u!114 &11407
 MonoBehaviour:
@@ -487,7 +488,7 @@ MonoBehaviour:
     m_PreInfinity: 2
     m_PostInfinity: 2
     m_RotationOrder: 4
-  gravity: 0.05
+  gravity: 0.052230828
   gravityCurve:
     serializedVersion: 2
     m_Curve: []
@@ -623,6 +624,35 @@ Transform:
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_Children: []
   m_Father: {fileID: 408}
+--- !u!1 &133
+GameObject:
+  m_Component:
+  - component: {fileID: 433}
+  m_Name: Bang
+  m_IsActive: 1
+--- !u!4 &433
+Transform:
+  m_GameObject: {fileID: 133}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0.05, y: 0.05, z: 0.15}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_Children:
+  - {fileID: 434}
+  m_Father: {fileID: 407}
+--- !u!1 &134
+GameObject:
+  m_Component:
+  - component: {fileID: 434}
+  m_Name: Bang_2
+  m_IsActive: 1
+--- !u!4 &434
+Transform:
+  m_GameObject: {fileID: 134}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: -0.2, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_Children: []
+  m_Father: {fileID: 433}
 --- !u!1 &110
 GameObject:
   m_Component:
@@ -687,7 +717,7 @@ Transform:
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_Children:
   - {fileID: 413}
-  m_Father: {fileID: 9060632056042483034}
+  m_Father: {fileID: 1060632056042483034}
 --- !u!1 &113
 GameObject:
   m_Component:
@@ -775,7 +805,7 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 9060632056042483034}
+  - component: {fileID: 1060632056042483034}
   - component: {fileID: 8120638631262054030}
   m_Layer: 0
   m_Name: Skirt
@@ -784,7 +814,7 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!4 &9060632056042483034
+--- !u!4 &1060632056042483034
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}

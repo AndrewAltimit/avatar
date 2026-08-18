@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Result, bail};
 use clap::Args;
 
+use crate::render_scene::BoneStretch;
 use crate::{render_scene, texture};
 
 #[derive(Args, Debug)]
@@ -31,6 +32,11 @@ pub struct ViewArgs {
     /// What the camera initially frames on (`avatar` by default when one is present; `world`).
     #[arg(long, value_enum)]
     frame: Option<FrameTarget>,
+    /// Preview a chain-length change: `HINGE:FACTOR` scales the offsets of every bone below the
+    /// bones named HINGE (`*` wildcards) — what `avatar physbone stretch` does to the prefab —
+    /// e.g. `Skirt_0_*:1.5`. Repeatable. FBX avatars only.
+    #[arg(long, value_name = "HINGE:FACTOR", value_parser = BoneStretch::parse)]
+    stretch: Vec<BoneStretch>,
 }
 
 #[derive(Args, Debug)]
@@ -60,6 +66,11 @@ pub struct RenderArgs {
     /// fills the shot with the avatar, the map visible around it; `world` frames the whole scene.
     #[arg(long, value_enum)]
     frame: Option<FrameTarget>,
+    /// Preview a chain-length change: `HINGE:FACTOR` scales the offsets of every bone below the
+    /// bones named HINGE (`*` wildcards) — what `avatar physbone stretch` does to the prefab —
+    /// e.g. `Skirt_0_*:1.5`. Repeatable. FBX avatars only.
+    #[arg(long, value_name = "HINGE:FACTOR", value_parser = BoneStretch::parse)]
+    stretch: Vec<BoneStretch>,
 }
 
 /// Camera framing target for `avatar render`.
@@ -75,6 +86,7 @@ enum FrameTarget {
 /// world's player-spawn point at human scale (or render it standalone), then frame the camera. The
 /// `width`/`height` set the framing aspect. Shared by `render` (offscreen PNG) and `view`
 /// (interactive window); prints a short progress summary as it goes.
+#[allow(clippy::too_many_arguments)]
 fn assemble_scene(
     avatar: Option<&Path>,
     world: Option<&Path>,
@@ -83,6 +95,7 @@ fn assemble_scene(
     yaw: f32,
     pitch: f32,
     frame: Option<FrameTarget>,
+    stretch: &[BoneStretch],
 ) -> Result<avatar_render::Scene> {
     if avatar.is_none() && world.is_none() {
         bail!("nothing to render: pass --avatar <model> and/or --world <scene|project>");
@@ -109,7 +122,8 @@ fn assemble_scene(
         // With a world, drop the avatar at its spawn point at human scale; otherwise render it alone.
         let av = match spawn {
             Some(p) if world.is_some() => {
-                let (av, bounds) = render_scene::load_avatar_in_world(avatar, p, &mut textures)?;
+                let (av, bounds) =
+                    render_scene::load_avatar_in_world(avatar, p, &mut textures, stretch)?;
                 println!(
                     "avatar: {} mesh(es) from {}, dropped at world spawn ({:.1}, {:.1}, {:.1})",
                     av.len(),
@@ -125,7 +139,7 @@ fn assemble_scene(
                 if world.is_some() {
                     println!("note: world declares no spawn point; rendering avatar at the origin");
                 }
-                let av = render_scene::load_avatar(avatar, &mut textures)?;
+                let av = render_scene::load_avatar(avatar, &mut textures, stretch)?;
                 println!("avatar: {} mesh(es) from {}", av.len(), avatar.display());
                 avatar_bounds = render_scene::mesh_bounds(&av);
                 av
@@ -165,6 +179,7 @@ pub fn render(args: &RenderArgs) -> Result<()> {
         args.yaw,
         args.pitch,
         args.frame,
+        &args.stretch,
     )?;
     let tris: usize = scene.meshes.iter().map(|m| m.indices.len() / 3).sum();
     println!(
@@ -190,6 +205,7 @@ pub fn view(args: &ViewArgs) -> Result<()> {
         args.yaw,
         args.pitch,
         args.frame,
+        &args.stretch,
     )?;
     let tris: usize = scene.meshes.iter().map(|m| m.indices.len() / 3).sum();
     println!(

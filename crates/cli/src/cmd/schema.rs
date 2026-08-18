@@ -51,6 +51,9 @@ fn entries() -> &'static [Entry] {
         ("migrate", || {
             serde_json::to_value(schema_for!(avatar_migrate::MigrationReport)).unwrap()
         }),
+        ("physbone", || {
+            serde_json::to_value(schema_for!(avatar_migrate::physbone::PhysBoneInfo)).unwrap()
+        }),
     ];
     entries
 }

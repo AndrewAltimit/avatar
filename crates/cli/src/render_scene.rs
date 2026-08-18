@@ -11,6 +11,132 @@ use glam::{Mat4, Quat, Vec3};
 
 use crate::texture::{SlotStyle, TextureSet, split_by_material};
 
+/// A chain-length preview: scale the offsets of every bone *below* the bones matching `hinge`
+/// (a name, `*` wildcards allowed — `Skirt_0_*`) by `factor`, and let the skinned mesh follow.
+/// This is exactly the edit `avatar physbone stretch` makes to a prefab, previewed on the FBX
+/// before any Unity round trip.
+#[derive(Debug, Clone, PartialEq)]
+pub struct BoneStretch {
+    pub hinge: String,
+    pub factor: f32,
+}
+
+impl BoneStretch {
+    /// Parse `HINGE:FACTOR` (e.g. `Skirt_0_*:1.5`).
+    pub fn parse(s: &str) -> Result<Self> {
+        let Some((h, f)) = s.rsplit_once(':') else {
+            bail!("--stretch '{s}' is not HINGE:FACTOR (e.g. 'Skirt_0_*:1.5')");
+        };
+        let factor: f32 = f
+            .trim()
+            .parse()
+            .map_err(|_| anyhow::anyhow!("--stretch factor '{f}' is not a number"))?;
+        if !(factor.is_finite() && factor > 0.0) {
+            bail!("--stretch factor must be > 0 (got {factor})");
+        }
+        let hinge = h.trim().to_string();
+        if hinge.is_empty() {
+            bail!("--stretch '{s}' names no bone");
+        }
+        Ok(BoneStretch { hinge, factor })
+    }
+
+    fn matches(&self, name: &str) -> bool {
+        glob_match(&self.hinge, name)
+    }
+}
+
+/// `*`-wildcard match (no other metacharacters).
+fn glob_match(pattern: &str, text: &str) -> bool {
+    let parts: Vec<&str> = pattern.split('*').collect();
+    if parts.len() == 1 {
+        return pattern == text;
+    }
+    let mut rest = text;
+    for (i, part) in parts.iter().enumerate() {
+        if i == 0 {
+            let Some(r) = rest.strip_prefix(part) else {
+                return false;
+            };
+            rest = r;
+        } else if i == parts.len() - 1 {
+            return rest.ends_with(part);
+        } else if part.is_empty() {
+            continue;
+        } else {
+            let Some(pos) = rest.find(part) else {
+                return false;
+            };
+            rest = &rest[pos + part.len()..];
+        }
+    }
+    true
+}
+
+/// Apply [`BoneStretch`]es to skinned FBX meshes: pose the skeleton with the scaled offsets and
+/// CPU-skin each mesh's raw control points through the resulting palette (identity everywhere
+/// the pose is untouched, so unaffected geometry is byte-identical to the rest render). Returns
+/// how many bones were moved.
+fn apply_stretch(
+    scene: &avatar_fbx::FbxScene,
+    meshes: &mut [RawMesh],
+    stretch: &[BoneStretch],
+) -> usize {
+    use avatar_pose::{PosedSkeleton, cpu_skin, model_global_matrix};
+    let skeleton = Skeleton::from_scene(scene);
+    // Bone id → (factor) for every bone strictly below a matching hinge.
+    let mut factor_of: std::collections::HashMap<i64, f32> = std::collections::HashMap::new();
+    for st in stretch {
+        let hinges: Vec<i64> = skeleton
+            .bones
+            .iter()
+            .filter(|b| st.matches(&b.name))
+            .map(|b| b.id)
+            .collect();
+        for b in &skeleton.bones {
+            let mut cur = b.parent;
+            while let Some(p) = cur {
+                if hinges.contains(&p) {
+                    factor_of.insert(b.id, st.factor);
+                    break;
+                }
+                cur = skeleton.bone(p).and_then(|pb| pb.parent);
+            }
+        }
+    }
+    if factor_of.is_empty() {
+        return 0;
+    }
+    for m in meshes.iter_mut().filter(|m| m.is_skinned()) {
+        let posed = PosedSkeleton::from_fbx(&skeleton, scene, m);
+        let mut pose = posed.rest_pose();
+        for (id, f) in &factor_of {
+            if let Some(i) = posed.index_of(*id) {
+                let (s, r, t) = pose.local[i].to_scale_rotation_translation();
+                pose.set_local_trs(i, t * *f, r, s);
+            }
+        }
+        let skin = posed.build_vertex_skin(m);
+        // The mesh is drawn from its raw control points, which live in the mesh node's own space
+        // (`G`, e.g. Blender's -90° X on the mesh object). The pose is a world-space change per
+        // bone (`posed · rest⁻¹`), so conjugate it into mesh space: `G⁻¹ · posed · rest⁻¹ · G`.
+        // Identity everywhere the pose is untouched. (The FBX cluster `Transform`s — the bind
+        // palette proper — are deliberately not used: converted avatars ship them inconsistent,
+        // which is why the renderer draws raw control points in the first place.)
+        let g = model_global_matrix(scene, m.model_id);
+        let g_inv = g.inverse();
+        let rest = posed.world_matrices(&posed.rest_pose());
+        let palette: Vec<Mat4> = posed
+            .world_matrices(&pose)
+            .iter()
+            .zip(&rest)
+            .map(|(p, r)| g_inv * *p * r.inverse() * g)
+            .collect();
+        m.positions = cpu_skin(m, &skin, &palette);
+    }
+    factor_of.len()
+}
+
 /// Tint used for a textured slot when the material declares no diffuse colour — lets the texture's
 /// own colours show through unmodulated.
 const WHITE: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
@@ -116,6 +242,7 @@ pub fn load_avatar_placed(
     path: &Path,
     extra: Mat4,
     tex: &mut TextureSet,
+    stretch: &[BoneStretch],
 ) -> Result<Vec<RenderMesh>> {
     let ext = path
         .extension()
@@ -129,9 +256,23 @@ pub fn load_avatar_placed(
         "fbx" => {
             let doc = avatar_fbx::FbxDocument::load(path)?;
             let scene = doc.scene();
-            let meshes = doc.meshes()?;
+            let mut meshes = doc.meshes()?;
             if meshes.is_empty() {
                 bail!("no meshes found in {}", path.display());
+            }
+            if !stretch.is_empty() {
+                let moved = apply_stretch(&scene, &mut meshes, stretch);
+                if moved == 0 {
+                    bail!(
+                        "--stretch matched no bone below {}",
+                        stretch
+                            .iter()
+                            .map(|s| format!("'{}'", s.hinge))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    );
+                }
+                println!("stretch: {moved} bone offset(s) scaled");
             }
             // Skinned meshes are placed at their bind transform then uprighted via the skeleton;
             // static meshes get the file's declared up-axis correction.
@@ -154,6 +295,9 @@ pub fn load_avatar_placed(
             let meshes = avatar_gltf::GltfDocument::import(path)?.meshes();
             if meshes.is_empty() {
                 bail!("no meshes found in {}", path.display());
+            }
+            if !stretch.is_empty() {
+                bail!("--stretch is supported for .fbx avatars only");
             }
             let places = vec![extra; meshes.len()];
             (meshes, places)
@@ -184,8 +328,12 @@ pub fn load_avatar_placed(
 }
 
 /// Load an avatar at the origin (convenience for the standalone-avatar case).
-pub fn load_avatar(path: &Path, tex: &mut TextureSet) -> Result<Vec<RenderMesh>> {
-    load_avatar_placed(path, Mat4::IDENTITY, tex)
+pub fn load_avatar(
+    path: &Path,
+    tex: &mut TextureSet,
+    stretch: &[BoneStretch],
+) -> Result<Vec<RenderMesh>> {
+    load_avatar_placed(path, Mat4::IDENTITY, tex, stretch)
 }
 
 /// Standing height (metres) an avatar is normalised to when dropped into a world, so a model
@@ -215,9 +363,10 @@ pub fn load_avatar_in_world(
     path: &Path,
     spawn: Vec3,
     tex: &mut TextureSet,
+    stretch: &[BoneStretch],
 ) -> Result<(Vec<RenderMesh>, (Vec3, Vec3))> {
     // Upright-local geometry at the origin; re-placed once we know its size.
-    let mut meshes = load_avatar_placed(path, Mat4::IDENTITY, tex)?;
+    let mut meshes = load_avatar_placed(path, Mat4::IDENTITY, tex, stretch)?;
     let (min, max) =
         mesh_bounds(&meshes).ok_or_else(|| anyhow::anyhow!("avatar has no geometry"))?;
     let scale = AVATAR_HEIGHT_M / (max.y - min.y).max(1e-4);
@@ -289,4 +438,32 @@ pub fn expand_bounds((min, max): (Vec3, Vec3), factor: f32) -> (Vec3, Vec3) {
     let center = (min + max) * 0.5;
     let half = (max - min) * 0.5 * factor;
     (center - half, center + half)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn stretch_spec_parses() {
+        let s = BoneStretch::parse("Skirt_0_*:1.5").unwrap();
+        assert_eq!(s.hinge, "Skirt_0_*");
+        assert_eq!(s.factor, 1.5);
+        assert!(BoneStretch::parse("Skirt").is_err());
+        assert!(BoneStretch::parse("Skirt:0").is_err());
+        assert!(BoneStretch::parse("Skirt:x").is_err());
+        assert!(BoneStretch::parse(":2").is_err());
+    }
+
+    #[test]
+    fn glob_matches_star_only() {
+        assert!(glob_match("Skirt_0_*", "Skirt_0_7"));
+        assert!(!glob_match("Skirt_0_*", "Skirt_1_7"));
+        assert!(glob_match("Hair_1", "Hair_1"));
+        assert!(!glob_match("Hair_1", "Hair_10"));
+        assert!(glob_match("*Tail*", "ButtTail1"));
+        assert!(glob_match("*", "anything"));
+        assert!(glob_match("A*B*C", "AxxBxC"));
+        assert!(!glob_match("A*B*C", "AxxBx"));
+    }
 }

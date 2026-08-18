@@ -51,6 +51,16 @@ The avatar loader (`crates/cli/src/render_scene.rs`):
 This renders the avatar in its rest/bind pose. (Full *posed* skinning would need the bind matrices,
 which this class of asset can't be trusted to provide; see the note above.)
 
+**`--stretch HINGE:FACTOR`** (repeatable, `*` wildcards in `HINGE`, FBX only) previews a
+chain-length change — the edit [`avatar physbone stretch`](physbone.md) makes to a prefab — on the
+FBX: every bone *below* the bones matching `HINGE` has its offset from its parent scaled by
+`FACTOR`, and each skinned mesh is CPU-skinned through the resulting pose. This is the one place
+the renderer poses: it uses the pose **delta** only — per bone `G⁻¹ · world(posed) ·
+world(rest)⁻¹ · G`, with `G` the mesh node's global transform (the space its raw control points
+live in) — so it is identity everywhere the pose is untouched and never touches the untrusted
+per-cluster bind `Transform`s. `avatar render --avatar m.fbx --stretch 'Skirt_0_*:1.5'` shows a
+50 %-longer skirt; a bone name that matches nothing is an error.
+
 ## Rendering a world — `avatar render --world <scene.unity | project-dir>`
 
 The world loader (`crates/cli/src/world.rs`) parses a Unity `.unity` scene and emulates enough of

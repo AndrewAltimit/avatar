@@ -116,6 +116,23 @@ pub fn build_server() -> Server {
             }),
         ))
         .tool(Tool::new(
+            "avatar_physbone_list",
+            "List every VRCPhysBone component in an SDK3 prefab: the object and root transform, \
+             the chains it drives (leaf path, bone count, length), colliders, ignore list, and the \
+             full tuning (pull/spring/stiffness/gravity/immobile/limits, with per-chain curves). \
+             Read-only; the retune/split/stretch edits are `avatar physbone set|split|stretch` on \
+             the CLI. Returns PhysBoneInfo[].",
+            path_schema("Path to a Unity .prefab (an SDK3 avatar)."),
+            Box::new(|args| {
+                let path = arg_existing_path(args, "path")?;
+                let text = std::fs::read_to_string(&path)
+                    .with_context(|| format!("reading {}", path.display()))?;
+                let rw = avatar_migrate::rewrite::PrefabRewriter::new(&text)
+                    .with_context(|| format!("parsing {} as a Unity prefab", path.display()))?;
+                to_json(&avatar_migrate::physbone::list(rw.scene()))
+            }),
+        ))
+        .tool(Tool::new(
             "avatar_gen_clip",
             "Generate a Unity .anim AnimationClip (blendshape and/or GameObject-active curves) and \
              return its YAML as text — nothing is written to disk; write the `yaml` to a file \
@@ -520,6 +537,7 @@ mod tests {
             "avatar_stats",
             "avatar_armature_check",
             "avatar_fbx_inspect",
+            "avatar_physbone_list",
             "avatar_unitypackage_info",
             "avatar_gen_clip",
             "avatar_gen_controller",

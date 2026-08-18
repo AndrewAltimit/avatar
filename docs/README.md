@@ -34,6 +34,10 @@ Documentation for the [avatar](../README.md) monorepo. Start with the root
 - [`reference/migrate.md`](reference/migrate.md) — `avatar migrate sdk3`: SDK2 → SDK3 migration of an
   avatar project (descriptor, PhysBones by the SDK's own rules, Cloth → PhysBone, FX from gesture
   overrides, rig-derived eye look, output project layout, limits).
+- [`reference/physbone.md`](reference/physbone.md) — `avatar physbone list|set|split|stretch`: inspect
+  and retune a prefab's `VRCPhysBone`s in place (values + per-chain curves, split chains onto their
+  own components, lengthen a skirt/tail by scaling bone offsets), and the `avatar render --stretch`
+  preview.
 - [`reference/osc-runtime.md`](reference/osc-runtime.md) — `avatar-osc`: the VRChat OSC address space,
   the pure codec, the UDP `ParamClient`, and OSCQuery avatar-config parsing.
 - [`reference/unitypackage.md`](reference/unitypackage.md) — `avatar-unitypackage`: reading the

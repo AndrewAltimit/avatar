@@ -28,6 +28,7 @@ pub mod eyelook;
 pub mod fx;
 pub mod math;
 pub mod packages;
+pub mod physbone;
 pub mod project;
 pub mod rewrite;
 pub mod scene;

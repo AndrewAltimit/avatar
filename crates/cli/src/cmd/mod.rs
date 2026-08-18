@@ -10,6 +10,7 @@ pub mod lint;
 pub mod mcp;
 pub mod migrate;
 pub mod osc;
+pub mod physbone;
 pub mod render;
 pub mod schema;
 pub mod stats;

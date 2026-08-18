@@ -13,6 +13,7 @@
 //!   - `avatar anim-gen params|menu …`    — generate VRC expression parameters / menu `.asset`s
 //!   - `avatar toggle --name N …`         — generate a full toggle bundle (clips+FX+params+menu)
 //!   - `avatar migrate sdk3 <project> …`  — SDK2 avatar project -> SDK3 (descriptor, PhysBones, FX)
+//!   - `avatar physbone list|set|split|stretch …` — inspect / retune / split / lengthen a prefab's PhysBones
 //!   - `avatar asset set <file> …`        — surgically edit a value in a Unity YAML asset (round-trip)
 //!   - `avatar schema [name]`             — JSON Schema for a `--json` report type (output contract)
 //!   - `avatar mcp serve`                 — expose the read/diagnose tools over MCP (stdio JSON-RPC)
@@ -45,6 +46,7 @@ use cmd::lint::LintArgs;
 use cmd::mcp::McpCommand;
 use cmd::migrate::MigrateCommand;
 use cmd::osc::OscCommand;
+use cmd::physbone::PhysBoneCommand;
 use cmd::render::{RenderArgs, ViewArgs};
 use cmd::schema::SchemaArgs;
 use cmd::stats::StatsArgs;
@@ -62,6 +64,8 @@ struct Cli {
     command: Command,
 }
 
+// Built exactly once from argv; the size spread between arg structs is irrelevant here.
+#[allow(clippy::large_enum_variant)]
 #[derive(Subcommand, Debug)]
 enum Command {
     /// Inspect and operate on FBX files.
@@ -87,6 +91,9 @@ enum Command {
     /// Migrate an avatar project between VRChat SDK generations (SDK2 -> SDK3 / Avatars 3.0).
     #[command(subcommand)]
     Migrate(MigrateCommand),
+    /// Inspect and retune the VRCPhysBone components of an SDK3 prefab (list/set/split/stretch).
+    #[command(subcommand)]
+    Physbone(PhysBoneCommand),
     /// Drive or observe a running VRChat avatar over OSC.
     #[command(subcommand)]
     Osc(OscCommand),
@@ -148,6 +155,18 @@ fn run() -> Result<ExitCode> {
         }
         Command::Migrate(MigrateCommand::Sdk3(args)) => {
             cmd::migrate::sdk3(&args).map(|()| ExitCode::SUCCESS)
+        }
+        Command::Physbone(PhysBoneCommand::List(args)) => {
+            cmd::physbone::list(&args).map(|()| ExitCode::SUCCESS)
+        }
+        Command::Physbone(PhysBoneCommand::Set(args)) => {
+            cmd::physbone::set(&args).map(|()| ExitCode::SUCCESS)
+        }
+        Command::Physbone(PhysBoneCommand::Split(args)) => {
+            cmd::physbone::split(&args).map(|()| ExitCode::SUCCESS)
+        }
+        Command::Physbone(PhysBoneCommand::Stretch(args)) => {
+            cmd::physbone::stretch(&args).map(|()| ExitCode::SUCCESS)
         }
         Command::Osc(OscCommand::Send(args)) => cmd::osc::send(&args).map(|()| ExitCode::SUCCESS),
         Command::Osc(OscCommand::Input(args)) => cmd::osc::input(&args).map(|()| ExitCode::SUCCESS),

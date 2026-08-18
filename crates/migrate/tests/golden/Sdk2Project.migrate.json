@@ -31,7 +31,7 @@
     {
       "file_id": 11407,
       "object_path": "Armature/Hips/Spine/Head/Hair",
-      "what": "DynamicBone -> VRCPhysBone (pull 0.05, spring 0.80, immobile 0.90, maxAngle 92, radius 0.020, gravity 0.050)"
+      "what": "DynamicBone -> VRCPhysBone (pull 0.05, spring 0.80, immobile 0.90, maxAngle 92, radius 0.020, gravity 0.052)"
     },
     {
       "file_id": 11400,
