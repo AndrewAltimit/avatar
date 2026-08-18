@@ -81,6 +81,7 @@ test — which is the point.
 | `avatar-stats` | `{Sample,Avatar,Dynamics}Project.project-stats.json` | per-avatar `PerfReport`s (component side) |
 | `avatar-stats` | `humanoid_skeleton.fbx-stats.json` | FBX geometry `PerfReport` |
 | `avatar-armature` | `humanoid_skeleton.armature.json` | the full `ArmatureReport` (humanoid mapping) |
+| `avatar-migrate` | `Sdk2Project.migrate.json`, `Sdk2Project.migrated.prefab.txt`, `Sdk2Project.FX.controller.txt` | the full `MigrationReport`, the rewritten prefab text, and the generated FX controller for the synthetic SDK2 fixture |
 
 To extend coverage, drop a fixture into the corpus (or add an `avatar-testkit::fbx` builder) and add
 a golden test that runs the analysis over it.

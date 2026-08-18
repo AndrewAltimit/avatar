@@ -276,6 +276,91 @@ pub fn fnv1a(bytes: &[u8]) -> u64 {
     h
 }
 
+/// Unity's `m_Script` fileID for a class compiled into a DLL: the first four bytes (little-endian
+/// `i32`) of MD4 over `"s\0\0\0" + namespace + class_name`. This is how every `{fileID: N, guid:
+/// <dll guid>, type: 3}` reference to a plugin script is derived (a loose `.cs` script instead
+/// gets the fixed `11500000`). Verified against the VRChat SDK's own serialized assets — e.g.
+/// `VRC.SDK3.Avatars.Components.VRCAvatarDescriptor` → `542108242`.
+pub fn script_file_id(namespace: &str, class_name: &str) -> i32 {
+    let mut input = b"s\0\0\0".to_vec();
+    input.extend_from_slice(namespace.as_bytes());
+    input.extend_from_slice(class_name.as_bytes());
+    let digest = md4(&input);
+    i32::from_le_bytes([digest[0], digest[1], digest[2], digest[3]])
+}
+
+/// MD4 (RFC 1320). Only used for [`script_file_id`]; not a general-purpose hash.
+fn md4(data: &[u8]) -> [u8; 16] {
+    fn f(x: u32, y: u32, z: u32) -> u32 {
+        (x & y) | (!x & z)
+    }
+    fn g(x: u32, y: u32, z: u32) -> u32 {
+        (x & y) | (x & z) | (y & z)
+    }
+    fn h(x: u32, y: u32, z: u32) -> u32 {
+        x ^ y ^ z
+    }
+    let mut msg = data.to_vec();
+    let bit_len = (data.len() as u64).wrapping_mul(8);
+    msg.push(0x80);
+    while msg.len() % 64 != 56 {
+        msg.push(0);
+    }
+    msg.extend_from_slice(&bit_len.to_le_bytes());
+
+    let (mut a0, mut b0, mut c0, mut d0) = (
+        0x6745_2301u32,
+        0xefcd_ab89u32,
+        0x98ba_dcfeu32,
+        0x1032_5476u32,
+    );
+    for block in msg.chunks_exact(64) {
+        let mut x = [0u32; 16];
+        for (i, w) in block.chunks_exact(4).enumerate() {
+            x[i] = u32::from_le_bytes([w[0], w[1], w[2], w[3]]);
+        }
+        let (mut a, mut b, mut c, mut d) = (a0, b0, c0, d0);
+        const S1: [u32; 4] = [3, 7, 11, 19];
+        for i in 0..16 {
+            let t = a
+                .wrapping_add(f(b, c, d))
+                .wrapping_add(x[i])
+                .rotate_left(S1[i % 4]);
+            (a, b, c, d) = (d, t, b, c);
+        }
+        const K2: [usize; 16] = [0, 4, 8, 12, 1, 5, 9, 13, 2, 6, 10, 14, 3, 7, 11, 15];
+        const S2: [u32; 4] = [3, 5, 9, 13];
+        for i in 0..16 {
+            let t = a
+                .wrapping_add(g(b, c, d))
+                .wrapping_add(x[K2[i]])
+                .wrapping_add(0x5a82_7999)
+                .rotate_left(S2[i % 4]);
+            (a, b, c, d) = (d, t, b, c);
+        }
+        const K3: [usize; 16] = [0, 8, 4, 12, 2, 10, 6, 14, 1, 9, 5, 13, 3, 11, 7, 15];
+        const S3: [u32; 4] = [3, 9, 11, 15];
+        for i in 0..16 {
+            let t = a
+                .wrapping_add(h(b, c, d))
+                .wrapping_add(x[K3[i]])
+                .wrapping_add(0x6ed9_eba1)
+                .rotate_left(S3[i % 4]);
+            (a, b, c, d) = (d, t, b, c);
+        }
+        a0 = a0.wrapping_add(a);
+        b0 = b0.wrapping_add(b);
+        c0 = c0.wrapping_add(c);
+        d0 = d0.wrapping_add(d);
+    }
+    let mut out = [0u8; 16];
+    out[0..4].copy_from_slice(&a0.to_le_bytes());
+    out[4..8].copy_from_slice(&b0.to_le_bytes());
+    out[8..12].copy_from_slice(&c0.to_le_bytes());
+    out[12..16].copy_from_slice(&d0.to_le_bytes());
+    out
+}
+
 /// Recursively collect every file under `root` (directories are descended, not emitted). Returns
 /// an empty vec if `root` is unreadable.
 pub fn walk_assets(root: &Path) -> Vec<PathBuf> {
@@ -428,6 +513,41 @@ Transform:
         assert_eq!(
             meta_guid(meta).as_deref(),
             Some("0123456789abcdef0123456789abcdef")
+        );
+    }
+
+    #[test]
+    fn script_file_id_matches_vrchat_sdk_serialized_values() {
+        // Read off com.vrchat.avatars / com.vrchat.base 3.10.4 sample assets.
+        assert_eq!(
+            script_file_id("VRC.SDK3.Avatars.Components", "VRCAvatarDescriptor"),
+            542108242
+        );
+        assert_eq!(
+            script_file_id("VRC.SDK3.Dynamics.PhysBone.Components", "VRCPhysBone"),
+            1661641543
+        );
+        assert_eq!(
+            script_file_id(
+                "VRC.SDK3.Dynamics.PhysBone.Components",
+                "VRCPhysBoneCollider"
+            ),
+            -1631200402
+        );
+        assert_eq!(
+            script_file_id(
+                "VRC.SDK3.Avatars.ScriptableObjects",
+                "VRCExpressionParameters"
+            ),
+            -1506855854
+        );
+        assert_eq!(
+            script_file_id("VRC.SDK3.Avatars.ScriptableObjects", "VRCExpressionsMenu"),
+            -340790334
+        );
+        assert_eq!(
+            script_file_id("VRC.SDK3.Dynamics.Contact.Components", "VRCContactReceiver"),
+            -1450912254
         );
     }
 }

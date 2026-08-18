@@ -50,6 +50,7 @@ format and subsystem references.
 | [`avatar-lint`](crates/lint/README.md) | Diagnostics engine: SDK3 compliance rules over a project (params, menus, descriptor refs, visemes incl. the source-FBX cross-check, Write Defaults, animation clips, PhysBones/Avatar-Dynamics, missing scripts, Quest shaders) |
 | [`avatar-stats`](crates/stats/README.md) | Offline VRChat **performance ranking** (Excellent→Very Poor) from an FBX (geometry) or a project's avatars (components), against PC + Android limits |
 | [`avatar-anim-gen`](crates/anim-gen/README.md) | **Generate** Unity `.anim` clips, FX-layer blend trees + full FX `AnimatorController`s, VRC expression parameters/menus, and the composite **toggle bundle**, as Unity YAML (deterministic fileIDs/GUIDs) — wired to `avatar anim-gen` / `avatar toggle` |
+| [`avatar-migrate`](crates/migrate/README.md) | **SDK2 → SDK3 migration** of an avatar project: descriptor/PipelineManager retyped in place, DynamicBone → PhysBone (the SDK's own rules), Cloth → PhysBone skirt, clutter stripped, gesture overrides → FX layer, rig-derived eye look, and a VCC-openable project tree around the rewritten prefab — wired to `avatar migrate sdk3` |
 | [`avatar-render`](crates/render/README.md) | **GPU preview** via wgpu: render an avatar (and a Unity world scene, with the avatar dropped at the world's spawn point) to a PNG, headless — plus an optional interactive **winit viewer** (orbit/zoom/walk). Wired to `avatar render` / `avatar view` |
 | [`avatar-osc`](crates/osc/README.md) | VRChat **OSC runtime**: `/avatar/parameters`, `/input`, `/avatar/change` codec + UDP client and OSCQuery avatar-config parsing — the M5 runtime foundation, wired to `avatar osc` |
 | [`avatar-osc-gestures`](crates/osc-gestures/README.md) | The **analog-gesture daemon** ("Vive advanced controls on any hardware"): controller trigger → `Gesture*`/`Gesture*Weight` over OSC, with deadzone + change detection. Wired to `avatar osc gestures` |
@@ -83,6 +84,7 @@ cargo run -p avatar-cli -- anim-gen controller --name FX --clip <guid>@0.0 --cli
 cargo run -p avatar-cli -- anim-gen params --param Hat:bool --param Dim:float:0.5:local -o Params.asset  # VRCExpressionParameters
 cargo run -p avatar-cli -- anim-gen menu --toggle Hat:Hat --radial Dim:Dim -o Menu.asset      # VRCExpressionsMenu
 cargo run -p avatar-cli -- toggle --name Hat --toggle Armature/Head/Hat -o HatBundle/  # full toggle bundle: clips+FX+params+menu (+.metas)
+cargo run -p avatar-cli -- migrate sdk3 <extracted-sdk2-project> -o out/ --name MyAvatar --drop-cloth --eyes Eye_L,Eye_R  # SDK2 avatar -> SDK3 project
 cargo run -p avatar-cli -- asset set Parameters.asset --path m_Name --value Params2   # surgical edit (round-trip-safe)
 cargo run -p avatar-cli -- schema describe                            # JSON Schema for a --json report type
 cargo run -p avatar-cli -- osc send VRCEmote 3                         # drive a running VRChat over OSC
@@ -133,7 +135,8 @@ overwritten without `--force`.
 | [`docs/reference/performance-stats.md`](docs/reference/performance-stats.md) | `avatar stats`: metrics (incl. particles & constraints), component recognition, and PC/Android threshold tables. |
 | [`docs/reference/rig-runtime.md`](docs/reference/rig-runtime.md) | Runtime rig layer: skin/bind extraction, posing, IK, tracker input. |
 | [`docs/reference/anim-gen.md`](docs/reference/anim-gen.md) | `avatar-anim-gen`: `.anim` clip + analog-gesture blend-tree generation. |
-| [`docs/reference/unity-yaml-edit.md`](docs/reference/unity-yaml-edit.md) | `EditableUnityFile` / `avatar asset set`: surgical, round-trip-safe value edits to an existing Unity asset. |
+| [`docs/reference/unity-yaml-edit.md`](docs/reference/unity-yaml-edit.md) | `EditableUnityFile` / `avatar asset set`: surgical, round-trip-safe value + structural edits to an existing Unity asset. |
+| [`docs/reference/migrate.md`](docs/reference/migrate.md) | `avatar migrate sdk3`: SDK2 → SDK3 migration — what is converted and how (SDK's PhysBone rules, script references, FX from overrides, eye look), output layout, limits. |
 | [`docs/reference/osc-runtime.md`](docs/reference/osc-runtime.md) | `avatar-osc`: the OSC address space, codec, and OSCQuery config parsing. |
 | [`docs/reference/unitypackage.md`](docs/reference/unitypackage.md) | `avatar-unitypackage`: the `.unitypackage` format, extraction, and the avatar-in-world testbed. |
 | [`docs/reference/render.md`](docs/reference/render.md) | `avatar-render` / `avatar render` + `avatar view`: the wgpu preview, avatar rest-pose render, world rendering, avatar-at-spawn-in-world, and the interactive viewer. |
@@ -154,6 +157,7 @@ overwritten without `--force`.
 [`lint`](crates/lint/README.md) ·
 [`stats`](crates/stats/README.md) ·
 [`anim-gen`](crates/anim-gen/README.md) ·
+[`migrate`](crates/migrate/README.md) ·
 [`osc`](crates/osc/README.md) ·
 [`osc-gestures`](crates/osc-gestures/README.md) ·
 [`cli`](crates/cli/README.md).

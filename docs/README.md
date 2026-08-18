@@ -29,8 +29,11 @@ Documentation for the [avatar](../README.md) monorepo. Start with the root
 - [`reference/anim-gen.md`](reference/anim-gen.md) — `avatar-anim-gen`: generating `.anim` clips and
   analog-gesture blend trees as Unity YAML, the emitter, and the deterministic-fileID strategy.
 - [`reference/unity-yaml-edit.md`](reference/unity-yaml-edit.md) — `EditableUnityFile` /
-  `avatar asset set`: surgical, round-trip-safe value edits to an *existing* Unity asset by
-  span-splicing raw text (fileIDs/refs/key-order/formatting preserved).
+  `avatar asset set`: surgical, round-trip-safe value + structural edits to an *existing* Unity
+  asset by span-splicing raw text (fileIDs/refs/key-order/formatting preserved).
+- [`reference/migrate.md`](reference/migrate.md) — `avatar migrate sdk3`: SDK2 → SDK3 migration of an
+  avatar project (descriptor, PhysBones by the SDK's own rules, Cloth → PhysBone, FX from gesture
+  overrides, rig-derived eye look, output project layout, limits).
 - [`reference/osc-runtime.md`](reference/osc-runtime.md) — `avatar-osc`: the VRChat OSC address space,
   the pure codec, the UDP `ParamClient`, and OSCQuery avatar-config parsing.
 - [`reference/unitypackage.md`](reference/unitypackage.md) — `avatar-unitypackage`: reading the

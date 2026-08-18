@@ -232,6 +232,7 @@ dependencies = [
  "avatar-lint",
  "avatar-mcp",
  "avatar-mesh",
+ "avatar-migrate",
  "avatar-osc",
  "avatar-osc-gestures",
  "avatar-pose",
@@ -309,6 +310,22 @@ name = "avatar-mesh"
 version = "0.1.0"
 dependencies = [
  "serde",
+]
+
+[[package]]
+name = "avatar-migrate"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "avatar-anim-gen",
+ "avatar-fbx",
+ "avatar-testkit",
+ "avatar-unity-asset",
+ "avatar-unity-yaml",
+ "avatar-vpm",
+ "schemars",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

@@ -222,8 +222,8 @@ that tier; the next worse tier starts one above it, and anything over **Poor** i
 | Bones | 75 | 150 | 256 | 400 |
 | PhysBone Components | 4 | 8 | 16 | 32 |
 | PhysBone Colliders | 4 | 8 | 16 | 32 |
-| PhysBone Affected Transforms | 16 | 32 | 64 | 128 |
-| PhysBone Collision Check Count | 8 | 16 | 32 | 64 |
+| PhysBone Affected Transforms | 16 | 64 | 128 | 256 |
+| PhysBone Collision Check Count | 32 | 128 | 256 | 512 |
 | Contacts | 8 | 16 | 24 | 32 |
 | Particle Systems | 0 | 4 | 8 | 16 |
 | Total Particles | 0 | 300 | 1,000 | 2,500 |
@@ -253,7 +253,7 @@ that tier; the next worse tier starts one above it, and anything over **Poor** i
 | PhysBone Components | 0 | 4 | 6 | 8 |
 | PhysBone Colliders | 0 | 4 | 8 | 16 |
 | PhysBone Affected Transforms | 0 | 16 | 32 | 64 |
-| PhysBone Collision Check Count | 0 | 8 | 16 | 32 |
+| PhysBone Collision Check Count | 0 | 16 | 32 | 64 |
 | Contacts | 2 | 4 | 8 | 16 |
 | Particle Systems | 0 | 0 | 0 | 2 |
 | Total Particles | 0 | 0 | 0 | 200 |

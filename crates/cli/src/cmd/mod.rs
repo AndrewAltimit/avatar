@@ -8,6 +8,7 @@ pub mod describe;
 pub mod fbx;
 pub mod lint;
 pub mod mcp;
+pub mod migrate;
 pub mod osc;
 pub mod render;
 pub mod schema;

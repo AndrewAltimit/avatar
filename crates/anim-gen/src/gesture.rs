@@ -9,10 +9,18 @@
 //! self" off so a held gesture doesn't retrigger. Gesture values that have no clip fall back to
 //! `Neutral` through their own Any-State transition, so the layer is authoritative for all eight.
 //!
+//! A layer can also read **several** gesture parameters at once ([`GestureLayer::parameters`]):
+//! each gesture state then gets one Any-State transition per parameter and `Neutral` requires
+//! *all* of them to be 0. That single "either hand" layer is exactly SDK2's semantics (an
+//! override slot fired for whichever hand made the gesture) and sidesteps the classic two-layer
+//! problem where the upper hand's Neutral clip, resetting shared blendshapes, clobbers the lower
+//! hand's expression under Write Defaults off. When both hands hold different gestures, the
+//! parameter listed first wins (its transitions come first in `m_AnyStateTransitions`).
+//!
 //! Clips here are expected to be *face-only* (blendshapes) — SDK3 hand poses come from the
 //! Gesture playable layer, so an SDK2 gesture clip that also carried finger muscles must be split
 //! (see `avatar-migrate`, which lifts just the blendshape curves). The `Neutral` clip should write
-//! every blendshape any gesture on that hand touches back to 0, so the layer works under VRChat's
+//! every blendshape any gesture in the layer touches back to 0, so the layer works under VRChat's
 //! recommended Write Defaults **off** (which is what the emitted states use).
 
 use crate::IdGen;
@@ -34,13 +42,14 @@ pub const GESTURE_NAMES: [&str; 8] = [
     "ThumbsUp",
 ];
 
-/// One hand's gesture layer: the `Int` parameter it reads and the motion for each gesture value.
+/// A gesture layer: the `Int` gesture parameter(s) it reads and the motion for each gesture value.
 #[derive(Debug, Clone)]
-pub struct GestureHand {
-    /// Layer name (`Left Hand`, `Right Hand`).
+pub struct GestureLayer {
+    /// Layer name (`Left Hand`, `Right Hand`, `Gestures`).
     pub layer_name: String,
-    /// The gesture parameter (`GestureLeft` / `GestureRight`).
-    pub parameter: String,
+    /// The gesture parameter(s) (`GestureLeft` / `GestureRight`); one for a per-hand layer, both
+    /// for an either-hand layer (first listed wins a conflict).
+    pub parameters: Vec<String>,
     /// The motion played in `Neutral` (also the fallback for gestures with no clip). Should reset
     /// every blendshape the other clips touch.
     pub neutral: ObjectRef,
@@ -50,16 +59,30 @@ pub struct GestureHand {
     pub transition_duration: f32,
 }
 
-impl GestureHand {
-    /// A hand with the given parameter/layer name and no gesture clips yet.
+/// Backwards-compatible name for a single-parameter [`GestureLayer`].
+pub type GestureHand = GestureLayer;
+
+impl GestureLayer {
+    /// A per-hand layer reading one parameter, with no gesture clips yet.
     pub fn new(
         layer_name: impl Into<String>,
         parameter: impl Into<String>,
         neutral: ObjectRef,
     ) -> Self {
-        GestureHand {
+        GestureLayer {
             layer_name: layer_name.into(),
-            parameter: parameter.into(),
+            parameters: vec![parameter.into()],
+            neutral,
+            motions: Default::default(),
+            transition_duration: 0.1,
+        }
+    }
+
+    /// An either-hand layer reading `GestureLeft` *and* `GestureRight` (SDK2 semantics).
+    pub fn either_hand(layer_name: impl Into<String>, neutral: ObjectRef) -> Self {
+        GestureLayer {
+            layer_name: layer_name.into(),
+            parameters: vec!["GestureLeft".into(), "GestureRight".into()],
             neutral,
             motions: Default::default(),
             transition_duration: 0.1,
@@ -86,17 +109,30 @@ impl GestureHand {
             .enumerate()
             .filter_map(|(i, m)| m.as_ref().map(|m| (i + 1, ids.alloc(), m)))
             .collect();
-        // Any-State transitions: one per gesture value 0..=7, targeting its state or Neutral.
-        let transitions: Vec<(usize, i64, i64)> = (0..8)
-            .map(|g| {
-                let dst = gesture_states
-                    .iter()
-                    .find(|(gi, _, _)| *gi == g)
-                    .map(|(_, id, _)| *id)
-                    .unwrap_or(neutral_state);
-                (g, ids.alloc(), dst)
-            })
-            .collect();
+        // Any-State transitions. Neutral: one transition requiring every parameter == 0. Each
+        // gesture value 1..=7: one transition per parameter (Equals g), targeting its state or
+        // Neutral (unclipped gestures still leave the previous expression). Parameter order in
+        // the list is priority order.
+        let mut transitions: Vec<Transition> = Vec::new();
+        transitions.push(Transition {
+            id: ids.alloc(),
+            conditions: self.parameters.iter().map(|p| (p.clone(), 0)).collect(),
+            dst: neutral_state,
+        });
+        for g in 1..8usize {
+            let dst = gesture_states
+                .iter()
+                .find(|(gi, _, _)| *gi == g)
+                .map(|(_, id, _)| *id)
+                .unwrap_or(neutral_state);
+            for p in &self.parameters {
+                transitions.push(Transition {
+                    id: ids.alloc(),
+                    conditions: vec![(p.clone(), g as i64)],
+                    dst,
+                });
+            }
+        }
 
         let mut e = Emitter::new();
 
@@ -130,8 +166,8 @@ impl GestureHand {
             e.kv("m_ChildStateMachines", "[]");
             e.key("m_AnyStateTransitions");
             e.indented(|e| {
-                for (_, tid, _) in &transitions {
-                    e.line(&format!("- {}", ObjectRef::local(*tid).render()));
+                for t in &transitions {
+                    e.line(&format!("- {}", ObjectRef::local(t.id).render()));
                 }
             });
             e.kv("m_EntryTransitions", "[]");
@@ -151,15 +187,8 @@ impl GestureHand {
         }
 
         // --- Any-State AnimatorStateTransitions (1101)
-        for (g, tid, dst) in &transitions {
-            emit_any_state_transition(
-                &mut e,
-                *tid,
-                &self.parameter,
-                *g as i64,
-                *dst,
-                self.transition_duration,
-            );
+        for t in &transitions {
+            emit_any_state_transition(&mut e, t, self.transition_duration);
         }
 
         (e.into_string(), sm_id)
@@ -197,15 +226,15 @@ fn emit_state(e: &mut Emitter, state_id: i64, name: &str, motion: &ObjectRef) {
     });
 }
 
-fn emit_any_state_transition(
-    e: &mut Emitter,
-    transition_id: i64,
-    parameter: &str,
-    value: i64,
-    dst_state_id: i64,
-    duration: f32,
-) {
-    e.doc_header(1101, transition_id);
+/// An Any-State transition: all `conditions` (`parameter Equals value`) must hold.
+struct Transition {
+    id: i64,
+    conditions: Vec<(String, i64)>,
+    dst: i64,
+}
+
+fn emit_any_state_transition(e: &mut Emitter, t: &Transition, duration: f32) {
+    e.doc_header(1101, t.id);
     e.line("AnimatorStateTransition:");
     e.indented(|e| {
         e.kv("m_ObjectHideFlags", "1");
@@ -215,15 +244,17 @@ fn emit_any_state_transition(
         e.kv("m_Name", "");
         e.key("m_Conditions");
         e.indented(|e| {
-            e.line(&format!("- m_ConditionMode: {CONDITION_EQUALS}"));
-            e.indented(|e| {
-                e.kv("m_ConditionEvent", parameter);
-                // Unity's field name really is misspelled ("Treshold").
-                e.kv_i64("m_EventTreshold", value);
-            });
+            for (parameter, value) in &t.conditions {
+                e.line(&format!("- m_ConditionMode: {CONDITION_EQUALS}"));
+                e.indented(|e| {
+                    e.kv("m_ConditionEvent", parameter);
+                    // Unity's field name really is misspelled ("Treshold").
+                    e.kv_i64("m_EventTreshold", *value);
+                });
+            }
         });
         e.kv("m_DstStateMachine", "{fileID: 0}");
-        e.kv_ref("m_DstState", &ObjectRef::local(dst_state_id));
+        e.kv_ref("m_DstState", &ObjectRef::local(t.dst));
         e.kv("m_Solo", "0");
         e.kv("m_Mute", "0");
         e.kv("m_IsExit", "0");
@@ -240,12 +271,12 @@ fn emit_any_state_transition(
     });
 }
 
-/// Assemble a complete FX `.controller` stream with one gesture layer per hand (plus any extra
-/// pre-built layers as `(layer_name, fragment_text, state_machine_id)`, appended after the
-/// hands). Declares each hand's `Int` parameter once. Returns the full text.
+/// Assemble a complete FX `.controller` stream from gesture layers (plus any extra pre-built
+/// layers as `(layer_name, fragment_text, state_machine_id)`, appended after them). Declares each
+/// gesture `Int` parameter once. Returns the full text.
 pub fn fx_gestures(
     name: &str,
-    hands: &[GestureHand],
+    layers: &[GestureLayer],
     extra_layers: &[(String, String, i64)],
     ids: &mut IdGen,
 ) -> String {
@@ -253,13 +284,15 @@ pub fn fx_gestures(
     let mut controller = AnimatorController::new(name);
     let mut fragments = String::new();
     let mut declared: Vec<String> = Vec::new();
-    for hand in hands {
-        if !declared.contains(&hand.parameter) {
-            controller = controller.parameter(AnimatorParameter::int(&hand.parameter));
-            declared.push(hand.parameter.clone());
+    for layer in layers {
+        for p in &layer.parameters {
+            if !declared.contains(p) {
+                controller = controller.parameter(AnimatorParameter::int(p));
+                declared.push(p.clone());
+            }
         }
-        let (fragment, sm_id) = hand.to_state_fragment(ids);
-        controller = controller.layer(&hand.layer_name, sm_id);
+        let (fragment, sm_id) = layer.to_state_fragment(ids);
+        controller = controller.layer(&layer.layer_name, sm_id);
         fragments.push_str(&fragment);
     }
     for (layer_name, fragment, sm_id) in extra_layers {
@@ -277,8 +310,8 @@ mod tests {
     use avatar_unity_asset::AnimatorController as ReaderController;
     use avatar_unity_yaml::UnityFile;
 
-    fn hand(param: &str) -> GestureHand {
-        GestureHand::new(
+    fn hand(param: &str) -> GestureLayer {
+        GestureLayer::new(
             format!("{param} Hand"),
             param,
             ObjectRef::external(7400000, "a000000000000000000000000000000a", 2),
@@ -340,6 +373,66 @@ mod tests {
             .find(|t| t.body["m_Conditions"][0]["m_EventTreshold"].as_i64() == Some(2))
             .unwrap();
         assert_eq!(t2.body["m_DstState"]["fileID"].as_i64(), Some(neutral_id));
+    }
+
+    #[test]
+    fn either_hand_layer_has_a_transition_per_parameter_and_an_all_zero_neutral() {
+        let mut ids = IdGen::new("either");
+        let layer = GestureLayer::either_hand(
+            "Gestures",
+            ObjectRef::external(7400000, "a000000000000000000000000000000a", 2),
+        )
+        .motion(
+            1,
+            ObjectRef::external(7400000, "a000000000000000000000000000000b", 2),
+        );
+        let (frag, _) = layer.to_state_fragment(&mut ids);
+        let file = UnityFile::parse(&format!("{UNITY_PREAMBLE}{frag}")).unwrap();
+        let transitions: Vec<_> = file
+            .documents
+            .iter()
+            .filter(|d| d.class_id == 1101)
+            .collect();
+        // 1 neutral + 7 gestures × 2 parameters.
+        assert_eq!(transitions.len(), 15);
+        let neutral = transitions
+            .iter()
+            .find(|t| t.body["m_Conditions"].as_vec().unwrap().len() == 2)
+            .expect("neutral transition has both conditions");
+        let events: Vec<&str> = neutral.body["m_Conditions"]
+            .as_vec()
+            .unwrap()
+            .iter()
+            .map(|c| c["m_ConditionEvent"].as_str().unwrap())
+            .collect();
+        assert_eq!(events, vec!["GestureLeft", "GestureRight"]);
+        assert!(
+            neutral.body["m_Conditions"]
+                .as_vec()
+                .unwrap()
+                .iter()
+                .all(|c| c["m_EventTreshold"].as_i64() == Some(0))
+        );
+        // GestureLeft transitions precede GestureRight ones for the same value (priority).
+        let sm = file.documents.iter().find(|d| d.class_id == 1107).unwrap();
+        let order: Vec<i64> = sm.body["m_AnyStateTransitions"]
+            .as_vec()
+            .unwrap()
+            .iter()
+            .map(|r| r["fileID"].as_i64().unwrap())
+            .collect();
+        let by_id = |id: i64| transitions.iter().find(|t| t.file_id == id).unwrap();
+        let fist: Vec<&str> = order
+            .iter()
+            .map(|id| by_id(*id))
+            .filter(|t| t.body["m_Conditions"][0]["m_EventTreshold"].as_i64() == Some(1))
+            .map(|t| {
+                t.body["m_Conditions"][0]["m_ConditionEvent"]
+                    .as_str()
+                    .unwrap()
+            })
+            .collect();
+        assert_eq!(fist, vec!["GestureLeft", "GestureRight"]);
     }
 
     #[test]

@@ -33,7 +33,12 @@ new assets is a separate concern (`avatar-anim-gen`). Full detail:
 - `EditableUnityFile::parse(text)` — load for surgical editing. `set_scalar(doc, path, Scalar)` and
   `set_reference(doc, path, fileID, guid, type)` splice a single value; `doc_by_file_id`,
   `documents()`, `into_string()`. Paths are `parse_path("parameters/0/saved")` /
-  `parse_path("m_Script/guid")`. See the [reference doc](../../docs/reference/unity-yaml-edit.md).
+  `parse_path("m_Script/guid")`. Structural edits: `remove_document` / `replace_document_body` /
+  `retag_document` / `append_document`, and `append_sequence_item` / `remove_sequence_item` /
+  `sequence_items` on block lists (`m_Component`, `m_Children`). See the
+  [reference doc](../../docs/reference/unity-yaml-edit.md).
+- `script_file_id(namespace, class)` — Unity's `m_Script` fileID for a class inside a DLL (MD4 class
+  hash), pinned against the VRChat SDK's serialized assets.
 
 ## Usage
 

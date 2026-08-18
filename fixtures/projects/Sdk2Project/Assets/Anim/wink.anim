@@ -1,0 +1,24 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!74 &7400000
+AnimationClip:
+  m_ObjectHideFlags: 0
+  m_Name: wink
+  serializedVersion: 6
+  m_Legacy: 0
+  m_FloatCurves:
+  - curve:
+      serializedVersion: 2
+      m_Curve:
+      - serializedVersion: 3
+        time: 0
+        value: 100
+    attribute: blendShape.Wink
+    path: Body
+    classID: 137
+    script: {fileID: 0}
+  m_PositionCurves: []
+  m_RotationCurves: []
+  m_EulerCurves: []
+  m_ScaleCurves: []
+  m_PPtrCurves: []

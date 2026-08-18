@@ -27,7 +27,8 @@ VRChat upload step is not. For what's built and the roadmap, see [Status](#statu
 | [`docs/reference/rig-runtime.md`](docs/reference/rig-runtime.md) | Runtime rig layer: skin/bind extraction, posing + bone-matrix palette, two-bone IK, tracker input. |
 | [`docs/reference/performance-stats.md`](docs/reference/performance-stats.md) | `avatar stats`: performance-rank metrics (incl. particles & constraints), component recognition, PC/Android threshold tables. |
 | [`docs/reference/anim-gen.md`](docs/reference/anim-gen.md) | `avatar-anim-gen`: `.anim` clip + analog-gesture blend-tree + FX `AnimatorController` generation (Unity-YAML emitter, deterministic fileIDs). |
-| [`docs/reference/unity-yaml-edit.md`](docs/reference/unity-yaml-edit.md) | `EditableUnityFile` / `avatar asset set`: surgical, round-trip-safe value edits to an *existing* Unity asset by span-splicing raw text (fileIDs/refs/key-order/formatting preserved). |
+| [`docs/reference/unity-yaml-edit.md`](docs/reference/unity-yaml-edit.md) | `EditableUnityFile` / `avatar asset set`: surgical, round-trip-safe value **and structural** edits to an *existing* Unity asset by span-splicing raw text (fileIDs/refs/key-order/formatting preserved). |
+| [`docs/reference/migrate.md`](docs/reference/migrate.md) | `avatar-migrate` / `avatar migrate sdk3`: SDK2 → SDK3 migration — descriptor/PipelineManager retyped in place, DynamicBone → PhysBone by the SDK's own rules, Cloth → PhysBone skirt, subtree stripping, gesture overrides → FX layer, rig-derived eye look, output project layout, script references, limits. |
 | [`docs/reference/osc-runtime.md`](docs/reference/osc-runtime.md) | `avatar-osc`: VRChat OSC address space, codec, UDP client, OSCQuery avatar-config parsing; the analog-gesture daemon. |
 | [`docs/reference/unitypackage.md`](docs/reference/unitypackage.md) | `avatar-unitypackage`: reading the `.unitypackage` format, extracting to a Unity project tree, the avatar-in-world co-import testbed. |
 | [`docs/reference/render.md`](docs/reference/render.md) | `avatar-render` / `avatar render` + `avatar view`: offscreen wgpu preview pipeline, avatar rest-pose render (auto-upright), world-scene render, avatar-dropped-at-spawn-in-world, interactive winit viewer (orbit/zoom/walk) + limits. |
@@ -51,6 +52,7 @@ VRChat upload step is not. For what's built and the roadmap, see [Status](#statu
 [`lint`](crates/lint/README.md) ·
 [`stats`](crates/stats/README.md) ·
 [`anim-gen`](crates/anim-gen/README.md) ·
+[`migrate`](crates/migrate/README.md) ·
 [`render`](crates/render/README.md) ·
 [`osc`](crates/osc/README.md) ·
 [`osc-gestures`](crates/osc-gestures/README.md) ·
@@ -137,9 +139,16 @@ READMEs. What exists today, with its doc:
   plus the composite **`avatar toggle`** — the full ten-file toggle bundle (clips + two-state FX
   controller + params + menu + guid-pinning `.meta`s) ([`anim-gen.md`](docs/reference/anim-gen.md)).
 - **Edit** — `avatar asset set` / `avatar_unity_yaml::EditableUnityFile`: surgical, round-trip-safe
-  value edits to an *existing* Unity asset (scalars, reference re-targets, flow-map subfields) by
-  span-splicing raw text — fileIDs/refs/key-order/formatting preserved
+  value edits to an *existing* Unity asset (scalars, reference re-targets, flow-map subfields) **and
+  structural edits** (remove/replace/append documents, block-sequence items) by span-splicing raw
+  text — fileIDs/refs/key-order/formatting preserved
   ([`unity-yaml-edit.md`](docs/reference/unity-yaml-edit.md)).
+- **Migrate (SDK2 → SDK3)** — `avatar migrate sdk3 <extracted-project> -o <out> --name N …`: rewrites
+  the SDK2 avatar prefab in place (descriptor + PipelineManager retyped at their fileIDs, root motion
+  off, DynamicBone → PhysBone with the SDK's own conversion rules, optional Cloth → PhysBone skirt,
+  `--strip` subtrees, gesture overrides → an either-hand FX layer, rig-derived eye look + blink) and
+  assembles a VCC-openable project around it; `--dry-run` / `--json`
+  ([`migrate.md`](docs/reference/migrate.md)).
 - **OSC runtime (M5)** — `avatar osc send|input|monitor|change|query` + the analog-gesture daemon
   `avatar osc gestures` ([`osc-runtime.md`](docs/reference/osc-runtime.md)).
 - **Packaging / preview** — `avatar unitypackage info|list|extract|testbed`
@@ -166,3 +175,8 @@ discovery; running the generated Blender repair script under CI. See [`PLAN.md`]
   ([`render.md`](docs/reference/render.md)).
 - **`fbxcel`'s `write_tree` re-emits arrays uncompressed** — a written FBX is larger than the input
   but semantically identical ([`armature-repair.md`](docs/reference/armature-repair.md)).
+- **SDK3 script references are DLL class hashes, not `11500000`.** Every SDK3 runtime class lives in
+  a DLL, so `m_Script` is `{fileID: <MD4 class hash>, guid: <dll guid>, type: 3}` —
+  `avatar_unity_yaml::script_file_id(namespace, class)` derives the hash (test-pinned against the
+  SDK's own assets); the pinned refs are in `avatar_migrate::sdk3` / `avatar_anim_gen::expressions`.
+  A `.cs`-style `{fileID: 11500000, guid: …}` to a guessed GUID resolves to nothing in Unity.

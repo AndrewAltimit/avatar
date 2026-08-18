@@ -1,0 +1,267 @@
+{
+  "added": [
+    {
+      "file_id": 8120638631262054030,
+      "object_path": "Armature/Hips",
+      "what": "VRCPhysBone chain (ignoring 2 children, 1 colliders)"
+    }
+  ],
+  "assets_copied": 10,
+  "assets_skipped": 3,
+  "avatar_root": "MikuFixture",
+  "blink_blendshape": null,
+  "converted": [
+    {
+      "file_id": 9500,
+      "object_path": "",
+      "what": "Animator: applyRootMotion 1 -> 0 (SDK3 locomotion must not apply root motion)"
+    },
+    {
+      "file_id": 13611,
+      "object_path": "Armature/Hips/Left leg/L cap",
+      "what": "CapsuleCollider -> VRCPhysBoneCollider (capsule)"
+    },
+    {
+      "file_id": 11404,
+      "object_path": "Armature/Hips/Spine/Head",
+      "what": "DynamicBoneCollider -> VRCPhysBoneCollider (sphere)"
+    },
+    {
+      "file_id": 11407,
+      "object_path": "Armature/Hips/Spine/Head/Hair",
+      "what": "DynamicBone -> VRCPhysBone (pull 0.05, spring 0.80, immobile 0.90, maxAngle 92, radius 0.020, gravity 0.050)"
+    },
+    {
+      "file_id": 11400,
+      "object_path": "",
+      "what": "VRC_AvatarDescriptor (SDK2) -> VRCAvatarDescriptor (SDK3)"
+    },
+    {
+      "file_id": 11401,
+      "object_path": "",
+      "what": "PipelineManager re-pointed at the SDK3 DLL; blueprint id cleared (new upload)"
+    }
+  ],
+  "descriptor": "SDK2 descriptor at fileID 11400",
+  "dry_run": false,
+  "eye_look": "derived from rig: up 10°, down 10°, left 12°, right 12°",
+  "fx": {
+    "controller_ref": [
+      335705499531219,
+      "e71e660263f81df238bca969703fc318"
+    ],
+    "files": [
+      {
+        "rel_path": "Fixture_SDK3/FX/Gesture_Fist.anim"
+      },
+      {
+        "rel_path": "Fixture_SDK3/FX/Gesture_Fist.anim.meta"
+      },
+      {
+        "rel_path": "Fixture_SDK3/FX/Gesture_Victory.anim"
+      },
+      {
+        "rel_path": "Fixture_SDK3/FX/Gesture_Victory.anim.meta"
+      },
+      {
+        "rel_path": "Fixture_SDK3/FX/Gesture_Neutral.anim"
+      },
+      {
+        "rel_path": "Fixture_SDK3/FX/Gesture_Neutral.anim.meta"
+      },
+      {
+        "rel_path": "Fixture_SDK3/FX/FX.controller"
+      },
+      {
+        "rel_path": "Fixture_SDK3/FX/FX.controller.meta"
+      }
+    ],
+    "gestures": [
+      {
+        "blendshapes": [
+          [
+            "Body",
+            "Cheek Blush",
+            60.0
+          ],
+          [
+            "Body",
+            "Smile",
+            100.0
+          ]
+        ],
+        "dropped_curves": 1,
+        "generated_file": "Fixture_SDK3/FX/Gesture_Fist.anim",
+        "gesture": 1,
+        "gesture_name": "Fist",
+        "source_clip": "Anim/smile.anim"
+      },
+      {
+        "blendshapes": [
+          [
+            "Body",
+            "Wink",
+            100.0
+          ]
+        ],
+        "dropped_curves": 0,
+        "generated_file": "Fixture_SDK3/FX/Gesture_Victory.anim",
+        "gesture": 4,
+        "gesture_name": "Victory",
+        "source_clip": "Anim/wink.anim"
+      }
+    ],
+    "neutral_shapes": [
+      [
+        "Body",
+        "Cheek Blush"
+      ],
+      [
+        "Body",
+        "Smile"
+      ],
+      [
+        "Body",
+        "Wink"
+      ]
+    ],
+    "skipped": [
+      [
+        "IDLE",
+        "locomotion/emote slot: SDK3 Base/Action layers are a different design; not migrated"
+      ]
+    ],
+    "slots": [
+      {
+        "clip_guid": "aaaaaaaa00000000aaaaaaaa00000011",
+        "clip_path": "Anim/smile.anim",
+        "gesture": 1,
+        "slot": "FIST"
+      },
+      {
+        "clip_guid": "aaaaaaaa00000000aaaaaaaa00000012",
+        "clip_path": "Anim/wink.anim",
+        "gesture": 4,
+        "slot": "VICTORY"
+      },
+      {
+        "clip_guid": "aaaaaaaa00000000aaaaaaaa00000012",
+        "clip_path": "Anim/wink.anim",
+        "gesture": null,
+        "slot": "IDLE"
+      }
+    ]
+  },
+  "generated": [
+    {
+      "kind": "clip",
+      "path": "Assets/Fixture_SDK3/FX/Gesture_Fist.anim"
+    },
+    {
+      "kind": "meta",
+      "path": "Assets/Fixture_SDK3/FX/Gesture_Fist.anim.meta"
+    },
+    {
+      "kind": "clip",
+      "path": "Assets/Fixture_SDK3/FX/Gesture_Victory.anim"
+    },
+    {
+      "kind": "meta",
+      "path": "Assets/Fixture_SDK3/FX/Gesture_Victory.anim.meta"
+    },
+    {
+      "kind": "clip",
+      "path": "Assets/Fixture_SDK3/FX/Gesture_Neutral.anim"
+    },
+    {
+      "kind": "meta",
+      "path": "Assets/Fixture_SDK3/FX/Gesture_Neutral.anim.meta"
+    },
+    {
+      "kind": "controller",
+      "path": "Assets/Fixture_SDK3/FX/FX.controller"
+    },
+    {
+      "kind": "meta",
+      "path": "Assets/Fixture_SDK3/FX/FX.controller.meta"
+    },
+    {
+      "kind": "asset",
+      "path": "Assets/Fixture_SDK3/Parameters.asset"
+    },
+    {
+      "kind": "meta",
+      "path": "Assets/Fixture_SDK3/Parameters.asset.meta"
+    },
+    {
+      "kind": "asset",
+      "path": "Assets/Fixture_SDK3/Menu.asset"
+    },
+    {
+      "kind": "meta",
+      "path": "Assets/Fixture_SDK3/Menu.asset.meta"
+    },
+    {
+      "kind": "prefab",
+      "path": "Assets/Fixture_SDK3/Fixture.prefab"
+    },
+    {
+      "kind": "meta",
+      "path": "Assets/Fixture_SDK3/Fixture.prefab.meta"
+    },
+    {
+      "kind": "meta",
+      "path": "Assets/Fixture_SDK3.meta"
+    },
+    {
+      "kind": "meta",
+      "path": "Assets/Fixture_SDK3/FX.meta"
+    }
+  ],
+  "next_steps": [
+    "Install the shader package the materials expect (Poiyomi Toon for '.poiyomi/…' shaders), then select the pink materials and switch them to the installed shader — textures/colours are kept by property name.",
+    "Open the output folder with the VRChat Creator Companion (Projects → Add Existing Project) so it resolves com.vrchat.avatars, then open it in Unity.",
+    "Drag Assets/Fixture_SDK3/Fixture.prefab into a scene; check the Avatar Descriptor's View Position and the FX layer, then Build & Publish from the VRChat SDK panel.",
+    "Test each hand gesture: expressions come from the generated 'Gestures' FX layer (either hand triggers).",
+    "Play-test the PhysBones (hair/skirt) and tune Pull/Spring/Gravity in the inspector if needed.",
+    "Eye look was derived from the rig; use the descriptor's eye-look preview to confirm the eyes glance the right way."
+  ],
+  "output_prefab": "Assets/Fixture_SDK3/Fixture.prefab",
+  "output_project": "<out>",
+  "prefab_log": [
+    "stripped subtree 'Vest' (6 objects)",
+    "removed Cloth from 'skirt'",
+    "CapsuleCollider -> VRCPhysBoneCollider on 'Armature/Hips/Left leg/L cap'",
+    "DynamicBoneCollider -> VRCPhysBoneCollider on 'Armature/Hips/Spine/Head'",
+    "DynamicBone -> VRCPhysBone on 'Armature/Hips/Spine/Head/Hair'",
+    "added VRCPhysBone chain rooted at 'Hips'",
+    "VRC_AvatarDescriptor (SDK2) -> VRCAvatarDescriptor (SDK3)",
+    "PipelineManager -> SDK3 PipelineManager (blueprint cleared)"
+  ],
+  "removed": [
+    {
+      "file_id": 18300,
+      "object_path": "skirt",
+      "what": "Cloth"
+    }
+  ],
+  "root_scale": [
+    0.75,
+    0.75,
+    0.75
+  ],
+  "source_prefab": "Avatar.prefab",
+  "stripped": [
+    "Armature/Hips/Vest"
+  ],
+  "view_position": [
+    0.0,
+    0.995,
+    0.06
+  ],
+  "warnings": [
+    "override slot IDLE: locomotion/emote slot: SDK3 Base/Action layers are a different design; not migrated",
+    "blink blendshape lookup failed: mesh guid aaaaaaaa00000000aaaaaaaa00000001 not in project",
+    "1 material(s) use shaders whose #include files are missing from the export (e.g. Mat/Body.mat); they will render pink until the shader package (Poiyomi Toon for '.poiyomi' shaders) is installed and the materials are re-pointed at it"
+  ]
+}

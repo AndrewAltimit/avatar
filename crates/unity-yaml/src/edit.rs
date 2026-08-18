@@ -1160,7 +1160,7 @@ Transform:
 MonoBehaviour:
   m_GameObject: {fileID: 100}
   m_Script: {fileID: 11500000, guid: aaaa0000aaaa0000aaaa0000aaaa0000, type: 3}
-  m_Name: 
+  m_Name:
   m_Damping: 0.2
 --- !u!183 &18300
 Cloth:

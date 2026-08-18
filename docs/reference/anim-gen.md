@@ -183,6 +183,23 @@ contract points:
 classifier `avatar lint` trusts — so a generated asset is proven to read back as a Parameters/Menu
 asset with the expected budget and controls.
 
+### 4b. Gesture-driven FX layers (`gesture` module)
+
+`GestureLayer` emits the idiomatic SDK3 face-expression layer: an `AnimatorStateMachine` with a
+`Neutral` default state plus one state per gesture value that has a clip, and Any-State
+`AnimatorStateTransition`s conditioned `GestureLeft`/`GestureRight` **Equals n** (`m_ConditionMode`
+6), no exit time, fixed 0.1 s, `m_CanTransitionToSelf: 0` so a held gesture doesn't retrigger.
+Gesture values with no clip route to `Neutral`, so the layer is authoritative for all eight; states
+are Write Defaults off, so the `Neutral` clip should reset every shape the gesture clips touch.
+
+A layer may read **several** parameters (`GestureLayer::either_hand`): each gesture state then gets
+one transition per parameter and `Neutral` requires *all* of them to be 0 (multiple
+`m_Conditions` = AND). One either-hand layer is SDK2's semantics (an override slot fired for
+whichever hand made the gesture) and avoids the two-per-hand-layer clobber where the upper layer's
+Neutral, resetting shared shapes under WD off, wipes the lower hand's expression. `fx_gestures`
+wraps layers in the class-91 controller, declaring each `Int` parameter once. Used by
+[`avatar-migrate`](migrate.md) to rebuild SDK2 gesture overrides.
+
 ### 5. The toggle bundle (`avatar toggle`) — the end-to-end composite
 
 A working in-game toggle needs five cooperating assets; the `toggle` module assembles all of them
