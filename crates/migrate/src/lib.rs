@@ -27,6 +27,7 @@
 pub mod eyelook;
 pub mod fx;
 pub mod math;
+pub mod packages;
 pub mod project;
 pub mod rewrite;
 pub mod scene;
@@ -45,6 +46,7 @@ use serde::Serialize;
 use crate::eyelook::{EyeLookAngles, derive_eye_look};
 use crate::fx::{FxBundle, FxLayout, build_fx_from_overrides};
 use crate::math::{Trs, Vec3};
+use crate::packages::{RelinkedMaterial, ShaderIndex, VpmPackage, relink_locked_materials};
 use crate::rewrite::PrefabRewriter;
 use crate::scene::{CAPSULE_COLLIDER, MONO_BEHAVIOUR, SKINNED_MESH_RENDERER, Scene, TRANSFORM};
 use crate::sdk2::Sdk2Avatar;
@@ -141,6 +143,13 @@ pub struct MigrateOptions {
     pub sdk_version: String,
     /// Unity editor version for `ProjectVersion.txt`.
     pub unity_version: String,
+    /// VPM packages (directories with `package.json`, or `.zip`s of one) to bundle into the output
+    /// project's `Packages/` — e.g. the shader package the materials need.
+    pub vpm_packages: Vec<PathBuf>,
+    /// Re-point materials whose shader was replaced by a locker's generated `Hidden/…` copy back
+    /// to their `OriginalShader` (found among source assets + bundled packages), and drop the
+    /// generated copies.
+    pub relink_locked_shaders: bool,
     /// Don't write anything; just plan and report.
     pub dry_run: bool,
 }
@@ -168,6 +177,8 @@ impl MigrateOptions {
             exclude: vec!["VRCSDK".into(), "VRChat Examples".into()],
             sdk_version: "3.10.4".into(),
             unity_version: "2022.3.22f1".into(),
+            vpm_packages: Vec::new(),
+            relink_locked_shaders: false,
             dry_run: false,
         }
     }
@@ -234,6 +245,12 @@ pub struct MigrationReport {
     pub generated: Vec<OutputFile>,
     pub assets_copied: usize,
     pub assets_skipped: usize,
+    /// Source assets not copied because a bundled package already provides their GUID.
+    pub assets_deduped: usize,
+    /// `(name, version)` of VPM packages bundled into `Packages/`.
+    pub bundled_packages: Vec<(String, String)>,
+    /// Materials re-pointed from a locked shader copy to their original shader.
+    pub relinked_materials: Vec<RelinkedMaterial>,
     pub warnings: Vec<String>,
     /// What still needs a human in Unity.
     pub next_steps: Vec<String>,
@@ -248,6 +265,50 @@ pub fn migrate(opts: &MigrateOptions) -> Result<MigrationReport> {
     }
     let files = walk_assets(&assets_root);
     let guid_index = build_guid_index(&files);
+
+    // ---- 0. Bundled VPM packages (loaded first: they feed the shader index and the GUID dedupe)
+    let scratch = std::env::temp_dir().join(format!("avatar-migrate-{}", std::process::id()));
+    let mut packages: Vec<VpmPackage> = Vec::new();
+    for p in &opts.vpm_packages {
+        packages.push(
+            VpmPackage::load(p, &scratch)
+                .with_context(|| format!("--vpm-package {}", p.display()))?,
+        );
+    }
+    let mut exclude: Vec<String> = opts.exclude.clone();
+    let mut package_guids: std::collections::HashSet<String> = std::collections::HashSet::new();
+    for pkg in &packages {
+        for lf in &pkg.legacy_folders {
+            if !exclude.contains(lf) {
+                exclude.push(lf.clone());
+            }
+        }
+        package_guids.extend(pkg.guids.keys().cloned());
+    }
+    // Locked-shader relink: source assets + packages form the shader name index.
+    let mut overrides: HashMap<String, String> = HashMap::new();
+    let mut relinked_materials: Vec<RelinkedMaterial> = Vec::new();
+    let mut early_warnings: Vec<String> = Vec::new();
+    if opts.relink_locked_shaders {
+        let mut shaders = ShaderIndex::default();
+        shaders.add(&guid_index);
+        for pkg in &packages {
+            shaders.add(&pkg.guids);
+        }
+        let r = relink_locked_materials(&assets_root, &files, &shaders);
+        for d in r.exclude_dirs {
+            if !exclude.contains(&d) {
+                exclude.push(d);
+            }
+        }
+        for (mat, orig) in &r.unresolved {
+            early_warnings.push(format!(
+                "material {mat}: original shader '{orig}' not found in the project or bundled packages; left on its locked copy"
+            ));
+        }
+        overrides = r.overrides;
+        relinked_materials = r.relinked;
+    }
 
     // ---- locate + parse the SDK2 prefab
     let prefab_path = match &opts.prefab {
@@ -267,7 +328,7 @@ pub fn migrate(opts: &MigrateOptions) -> Result<MigrationReport> {
     let mut rw = PrefabRewriter::new(&prefab_text)?;
     let scene = rw.scene().clone();
     let sdk2 = Sdk2Avatar::read(&scene)?;
-    let mut warnings = Vec::new();
+    let mut warnings = early_warnings;
     let mut next_steps = Vec::new();
     let mut converted = Vec::new();
     let mut added = Vec::new();
@@ -828,7 +889,11 @@ pub fn migrate(opts: &MigrateOptions) -> Result<MigrationReport> {
 
     // ---- 9b. Material shaders: a locked/optimized shader exported without its #include files
     // compiles to pink in a fresh project. Detect it here so the user hears it from the report.
-    let broken = shader_include_check(&assets_root, &files, &guid_index, &opts.exclude);
+    let broken: Vec<(String, String)> =
+        shader_include_check(&assets_root, &files, &guid_index, &exclude)
+            .into_iter()
+            .filter(|(m, _)| !overrides.contains_key(m))
+            .collect();
     if !broken.is_empty() {
         let names: Vec<String> = broken.iter().take(3).map(|(m, _)| m.clone()).collect();
         warnings.push(format!(
@@ -870,6 +935,7 @@ pub fn migrate(opts: &MigrateOptions) -> Result<MigrationReport> {
         .unwrap_or_else(|_| prefab_path.to_string_lossy().to_string());
     let mut assets_copied = 0;
     let mut assets_skipped = 0;
+    let mut assets_deduped = 0;
     if !opts.dry_run {
         let out_assets = project::assets_dir(&opts.output);
         if out_assets.exists() {
@@ -879,19 +945,39 @@ pub fn migrate(opts: &MigrateOptions) -> Result<MigrationReport> {
             );
         }
         // The SDK2 prefab itself (and its .meta) is replaced by the migrated one.
-        let skip = vec![
+        // Source files whose GUID a bundled package already provides are not copied (Unity would
+        // otherwise see duplicate GUIDs and reassign one at random).
+        let mut skip_paths = vec![
             source_prefab_rel.clone(),
             format!("{source_prefab_rel}.meta"),
         ];
-        let (c, s) = project::copy_assets(&assets_root, &out_assets, &opts.exclude, &skip)?;
+        for (guid, path) in &guid_index {
+            if package_guids.contains(guid)
+                && let Ok(rel) = path.strip_prefix(&assets_root)
+            {
+                let rel = rel.to_string_lossy().replace('\\', "/");
+                assets_deduped += 1;
+                skip_paths.push(format!("{rel}.meta"));
+                skip_paths.push(rel);
+            }
+        }
+        let (c, s) =
+            project::copy_assets(&assets_root, &out_assets, &exclude, &skip_paths, &overrides)?;
         assets_copied = c;
         assets_skipped = s;
         for (rel, content) in &generated_files {
             project::write_text(&out_assets.join(rel), content)?;
         }
+        for pkg in &packages {
+            pkg.install(&opts.output)?;
+        }
+        let bundled: Vec<(String, String)> = packages
+            .iter()
+            .map(|p| (p.name.clone(), p.version.clone()))
+            .collect();
         project::write_text(
             &opts.output.join("Packages/vpm-manifest.json"),
-            &project::vpm_manifest(&opts.sdk_version),
+            &project::vpm_manifest(&opts.sdk_version, &bundled),
         )?;
         project::write_text(
             &opts.output.join("Packages/manifest.json"),
@@ -903,6 +989,13 @@ pub fn migrate(opts: &MigrateOptions) -> Result<MigrationReport> {
         )?;
     }
 
+    let _ = std::fs::remove_dir_all(&scratch);
+    if !relinked_materials.is_empty() {
+        next_steps.push(format!(
+            "{} material(s) were re-pointed from locked shader copies to their original shader; open each once in the inspector so the shader's upgrade pass runs, and eyeball them.",
+            relinked_materials.len()
+        ));
+    }
     next_steps.push("Open the output folder with the VRChat Creator Companion (Projects → Add Existing Project) so it resolves com.vrchat.avatars, then open it in Unity.".into());
     next_steps.push(format!("Drag Assets/{out_prefab_rel} into a scene; check the Avatar Descriptor's View Position and the FX layer, then Build & Publish from the VRChat SDK panel."));
     if fx_bundle.is_some() {
@@ -934,6 +1027,12 @@ pub fn migrate(opts: &MigrateOptions) -> Result<MigrationReport> {
         generated,
         assets_copied,
         assets_skipped,
+        assets_deduped,
+        bundled_packages: packages
+            .iter()
+            .map(|p| (p.name.clone(), p.version.clone()))
+            .collect(),
+        relinked_materials,
         warnings,
         next_steps,
         prefab_log: rw.log.clone(),

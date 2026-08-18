@@ -6,10 +6,12 @@
       "what": "VRCPhysBone chain (ignoring 2 children, 1 colliders)"
     }
   ],
-  "assets_copied": 10,
-  "assets_skipped": 3,
+  "assets_copied": 14,
+  "assets_deduped": 0,
+  "assets_skipped": 4,
   "avatar_root": "MikuFixture",
   "blink_blendshape": null,
+  "bundled_packages": [],
   "converted": [
     {
       "file_id": 9500,
@@ -220,6 +222,7 @@
   ],
   "next_steps": [
     "Install the shader package the materials expect (Poiyomi Toon for '.poiyomi/…' shaders), then select the pink materials and switch them to the installed shader — textures/colours are kept by property name.",
+    "1 material(s) were re-pointed from locked shader copies to their original shader; open each once in the inspector so the shader's upgrade pass runs, and eyeball them.",
     "Open the output folder with the VRChat Creator Companion (Projects → Add Existing Project) so it resolves com.vrchat.avatars, then open it in Unity.",
     "Drag Assets/Fixture_SDK3/Fixture.prefab into a scene; check the Avatar Descriptor's View Position and the FX layer, then Build & Publish from the VRChat SDK panel.",
     "Test each hand gesture: expressions come from the generated 'Gestures' FX layer (either hand triggers).",
@@ -238,6 +241,15 @@
     "added VRCPhysBone chain rooted at 'Hips'",
     "VRC_AvatarDescriptor (SDK2) -> VRCAvatarDescriptor (SDK3)",
     "PipelineManager -> SDK3 PipelineManager (blueprint cleared)"
+  ],
+  "relinked_materials": [
+    {
+      "dropped_folder": "Mat/OptimizedShaders/Locked-1a2b3c",
+      "material": "Mat/Skirt.mat",
+      "original_shader": ".poiyomi/• Poiyomi Toon •",
+      "relinked_to": ".poiyomi/Poiyomi Toon",
+      "shader_path": "<ROOT>/fixtures/projects/Sdk2Project/Assets/Shaders/Toon.shader"
+    }
   ],
   "removed": [
     {

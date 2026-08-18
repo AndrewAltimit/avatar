@@ -33,6 +33,7 @@ fn options(out: &Path) -> MigrateOptions {
     opts.capsules_to_physbone_colliders = true;
     opts.physbone_roots = vec![PhysBoneRootSpec::parse("Hips|Spine,Left leg").unwrap()];
     opts.eye_bones = Some(("Eye_L".into(), "Eye_R".into()));
+    opts.relink_locked_shaders = true;
     opts
 }
 

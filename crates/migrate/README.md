@@ -25,7 +25,11 @@ project around it that the VRChat Creator Companion can open:
 - SDK2 gesture overrides → clean blendshape clips + an either-hand gesture FX layer
   ([`avatar-anim-gen`](../anim-gen/README.md)); empty expression menu/params generated.
 - `Assets/` copied minus exclusions (SDK2 `VRCSDK`, examples, DynamicBone scripts), plus
-  `Packages/vpm-manifest.json` (`com.vrchat.avatars`) and `ProjectSettings/ProjectVersion.txt`.
+  `Packages/vpm-manifest.json` (`com.vrchat.avatars`), a VCC-template `manifest.json` (incl.
+  `com.unity.test-framework`, without which the SDK doesn't compile) and `ProjectVersion.txt`.
+- `--vpm-package` bundles VPM packages (e.g. a shader package's release zip) into `Packages/`;
+  `--relink-locked-shaders` re-points materials from a locker's generated `Hidden/…` shader copy
+  to their `OriginalShader` (found in the project or bundled packages) and drops the copies.
 - A report (`--json`; schema `avatar schema migrate`) of every conversion, warning (locomotion
   overrides not migrated, shaders with missing includes, …) and the remaining Unity-side steps.
 
@@ -44,6 +48,7 @@ project around it that the VRChat Creator Companion can open:
 - `scene::Scene` — the prefab graph (transform tree, components, world-space composition);
   `rewrite::PrefabRewriter` — strip subtree / remove / retype / add component over `EditableUnityFile`.
 - `fx::build_fx_from_overrides` — override controller → FX bundle; `eyelook::derive_eye_look`.
+- `packages::{VpmPackage, ShaderIndex, relink_locked_materials}` — VPM bundling + locked-shader relink.
 
 ## Status
 

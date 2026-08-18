@@ -147,7 +147,8 @@ READMEs. What exists today, with its doc:
   the SDK2 avatar prefab in place (descriptor + PipelineManager retyped at their fileIDs, root motion
   off, DynamicBone → PhysBone with the SDK's own conversion rules, optional Cloth → PhysBone skirt,
   `--strip` subtrees, gesture overrides → an either-hand FX layer, rig-derived eye look + blink) and
-  assembles a VCC-openable project around it; `--dry-run` / `--json`
+  assembles a VCC-openable project around it (`--vpm-package` bundles e.g. a shader package,
+  `--relink-locked-shaders` re-points locked materials at their original shader); `--dry-run` / `--json`
   ([`migrate.md`](docs/reference/migrate.md)).
 - **OSC runtime (M5)** — `avatar osc send|input|monitor|change|query` + the analog-gesture daemon
   `avatar osc gestures` ([`osc-runtime.md`](docs/reference/osc-runtime.md)).

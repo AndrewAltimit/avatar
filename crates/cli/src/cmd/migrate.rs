@@ -59,6 +59,15 @@ pub struct MigrateSdk3Args {
     /// `VRChat Examples` (SDK2) are always excluded.
     #[arg(long, value_name = "DIR")]
     exclude: Vec<String>,
+    /// Bundle a VPM package (a directory with `package.json`, or a `.zip` of one — e.g. a shader
+    /// package's release zip) into the output project's `Packages/`. Repeatable.
+    #[arg(long = "vpm-package", value_name = "PATH")]
+    vpm_packages: Vec<PathBuf>,
+    /// Re-point materials sitting on a locker's generated `Hidden/…` shader copy back to their
+    /// original shader (by the material's `OriginalShader` tag; found among the project's shaders
+    /// and bundled packages), and drop the generated copies.
+    #[arg(long)]
+    relink_locked_shaders: bool,
     /// `com.vrchat.avatars` version to pin in the output `vpm-manifest.json`.
     #[arg(long, default_value = "3.10.4")]
     sdk_version: String,
@@ -111,6 +120,8 @@ pub fn sdk3(args: &MigrateSdk3Args) -> Result<()> {
             opts.exclude.push(e);
         }
     }
+    opts.vpm_packages = args.vpm_packages.clone();
+    opts.relink_locked_shaders = args.relink_locked_shaders;
     opts.sdk_version = args.sdk_version.clone();
     opts.unity_version = args.unity_version.clone();
     opts.dry_run = args.dry_run;
@@ -192,11 +203,24 @@ fn print_report(r: &MigrationReport) {
         }
     }
     println!(
-        "  files         : {} generated, {} copied, {} skipped",
+        "  files         : {} generated, {} copied, {} skipped, {} deduped against bundled packages",
         r.generated.len(),
         r.assets_copied,
-        r.assets_skipped
+        r.assets_skipped,
+        r.assets_deduped
     );
+    for (name, version) in &r.bundled_packages {
+        println!("  bundled       : {name} {version}");
+    }
+    if !r.relinked_materials.is_empty() {
+        println!("  relinked materials:");
+        for m in &r.relinked_materials {
+            println!(
+                "    - {} : '{}' -> '{}'",
+                m.material, m.original_shader, m.relinked_to
+            );
+        }
+    }
     if !r.warnings.is_empty() {
         println!("  warnings:");
         for w in &r.warnings {

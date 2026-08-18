@@ -15,6 +15,7 @@ pub fn copy_assets(
     dst_assets: &Path,
     exclude: &[String],
     skip_files: &[String],
+    overrides: &std::collections::HashMap<String, String>,
 ) -> Result<(usize, usize)> {
     let mut copied = 0;
     let mut skipped = 0;
@@ -48,8 +49,12 @@ pub fn copy_assets(
             if let Some(parent) = dst.parent() {
                 fs::create_dir_all(parent)?;
             }
-            fs::copy(&path, &dst)
-                .with_context(|| format!("copying {} -> {}", path.display(), dst.display()))?;
+            if let Some(content) = overrides.get(&rel) {
+                fs::write(&dst, content).with_context(|| format!("writing {}", dst.display()))?;
+            } else {
+                fs::copy(&path, &dst)
+                    .with_context(|| format!("copying {} -> {}", path.display(), dst.display()))?;
+            }
             copied += 1;
         }
     }
@@ -64,17 +69,100 @@ pub fn write_text(path: &Path, content: &str) -> Result<()> {
     fs::write(path, content).with_context(|| format!("writing {}", path.display()))
 }
 
-/// `Packages/vpm-manifest.json` declaring the VRChat avatar SDK (VCC resolves it on open).
-pub fn vpm_manifest(sdk_version: &str) -> String {
-    format!(
-        "{{\n  \"dependencies\": {{\n    \"com.vrchat.avatars\": {{\n      \"version\": \"{sdk_version}\"\n    }},\n    \"com.vrchat.base\": {{\n      \"version\": \"{sdk_version}\"\n    }}\n  }},\n  \"locked\": {{\n    \"com.vrchat.avatars\": {{\n      \"version\": \"{sdk_version}\",\n      \"dependencies\": {{\n        \"com.vrchat.base\": \"{sdk_version}\"\n      }}\n    }},\n    \"com.vrchat.base\": {{\n      \"version\": \"{sdk_version}\",\n      \"dependencies\": {{}}\n    }}\n  }}\n}}\n"
-    )
+/// `Packages/vpm-manifest.json` declaring the VRChat avatar SDK plus any bundled packages (VCC
+/// resolves the SDK on open; bundled packages are already present as embedded packages).
+pub fn vpm_manifest(sdk_version: &str, bundled: &[(String, String)]) -> String {
+    let mut deps = serde_json::Map::new();
+    let mut locked = serde_json::Map::new();
+    deps.insert(
+        "com.vrchat.avatars".into(),
+        serde_json::json!({ "version": sdk_version }),
+    );
+    deps.insert(
+        "com.vrchat.base".into(),
+        serde_json::json!({ "version": sdk_version }),
+    );
+    locked.insert(
+        "com.vrchat.avatars".into(),
+        serde_json::json!({ "version": sdk_version, "dependencies": { "com.vrchat.base": sdk_version } }),
+    );
+    locked.insert(
+        "com.vrchat.base".into(),
+        serde_json::json!({ "version": sdk_version, "dependencies": {} }),
+    );
+    for (name, version) in bundled {
+        deps.insert(name.clone(), serde_json::json!({ "version": version }));
+        locked.insert(
+            name.clone(),
+            serde_json::json!({ "version": version, "dependencies": {} }),
+        );
+    }
+    let root = serde_json::json!({ "dependencies": deps, "locked": locked });
+    let mut text = serde_json::to_string_pretty(&root).unwrap_or_default();
+    text.push('\n');
+    text
 }
 
-/// `Packages/manifest.json` — Unity's own manifest; VCC adds the VRChat entries, but the file
-/// must exist for Unity to treat the folder as a project.
+/// `Packages/manifest.json` — Unity's own manifest, matching what a Creator-Companion avatar
+/// template project (Unity 2022.3) declares. `com.unity.test-framework` is load-bearing: the
+/// VRChat SDK's editor assembly ships NUnit tests and fails to compile without it, which puts the
+/// whole project into a broken state; TextMeshPro/uGUI back the SDK's control panel UI.
 pub fn unity_manifest() -> String {
-    "{\n  \"dependencies\": {\n    \"com.unity.modules.animation\": \"1.0.0\",\n    \"com.unity.modules.imageconversion\": \"1.0.0\",\n    \"com.unity.modules.jsonserialize\": \"1.0.0\",\n    \"com.unity.modules.physics\": \"1.0.0\",\n    \"com.unity.modules.ui\": \"1.0.0\",\n    \"com.unity.modules.uielements\": \"1.0.0\",\n    \"com.unity.modules.unitywebrequest\": \"1.0.0\",\n    \"com.unity.modules.video\": \"1.0.0\",\n    \"com.unity.modules.audio\": \"1.0.0\",\n    \"com.unity.modules.cloth\": \"1.0.0\",\n    \"com.unity.modules.particlesystem\": \"1.0.0\",\n    \"com.unity.modules.physics2d\": \"1.0.0\",\n    \"com.unity.modules.terrain\": \"1.0.0\",\n    \"com.unity.modules.ai\": \"1.0.0\",\n    \"com.unity.modules.androidjni\": \"1.0.0\",\n    \"com.unity.modules.assetbundle\": \"1.0.0\",\n    \"com.unity.modules.director\": \"1.0.0\",\n    \"com.unity.modules.imgui\": \"1.0.0\",\n    \"com.unity.modules.screencapture\": \"1.0.0\",\n    \"com.unity.modules.unityanalytics\": \"1.0.0\",\n    \"com.unity.modules.unitywebrequestassetbundle\": \"1.0.0\",\n    \"com.unity.modules.unitywebrequestaudio\": \"1.0.0\",\n    \"com.unity.modules.unitywebrequesttexture\": \"1.0.0\",\n    \"com.unity.modules.unitywebrequestwww\": \"1.0.0\",\n    \"com.unity.modules.vehicles\": \"1.0.0\",\n    \"com.unity.modules.vr\": \"1.0.0\",\n    \"com.unity.modules.wind\": \"1.0.0\",\n    \"com.unity.modules.xr\": \"1.0.0\"\n  }\n}\n".to_string()
+    let registry: &[(&str, &str)] = &[
+        ("com.unity.ide.visualstudio", "2.0.22"),
+        ("com.unity.test-framework", "1.1.33"),
+        ("com.unity.textmeshpro", "3.0.6"),
+        ("com.unity.timeline", "1.7.6"),
+        ("com.unity.ugui", "1.0.0"),
+        ("com.unity.visualscripting", "1.9.1"),
+    ];
+    let modules: &[&str] = &[
+        "ai",
+        "androidjni",
+        "animation",
+        "assetbundle",
+        "audio",
+        "cloth",
+        "director",
+        "imageconversion",
+        "imgui",
+        "jsonserialize",
+        "particlesystem",
+        "physics",
+        "physics2d",
+        "screencapture",
+        "terrain",
+        "terrainphysics",
+        "tilemap",
+        "ui",
+        "uielements",
+        "umbra",
+        "unityanalytics",
+        "unitywebrequest",
+        "unitywebrequestassetbundle",
+        "unitywebrequestaudio",
+        "unitywebrequesttexture",
+        "unitywebrequestwww",
+        "vehicles",
+        "video",
+        "vr",
+        "wind",
+        "xr",
+    ];
+    let mut deps = serde_json::Map::new();
+    for (k, v) in registry {
+        deps.insert((*k).into(), serde_json::Value::String((*v).into()));
+    }
+    for m in modules {
+        deps.insert(
+            format!("com.unity.modules.{m}"),
+            serde_json::Value::String("1.0.0".into()),
+        );
+    }
+    let root = serde_json::json!({ "dependencies": deps });
+    let mut text = serde_json::to_string_pretty(&root).unwrap_or_default();
+    text.push('\n');
+    text
 }
 
 /// `ProjectSettings/ProjectVersion.txt`.

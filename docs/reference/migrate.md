@@ -11,7 +11,8 @@ error-prone Unity session. Everything except the final Unity/VCC open + SDK uplo
 avatar migrate sdk3 <extracted-project> -o <out-dir> --name MyAvatar \
   --strip BhapticsVRC_Vest --drop-cloth --capsules-to-physbone-colliders \
   --physbone "Hips|Spine,Left leg,Right leg,ButtTail1|L cap,R cap" \
-  --eyes "Eye_L,Eye_R" --exclude Assets/Bhaptics --exclude Assets/Avatar/DynamicBone [--dry-run] [--json]
+  --eyes "Eye_L,Eye_R" --exclude Assets/Bhaptics --exclude Assets/Avatar/DynamicBone \
+  --vpm-package com.poiyomi.toon-9.3.64.zip --relink-locked-shaders [--dry-run] [--json]
 ```
 
 ## What is migrated
@@ -104,6 +105,26 @@ eye bones' own axes are wildly rolled (ripped/MMD rigs). Default angles 10° up/
 `blink`, `Blink_Both`, `vrc.blink`, `まばたき`, or `--blink NAME`) and its **import-order index**
 written into `eyelidsBlendshapes` (`eyelidType: 2`).
 
+## Bundled packages and locked-shader relink
+
+`--vpm-package PATH` (repeatable) bundles a VPM package — a directory with `package.json`, or a
+`.zip` of one, e.g. a shader package's GitHub release — into `<out>/Packages/<name>/` (Unity treats
+it as an embedded package) and records it in `vpm-manifest.json`. Its `legacyFolders` (what VCC
+deletes on install, e.g. `Assets/_PoiyomiShaders`) are excluded from the asset copy, and any source
+asset whose GUID the package already provides is skipped (`assets_deduped` in the report), so the
+project opens without duplicate-GUID reassignments.
+
+`--relink-locked-shaders` handles the export-time reality that shader lockers (Poiyomi/Thry's
+optimizer, Kaj's) leave behind: each material points at a generated, per-material `Hidden/…`
+shader copy whose `#include`s were never exported, and remembers the real one in
+`stringTagMap.OriginalShader`. The relink finds a shader whose `Shader "<name>"` matches that tag
+(exactly, else ignoring bullets/whitespace — `.poiyomi/• Poiyomi Toon •` ↔ `.poiyomi/Poiyomi
+Toon`) among the source assets **and bundled packages**, re-points `m_Shader`, sets the locker's
+`_ShaderOptimizerEnabled` float to 0, and excludes the generated `OptimizedShaders/<folder>` copy
+from the copy. Property values are kept (lockers keep property names; the shader's own upgrade
+pass runs on first inspection). Materials whose original shader can't be found are reported and
+left alone; materials still on a shader with unresolvable includes are warned about.
+
 ## Output layout
 
 ```
@@ -111,8 +132,10 @@ written into `eyelidsBlendshapes` (`eyelidType: 2`).
 <out>/Assets/<Name>_SDK3/<Name>.prefab (+ .meta)         # the migrated prefab
 <out>/Assets/<Name>_SDK3/FX/FX.controller, Gesture_*.anim (+ .meta)
 <out>/Assets/<Name>_SDK3/Parameters.asset, Menu.asset (+ .meta)
-<out>/Packages/vpm-manifest.json                          # com.vrchat.avatars/base <sdk_version>
-<out>/Packages/manifest.json, ProjectSettings/ProjectVersion.txt (<unity_version>)
+<out>/Packages/<bundled package>/…                        # each --vpm-package
+<out>/Packages/vpm-manifest.json                          # com.vrchat.avatars/base <sdk_version> + bundled
+<out>/Packages/manifest.json                              # VCC-template Unity packages incl. com.unity.test-framework
+<out>/ProjectSettings/ProjectVersion.txt (<unity_version>)
 ```
 
 The output must not already contain `Assets/` (refuse-before-write); `--dry-run` plans and reports
@@ -124,8 +147,11 @@ without touching the filesystem. Generated GUIDs/fileIDs are deterministic (seed
   Unity drag the prefab into a scene, check the descriptor (view position, FX layer), *Build &
   Publish*.
 - Materials whose shader source has an unresolvable `#include` (locked/optimized shaders exported
-  without their `.cginc`s — Poiyomi's `OptimizedShaders/…`) are flagged: they render pink until the
-  shader package is installed and the materials re-pointed at it.
+  without their `.cginc`s) are flagged: they render pink until the shader package is installed and
+  the materials re-pointed at it — which `--vpm-package` + `--relink-locked-shaders` does offline.
+- `Packages/manifest.json` must carry `com.unity.test-framework`: the SDK's editor assembly ships
+  NUnit tests and a project without it fails to compile (`NUnit could not be found`, then a Burst
+  `VRC.ExampleCentral.Editor` resolution cascade).
 - Play-test PhysBones (tune in the inspector), confirm the eye-look preview, test each gesture.
 
 ## Limits

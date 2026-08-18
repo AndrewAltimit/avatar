@@ -18,6 +18,7 @@ avatar-anim-gen = { path = "../anim-gen" }
 avatar-fbx = { path = "../fbx" }
 avatar-vpm = { path = "../vpm" }
 schemars = { workspace = true, optional = true }
+zip = { version = "6", default-features = false, features = ["deflate"] }
 
 [features]
 schema = ["schemars"]
