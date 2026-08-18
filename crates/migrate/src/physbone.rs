@@ -681,6 +681,10 @@ pub enum StretchAmount {
     By(f64),
 }
 
+/// Per-chain overrides for [`stretch_with`]: `(transform in the chain — usually its hinge — ,
+/// length to add)`; a chain containing that transform uses this amount instead of the global one.
+pub type ChainOverrides<'a> = &'a [(i64, f64)];
+
 /// [`stretch`] with a per-chain amount; see [`StretchAmount`]. Chains sharing a bone (a
 /// branching root) use the factor of the first chain that reaches it.
 pub fn stretch_with(
@@ -688,6 +692,18 @@ pub fn stretch_with(
     file_id: i64,
     amount: StretchAmount,
     from_depth: usize,
+) -> Result<StretchReport> {
+    stretch_chains(rw, file_id, amount, from_depth, &[])
+}
+
+/// [`stretch_with`] with per-chain overrides (see [`ChainOverrides`]) — how you level a hem whose
+/// chains respond unequally: `--by 0.077` overall, `--chain Skirt_0_1=0.06` for the odd one.
+pub fn stretch_chains(
+    rw: &mut PrefabRewriter,
+    file_id: i64,
+    amount: StretchAmount,
+    from_depth: usize,
+    overrides: ChainOverrides<'_>,
 ) -> Result<StretchReport> {
     let factor = match amount {
         StretchAmount::Factor(f) => f,
@@ -736,10 +752,14 @@ pub fn stretch_with(
     let mut plan: Vec<(i64, String, f64, crate::math::Vec3, f64)> = Vec::new();
     for c in &chains_t {
         // This chain's factor: uniform, or `1 + by / (length of the part being scaled)` so the
-        // chain grows by exactly `by`.
-        let f = match amount {
-            StretchAmount::Factor(f) => f,
-            StretchAmount::By(b) => {
+        // chain grows by exactly `by` (an override on any transform of the chain wins).
+        let by_override = overrides
+            .iter()
+            .find(|(t, _)| c.contains(t))
+            .map(|(_, b)| *b);
+        let f = match (amount, by_override) {
+            (StretchAmount::Factor(f), None) => f,
+            (_, Some(b)) | (StretchAmount::By(b), None) => {
                 let scaled: f64 = c
                     .windows(2)
                     .filter(|w| depth_below_root(w[1]) >= from_depth)
@@ -1192,6 +1212,12 @@ mod tests {
         // Shortening past zero is refused.
         let mut rw2 = PrefabRewriter::new(&prefab()).unwrap();
         assert!(stretch_with(&mut rw2, 900, StretchAmount::By(-0.5), 2).is_err());
+        // A per-chain override (keyed by the chain's hinge B = 405) wins for that chain only.
+        let mut rw3 = PrefabRewriter::new(&prefab()).unwrap();
+        let r = stretch_chains(&mut rw3, 900, StretchAmount::By(0.2), 2, &[(405, 0.1)]).unwrap();
+        let a = r.chains.iter().find(|c| c.0.ends_with("A2")).unwrap();
+        let b = r.chains.iter().find(|c| c.0.ends_with("B3")).unwrap();
+        assert!((a.2 - a.1 - 0.2).abs() < 1e-9 && (b.2 - b.1 - 0.1).abs() < 1e-9);
     }
 
     #[test]

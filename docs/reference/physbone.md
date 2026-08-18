@@ -88,7 +88,11 @@ grandchildren, …; the root itself never moves). **`--by METERS`** instead adds
 you want when chains have unequal bone counts: a uniform factor grows a 5-bone chain more than
 its 4-bone neighbours and the hem grows peaks there (the mikunpc skirt: three front chains have
 five bones), equal added length keeps an even hem even. Negative shortens; going past zero is
-refused. The skinned mesh follows its bones, so what hangs
+refused. **`--chain NAME=METERS`** (repeatable; NAME = any transform of the chain, e.g. its
+hinge) overrides the added length for one chain — the knob for levelling a hem whose sectors
+respond unequally to the same added length (skin weights decide which bones a hem vertex
+follows, and a sector's height is set by *its* chain: measure with `avatar render --pose`, or
+in-game, then shorten/lengthen that chain alone). The skinned mesh follows its bones, so what hangs
 off the chain gets longer: each ring of vertices bound to a deeper bone moves further down the
 chain and the faces between rings stretch. Only translations change — no rotation, no
 non-uniform scale, so **no shear**, and PhysBone sees ordinary (longer) bones with the same
@@ -151,6 +155,9 @@ avatar render --avatar final.fbx --pose $P -o preview.png            # what Unit
 avatar physbone stretch $P SkirtRoot --factor 0.512820513 -o $P --force   # back to the original offsets
 avatar physbone stretch $P SkirtRoot --by 0.077 -o $P --force            # +7.7 cm on every chain
 avatar physbone flare   $P SkirtRoot --angle 16 -o $P --force
+# round four: two hem points still low in-game — they sit on the two front-diagonal chains
+avatar physbone stretch $P SkirtRoot --by -0.077 -o $P --force            # undo (exact per chain)
+avatar physbone stretch $P SkirtRoot --by 0.077 --chain Skirt_0_1=0.055 --chain Skirt_0_9=0.055 -o $P --force
 ```
 
 `avatar lint` stays clean and `avatar stats` reports the change (5 PhysBone components: Good;

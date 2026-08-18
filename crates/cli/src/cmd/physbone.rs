@@ -295,6 +295,11 @@ pub struct StretchArgs {
     /// even. Negative shortens.
     #[arg(long, required_unless_present = "factor", allow_hyphen_values = true)]
     by: Option<f64>,
+    /// Per-chain override `NAME=METERS` (NAME = any transform of that chain, e.g. its hinge
+    /// `Skirt_0_1`): that chain gets this added length instead of `--by`. Repeatable. How you
+    /// level a hem whose chains respond unequally.
+    #[arg(long = "chain", value_name = "NAME=METERS")]
+    chain_by: Vec<String>,
     /// First depth below the PhysBone root whose offsets are scaled (1 = the root's children, 2 =
     /// grandchildren, …; the root never moves). Default 2 keeps the root's children — a skirt's
     /// hinges — in place; use 1 for a component rooted on a chain's own first bone.
@@ -584,7 +589,23 @@ pub fn stretch(args: &StretchArgs) -> Result<()> {
         (None, Some(b)) => StretchAmount::By(b),
         (None, None) => anyhow::bail!("pass --factor F or --by METERS"),
     };
-    let r: StretchReport = physbone::stretch_with(&mut rw, id, amount, args.from_depth)?;
+    let mut overrides: Vec<(i64, f64)> = Vec::new();
+    for spec in &args.chain_by {
+        let Some((name, m)) = spec.split_once('=') else {
+            anyhow::bail!("--chain '{spec}' is not NAME=METERS");
+        };
+        let m: f64 = m
+            .trim()
+            .parse()
+            .with_context(|| format!("--chain {spec}: metres"))?;
+        let t = rw
+            .scene()
+            .transform_by_path(name.trim())
+            .with_context(|| format!("--chain {spec}"))?;
+        overrides.push((t, m));
+    }
+    let r: StretchReport =
+        physbone::stretch_chains(&mut rw, id, amount, args.from_depth, &overrides)?;
     let report = json!({
         "physbone": id,
         "stretch": r,
