@@ -40,6 +40,9 @@ pub struct ChainInfo {
     pub bones: usize,
     /// Chain length in avatar space (root-scale included), first bone → leaf.
     pub length: f64,
+    /// Angle (degrees) between the first-bone→leaf direction and straight down (avatar −Y):
+    /// 0 = hangs vertically, 90 = sticks out sideways. What [`flare`] adjusts.
+    pub flare_deg: f64,
 }
 
 /// A `VRCPhysBone` as found in a prefab: where it is, what it drives, how it is tuned.
@@ -168,6 +171,19 @@ pub fn chains(scene: &Scene, spec: &PhysBoneSpec) -> Vec<Vec<i64>> {
     out
 }
 
+/// Angle in degrees between the chain's first→leaf direction and avatar −Y.
+fn chain_flare_deg(scene: &Scene, chain: &[i64]) -> f64 {
+    let (Some(a), Some(b)) = (chain.first(), chain.last()) else {
+        return 0.0;
+    };
+    let d = scene.world(*b).position - scene.world(*a).position;
+    let len = d.length();
+    if len < 1e-9 {
+        return 0.0;
+    }
+    (-d.y / len).clamp(-1.0, 1.0).acos().to_degrees()
+}
+
 fn chain_length(scene: &Scene, chain: &[i64]) -> f64 {
     let mut len = 0.0;
     for w in chain.windows(2) {
@@ -224,6 +240,7 @@ fn info_of_spec(scene: &Scene, file_id: i64, spec: &PhysBoneSpec) -> PhysBoneInf
                 leaf: scene.path_of(*c.last().unwrap()),
                 bones: c.len(),
                 length: chain_length(scene, c),
+                flare_deg: chain_flare_deg(scene, c),
             })
             .collect(),
         transforms: simulated.len(),
@@ -746,6 +763,153 @@ pub fn stretch(
     })
 }
 
+/// How [`flare`] chooses each chain's new angle from vertical.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum FlareTarget {
+    /// Multiply the current angle (0.5 = halve the flare; 0 = hang straight down).
+    Scale(f64),
+    /// Set the angle to this many degrees from straight down.
+    Angle(f64),
+}
+
+/// One chain re-angled by [`flare`].
+#[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct FlaredChain {
+    /// The hinge transform that was rotated.
+    pub hinge: String,
+    pub leaf: String,
+    pub before_deg: f64,
+    pub after_deg: f64,
+}
+
+/// Result of [`flare`].
+#[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct FlareReport {
+    pub chains: Vec<FlaredChain>,
+}
+
+/// Re-angle the chains of PhysBone `file_id` toward (or away from) straight down: for each chain,
+/// the transform at `hinge_depth` below the root (1 = the root's children — a skirt's hinge ring;
+/// 0 = the root itself, for a component rooted on the chain's first bone) is rotated, in avatar
+/// space, about the axis perpendicular to its chain direction and −Y, so that the hinge→leaf
+/// direction makes the `target` angle with −Y. Only that one local rotation changes per chain
+/// (`local' = R_parent⁻¹ · Δ · R_parent · local`), so the chain swings rigidly like a panel about
+/// its hinge, and the skinned mesh follows: a funnel skirt hugs the legs, a drooping tail lifts.
+/// This is a rest-pose edit — PhysBone takes the new pose as rest. Chains already within 0.01°
+/// of the target are left alone.
+pub fn flare(
+    rw: &mut PrefabRewriter,
+    file_id: i64,
+    target: FlareTarget,
+    hinge_depth: usize,
+) -> Result<FlareReport> {
+    match target {
+        FlareTarget::Scale(s) if !(s.is_finite() && s >= 0.0) => {
+            bail!("flare scale must be ≥ 0 (got {s})")
+        }
+        FlareTarget::Angle(a) if !(a.is_finite() && (0.0..=180.0).contains(&a)) => {
+            bail!("flare angle must be 0..180 degrees (got {a})")
+        }
+        _ => {}
+    }
+    let spec = spec_of(rw.scene(), file_id)?;
+    let root = root_transform(rw.scene(), &spec).context("PhysBone has no root transform")?;
+    let chains_t = chains(rw.scene(), &spec);
+    if chains_t.is_empty() {
+        bail!("PhysBone &{file_id} drives no chain");
+    }
+    let down = crate::math::Vec3::new(0.0, -1.0, 0.0);
+    // Plan every hinge rotation from the *current* scene (chains sharing a hinge are grouped: the
+    // hinge is rotated once, aimed by its first chain), then apply.
+    let scene = rw.scene();
+    let mut planned: Vec<(i64, String, String, f64, f64, crate::math::Quat)> = Vec::new();
+    let mut seen: HashSet<i64> = HashSet::new();
+    for c in &chains_t {
+        // The hinge: walk up from the leaf to `hinge_depth` below the root.
+        let mut path_from_root: Vec<i64> = Vec::new();
+        let mut cur = *c.last().unwrap();
+        while cur != root {
+            path_from_root.push(cur);
+            match scene.transforms.get(&cur) {
+                Some(tr) if tr.parent != 0 => cur = tr.parent,
+                _ => break,
+            }
+        }
+        path_from_root.reverse(); // root's child first
+        let hinge = if hinge_depth == 0 {
+            root
+        } else {
+            match path_from_root.get(hinge_depth - 1) {
+                Some(h) => *h,
+                None => continue,
+            }
+        };
+        if !seen.insert(hinge) {
+            continue;
+        }
+        let leaf = *c.last().unwrap();
+        let hinge_w = scene.world(hinge);
+        let d = scene.world(leaf).position - hinge_w.position;
+        let len = d.length();
+        if len < 1e-9 {
+            continue;
+        }
+        let dn = d.scale(1.0 / len);
+        let before = dn.dot(down).clamp(-1.0, 1.0).acos().to_degrees();
+        let after = match target {
+            FlareTarget::Scale(s) => before * s,
+            FlareTarget::Angle(a) => a,
+        };
+        let delta_deg = before - after; // rotate d toward down by this much
+        if delta_deg.abs() < 0.01 {
+            continue;
+        }
+        // Axis that takes d toward down (right-hand rule); if d ∥ down pick any perpendicular.
+        let mut axis = dn.cross(down);
+        if axis.length() < 1e-6 {
+            axis = if dn.x.abs() < 0.9 {
+                crate::math::Vec3::new(1.0, 0.0, 0.0)
+            } else {
+                crate::math::Vec3::new(0.0, 0.0, 1.0)
+            }
+            .cross(dn);
+        }
+        let axis = axis.normalized();
+        let delta = crate::math::Quat::axis_angle(axis, delta_deg);
+        let tr = &scene.transforms[&hinge];
+        let parent_rot = scene.world(tr.parent).rotation;
+        let new_local =
+            (parent_rot.inverse() * delta * parent_rot * tr.local.rotation).normalized();
+        planned.push((
+            hinge,
+            scene.path_of(hinge),
+            scene.path_of(leaf),
+            before,
+            after,
+            new_local,
+        ));
+    }
+    let mut out = Vec::new();
+    for (hinge, hinge_path, leaf_path, before, after, q) in planned {
+        for (k, v) in [("x", q.x), ("y", q.y), ("z", q.z), ("w", q.w)] {
+            rw.set_scalar(
+                hinge,
+                &format!("m_LocalRotation/{k}"),
+                avatar_unity_yaml::Scalar::Float(v),
+            )?;
+        }
+        out.push(FlaredChain {
+            hinge: hinge_path,
+            leaf: leaf_path,
+            before_deg: before,
+            after_deg: after,
+        });
+    }
+    Ok(FlareReport { chains: out })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -897,6 +1061,57 @@ mod tests {
         // Splitting an already-ignored chain is refused.
         let mut rw2 = PrefabRewriter::new(rw.text()).unwrap();
         assert!(split(&mut rw2, 900, &["B".into()], &Tuning::default()).is_err());
+    }
+
+    #[test]
+    fn flare_re_angles_hinges_toward_down() {
+        // Tilt chain A: give A a rotation so A→A2 (local +Y·0.1) points 60° from −Y, i.e. A2
+        // sits at (sin60·0.1, −cos60·0.1) relative to A once we look at world space. The fixture
+        // offsets are +Y (up), so first make A2's offset hang: pos (0, −0.1, 0), then rotate A by
+        // 60° about Z: −Y → (sin60, −cos60, 0)... simplest: rotate A about Z by −60° so its −Y
+        // axis swings toward +X.
+        let text = prefab()
+            .replace(
+                "--- !u!4 &403\nTransform:\n  m_GameObject: {fileID: 103}\n  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}",
+                "--- !u!4 &403\nTransform:\n  m_GameObject: {fileID: 103}\n  m_LocalRotation: {x: 0, y: 0, z: -0.5, w: 0.8660254}",
+            )
+            .replace(
+                "--- !u!4 &404\nTransform:\n  m_GameObject: {fileID: 104}\n  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}\n  m_LocalPosition: {x: 0, y: 0.1, z: 0}",
+                "--- !u!4 &404\nTransform:\n  m_GameObject: {fileID: 104}\n  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}\n  m_LocalPosition: {x: 0, y: -0.1, z: 0}",
+            );
+        let mut rw = PrefabRewriter::new(&text).unwrap();
+        let before = info(rw.scene(), 900).unwrap();
+        let a = before
+            .chains
+            .iter()
+            .find(|c| c.leaf.ends_with("A2"))
+            .unwrap();
+        assert!((a.flare_deg - 60.0).abs() < 0.01, "{}", a.flare_deg);
+        let r = flare(&mut rw, 900, FlareTarget::Angle(10.0), 1).unwrap();
+        let ra = r.chains.iter().find(|c| c.leaf.ends_with("A2")).unwrap();
+        assert!((ra.before_deg - 60.0).abs() < 0.01 && (ra.after_deg - 10.0).abs() < 1e-9);
+        assert_eq!(ra.hinge, "Hips/Hair/A");
+        let again = PrefabRewriter::new(rw.text()).unwrap();
+        let after = info(again.scene(), 900).unwrap();
+        let a2 = after
+            .chains
+            .iter()
+            .find(|c| c.leaf.ends_with("A2"))
+            .unwrap();
+        assert!((a2.flare_deg - 10.0).abs() < 0.01, "{}", a2.flare_deg);
+        // Chain B pointed straight up (180°, axis arbitrary) and was brought to 10° too; a
+        // second pass with Scale(0.5) halves it.
+        let rb = r.chains.iter().find(|c| c.leaf.ends_with("B3")).unwrap();
+        assert!((rb.before_deg - 180.0).abs() < 0.01 && (rb.after_deg - 10.0).abs() < 1e-9);
+        let mut rw2 = PrefabRewriter::new(rw.text()).unwrap();
+        let r2 = flare(&mut rw2, 900, FlareTarget::Scale(0.5), 1).unwrap();
+        let rb = r2.chains.iter().find(|c| c.leaf.ends_with("B3")).unwrap();
+        assert!((rb.after_deg - 5.0).abs() < 1e-6, "{rb:?}");
+        let again2 = PrefabRewriter::new(rw2.text()).unwrap();
+        let b = info(again2.scene(), 900).unwrap();
+        let b3 = b.chains.iter().find(|c| c.leaf.ends_with("B3")).unwrap();
+        assert!((b3.flare_deg - 5.0).abs() < 0.01, "{}", b3.flare_deg);
+        assert!(flare(&mut rw2, 900, FlareTarget::Scale(-1.0), 1).is_err());
     }
 
     #[test]

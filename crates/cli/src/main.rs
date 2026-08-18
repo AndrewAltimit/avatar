@@ -13,7 +13,7 @@
 //!   - `avatar anim-gen params|menu …`    — generate VRC expression parameters / menu `.asset`s
 //!   - `avatar toggle --name N …`         — generate a full toggle bundle (clips+FX+params+menu)
 //!   - `avatar migrate sdk3 <project> …`  — SDK2 avatar project -> SDK3 (descriptor, PhysBones, FX)
-//!   - `avatar physbone list|set|split|stretch …` — inspect / retune / split / lengthen a prefab's PhysBones
+//!   - `avatar physbone list|set|split|stretch|flare …` — inspect / retune / split / lengthen / re-angle a prefab's PhysBones
 //!   - `avatar asset set <file> …`        — surgically edit a value in a Unity YAML asset (round-trip)
 //!   - `avatar schema [name]`             — JSON Schema for a `--json` report type (output contract)
 //!   - `avatar mcp serve`                 — expose the read/diagnose tools over MCP (stdio JSON-RPC)
@@ -167,6 +167,9 @@ fn run() -> Result<ExitCode> {
         }
         Command::Physbone(PhysBoneCommand::Stretch(args)) => {
             cmd::physbone::stretch(&args).map(|()| ExitCode::SUCCESS)
+        }
+        Command::Physbone(PhysBoneCommand::Flare(args)) => {
+            cmd::physbone::flare(&args).map(|()| ExitCode::SUCCESS)
         }
         Command::Osc(OscCommand::Send(args)) => cmd::osc::send(&args).map(|()| ExitCode::SUCCESS),
         Command::Osc(OscCommand::Input(args)) => cmd::osc::input(&args).map(|()| ExitCode::SUCCESS),

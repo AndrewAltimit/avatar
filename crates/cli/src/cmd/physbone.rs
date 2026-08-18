@@ -10,7 +10,9 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
-use avatar_migrate::physbone::{self, PhysBoneInfo, SplitChain, StretchReport, Tuning};
+use avatar_migrate::physbone::{
+    self, FlareReport, FlareTarget, PhysBoneInfo, SplitChain, StretchReport, Tuning,
+};
 use avatar_migrate::rewrite::PrefabRewriter;
 use avatar_migrate::sdk3::{Curve, LimitType};
 use clap::{Args, Subcommand};
@@ -28,6 +30,8 @@ pub enum PhysBoneCommand {
     Split(SplitArgs),
     /// Lengthen a PhysBone's chains by scaling the bone offsets below the hinge (longer skirt/tail).
     Stretch(StretchArgs),
+    /// Re-angle a PhysBone's chains toward/away from straight down (a funnel skirt hugs the legs).
+    Flare(FlareArgs),
 }
 
 #[derive(Args, Debug)]
@@ -295,6 +299,27 @@ pub struct StretchArgs {
     out: EditOut,
 }
 
+#[derive(Args, Debug)]
+pub struct FlareArgs {
+    /// The SDK3 prefab (`.prefab`) to edit.
+    prefab: PathBuf,
+    /// The PhysBone whose chains to re-angle (root name/path, GameObject, or `&fileID`).
+    target: String,
+    /// New angle from straight down, in degrees, for every chain (0 = hang vertically).
+    #[arg(long, conflicts_with = "scale", required_unless_present = "scale")]
+    angle: Option<f64>,
+    /// Multiply every chain's current angle from straight down (0.5 = half the flare).
+    #[arg(long, required_unless_present = "angle")]
+    scale: Option<f64>,
+    /// Which transform of each chain to rotate: depth below the PhysBone root (1 = the root's
+    /// children — a skirt's hinge ring; 0 = the root itself, for a component rooted on the chain's
+    /// first bone).
+    #[arg(long, default_value_t = 1)]
+    hinge_depth: usize,
+    #[command(flatten)]
+    out: EditOut,
+}
+
 fn load(prefab: &Path) -> Result<(String, PrefabRewriter)> {
     let text =
         std::fs::read_to_string(prefab).with_context(|| format!("reading {}", prefab.display()))?;
@@ -397,7 +422,10 @@ fn print_info(pb: &PhysBoneInfo) {
         pb.chains.len()
     );
     for c in &pb.chains {
-        println!("    {} — {} bone(s), {:.3} m", c.leaf, c.bones, c.length);
+        println!(
+            "    {} — {} bone(s), {:.3} m, {:.1}° from down",
+            c.leaf, c.bones, c.length, c.flare_deg
+        );
     }
 }
 
@@ -560,6 +588,34 @@ pub fn stretch(args: &StretchArgs) -> Result<()> {
         );
         for (leaf, b, a) in &r.chains {
             println!("  {leaf}: {b:.3} m -> {a:.3} m");
+        }
+    })
+}
+
+pub fn flare(args: &FlareArgs) -> Result<()> {
+    let (_, mut rw) = load(&args.prefab)?;
+    let id = physbone::find(rw.scene(), &args.target)?;
+    let target = match (args.angle, args.scale) {
+        (Some(a), _) => FlareTarget::Angle(a),
+        (None, Some(s)) => FlareTarget::Scale(s),
+        (None, None) => anyhow::bail!("pass --angle DEG or --scale FACTOR"),
+    };
+    let r: FlareReport = physbone::flare(&mut rw, id, target, args.hinge_depth)?;
+    let report = json!({
+        "physbone": id,
+        "flare": r,
+    });
+    finish(&args.prefab, rw, &args.out, report, || {
+        println!(
+            "re-angled {} chain(s) of PhysBone &{id} ({}):",
+            r.chains.len(),
+            match target {
+                FlareTarget::Angle(a) => format!("to {a}° from down"),
+                FlareTarget::Scale(s) => format!("angle from down x{s}"),
+            }
+        );
+        for c in &r.chains {
+            println!("  {}: {:.1}° -> {:.1}°", c.hinge, c.before_deg, c.after_deg);
         }
     })
 }

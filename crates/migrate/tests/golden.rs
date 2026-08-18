@@ -265,6 +265,7 @@ fn ungrouped_chain_with_collider_under_the_root_warns_about_the_cycle() {
 /// Post-migration PhysBone work over the migrated fixture prefab: `list` (pinned), then `split`
 /// the bang chain off the hair component, retune the pigtail with per-chain curves, and stretch
 /// the skirt — the state after is pinned too, and everything untouched stays byte-identical.
+/// (`flare` re-angles the remaining hair chain in between.)
 #[test]
 fn golden_physbone_list_split_set_stretch() {
     use avatar_migrate::physbone::{self, Tuning};
@@ -330,6 +331,16 @@ fn golden_physbone_list_split_set_stretch() {
         1,
         "only the pigtail remains on the hair component"
     );
+    // The pigtail hangs straight down (0°). Give it a 15° hang at its hinge (Hair_1, depth 1
+    // below the root — the root itself would swing the ignored Bang along), then lengthen the
+    // skirt.
+    let flared = physbone::flare(&mut rw, hair, physbone::FlareTarget::Angle(15.0), 1).unwrap();
+    assert_eq!(
+        flared.chains.len(),
+        1,
+        "one chain left on the hair component"
+    );
+    assert!((flared.chains[0].after_deg - 15.0).abs() < 1e-9);
     let stretched = physbone::stretch(&mut rw, skirt, 1.5, 2).unwrap();
     assert_eq!(
         stretched.bones.len(),

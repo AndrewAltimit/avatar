@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Result, bail};
 use clap::Args;
 
-use crate::render_scene::BoneStretch;
+use crate::render_scene::{AvatarPose, BoneStretch};
 use crate::{render_scene, texture};
 
 #[derive(Args, Debug)]
@@ -37,6 +37,12 @@ pub struct ViewArgs {
     /// e.g. `Skirt_0_*:1.5`. Repeatable. FBX avatars only.
     #[arg(long, value_name = "HINGE:FACTOR", value_parser = BoneStretch::parse)]
     stretch: Vec<BoneStretch>,
+    /// Pose the avatar from a Unity prefab: every bone's local transform is taken from the
+    /// GameObject of the same name (Unity's mirrored import undone), so the render shows what
+    /// the prefab's transforms — stretched/re-angled chains, posed bones — will look like in
+    /// Unity. FBX avatars only.
+    #[arg(long, value_name = "PREFAB")]
+    pose: Option<PathBuf>,
 }
 
 #[derive(Args, Debug)]
@@ -71,6 +77,12 @@ pub struct RenderArgs {
     /// e.g. `Skirt_0_*:1.5`. Repeatable. FBX avatars only.
     #[arg(long, value_name = "HINGE:FACTOR", value_parser = BoneStretch::parse)]
     stretch: Vec<BoneStretch>,
+    /// Pose the avatar from a Unity prefab: every bone's local transform is taken from the
+    /// GameObject of the same name (Unity's mirrored import undone), so the render shows what
+    /// the prefab's transforms — stretched/re-angled chains, posed bones — will look like in
+    /// Unity. FBX avatars only.
+    #[arg(long, value_name = "PREFAB")]
+    pose: Option<PathBuf>,
 }
 
 /// Camera framing target for `avatar render`.
@@ -95,7 +107,7 @@ fn assemble_scene(
     yaw: f32,
     pitch: f32,
     frame: Option<FrameTarget>,
-    stretch: &[BoneStretch],
+    how: &AvatarPose,
 ) -> Result<avatar_render::Scene> {
     if avatar.is_none() && world.is_none() {
         bail!("nothing to render: pass --avatar <model> and/or --world <scene|project>");
@@ -123,7 +135,7 @@ fn assemble_scene(
         let av = match spawn {
             Some(p) if world.is_some() => {
                 let (av, bounds) =
-                    render_scene::load_avatar_in_world(avatar, p, &mut textures, stretch)?;
+                    render_scene::load_avatar_in_world(avatar, p, &mut textures, how)?;
                 println!(
                     "avatar: {} mesh(es) from {}, dropped at world spawn ({:.1}, {:.1}, {:.1})",
                     av.len(),
@@ -139,7 +151,7 @@ fn assemble_scene(
                 if world.is_some() {
                     println!("note: world declares no spawn point; rendering avatar at the origin");
                 }
-                let av = render_scene::load_avatar(avatar, &mut textures, stretch)?;
+                let av = render_scene::load_avatar(avatar, &mut textures, how)?;
                 println!("avatar: {} mesh(es) from {}", av.len(), avatar.display());
                 avatar_bounds = render_scene::mesh_bounds(&av);
                 av
@@ -179,7 +191,10 @@ pub fn render(args: &RenderArgs) -> Result<()> {
         args.yaw,
         args.pitch,
         args.frame,
-        &args.stretch,
+        &AvatarPose {
+            stretch: args.stretch.clone(),
+            pose_prefab: args.pose.clone(),
+        },
     )?;
     let tris: usize = scene.meshes.iter().map(|m| m.indices.len() / 3).sum();
     println!(
@@ -205,7 +220,10 @@ pub fn view(args: &ViewArgs) -> Result<()> {
         args.yaw,
         args.pitch,
         args.frame,
-        &args.stretch,
+        &AvatarPose {
+            stretch: args.stretch.clone(),
+            pose_prefab: args.pose.clone(),
+        },
     )?;
     let tris: usize = scene.meshes.iter().map(|m| m.indices.len() / 3).sum();
     println!(

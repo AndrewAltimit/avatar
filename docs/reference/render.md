@@ -61,6 +61,14 @@ live in) — so it is identity everywhere the pose is untouched and never touche
 per-cluster bind `Transform`s. `avatar render --avatar m.fbx --stretch 'Skirt_0_*:1.5'` shows a
 50 %-longer skirt; a bone name that matches nothing is an error.
 
+**`--pose PREFAB`** (FBX only) goes further: every bone's local transform is taken from the
+prefab's GameObject of the same name (ambiguous names skipped), so the render shows what Unity
+will show for *that prefab* — stretched and re-angled chains, hand-posed bones. Unity's import
+mirrors the FBX hierarchy (X negated), so a prefab local `(p, q)` maps back to
+`((−p.x, p.y, p.z), (q.x, −q.y, −q.z, q.w))`, positions divided by the import scale
+(`UnitScaleFactor/100`); the same delta-only skinning applies. Verified on the real avatar: posing
+from its untouched migration prefab (152 bones) reproduces the rest render to the pixel.
+
 ## Rendering a world — `avatar render --world <scene.unity | project-dir>`
 
 The world loader (`crates/cli/src/world.rs`) parses a Unity `.unity` scene and emulates enough of

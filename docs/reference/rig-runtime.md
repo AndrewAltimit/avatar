@@ -68,8 +68,8 @@ trusted (converted avatars — see [render.md](render.md)), a pose can still be 
 control points as a *delta*: per bone `G⁻¹ · world(pose) · world(rest)⁻¹ · G`, where `G =
 model_global_matrix(&scene, mesh.model_id)` is the mesh node's own global transform (the space the
 control points live in). It is identity for every untouched bone and never involves the cluster
-`Transform`s; `avatar render --stretch` is built on it. `lcl_to_mat4` (plain Lcl TRS) is public
-for the same reason.
+`Transform`s; `avatar render --pose <prefab>` / `--stretch` are built on it. `lcl_to_mat4` (plain
+Lcl TRS) is public for the same reason.
 
 ## Two-bone IK (`avatar_pose::ik`)
 
