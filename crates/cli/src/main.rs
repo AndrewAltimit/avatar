@@ -12,6 +12,7 @@
 //!   - `avatar anim-gen controller …`     — generate a complete FX `.controller` (full M4 asset)
 //!   - `avatar anim-gen params|menu …`    — generate VRC expression parameters / menu `.asset`s
 //!   - `avatar toggle --name N …`         — generate a full toggle bundle (clips+FX+params+menu)
+//!   - `avatar migrate sdk3 <project> …`  — SDK2 avatar project -> SDK3 (descriptor, PhysBones, FX)
 //!   - `avatar asset set <file> …`        — surgically edit a value in a Unity YAML asset (round-trip)
 //!   - `avatar schema [name]`             — JSON Schema for a `--json` report type (output contract)
 //!   - `avatar mcp serve`                 — expose the read/diagnose tools over MCP (stdio JSON-RPC)
@@ -42,6 +43,7 @@ use cmd::describe::DescribeArgs;
 use cmd::fbx::{ArmatureCommand, FbxCommand};
 use cmd::lint::LintArgs;
 use cmd::mcp::McpCommand;
+use cmd::migrate::MigrateCommand;
 use cmd::osc::OscCommand;
 use cmd::render::{RenderArgs, ViewArgs};
 use cmd::schema::SchemaArgs;
@@ -82,6 +84,9 @@ enum Command {
     /// Surgically edit a value in a Unity YAML asset, preserving fileIDs/refs/formatting.
     #[command(subcommand)]
     Asset(AssetCommand),
+    /// Migrate an avatar project between VRChat SDK generations (SDK2 -> SDK3 / Avatars 3.0).
+    #[command(subcommand)]
+    Migrate(MigrateCommand),
     /// Drive or observe a running VRChat avatar over OSC.
     #[command(subcommand)]
     Osc(OscCommand),
@@ -140,6 +145,9 @@ fn run() -> Result<ExitCode> {
         Command::Toggle(args) => cmd::toggle::toggle(&args).map(|()| ExitCode::SUCCESS),
         Command::Asset(AssetCommand::Set(args)) => {
             cmd::asset::set(&args).map(|()| ExitCode::SUCCESS)
+        }
+        Command::Migrate(MigrateCommand::Sdk3(args)) => {
+            cmd::migrate::sdk3(&args).map(|()| ExitCode::SUCCESS)
         }
         Command::Osc(OscCommand::Send(args)) => cmd::osc::send(&args).map(|()| ExitCode::SUCCESS),
         Command::Osc(OscCommand::Input(args)) => cmd::osc::input(&args).map(|()| ExitCode::SUCCESS),

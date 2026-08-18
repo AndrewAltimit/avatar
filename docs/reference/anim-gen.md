@@ -161,10 +161,15 @@ println!("{}", tree.wiring_note(110600000));
 no internal fileID graph, so generation is a single-document emit (`expressions` module). The
 contract points:
 
-- **Script GUIDs.** `m_Script` points at the SDK script. The SDK's GUIDs have been stable since
-  SDK3 launched; `VRC_EXPRESSION_PARAMETERS_SCRIPT_GUID` / `VRC_EXPRESSIONS_MENU_SCRIPT_GUID` are
-  the defaults and `.script_guid(g)` (CLI `--script-guid`) overrides them — a future SDK relocation
-  is a flag, not a code change (`PLAN.md` risk 3).
+- **Script references.** `m_Script` points at the SDK class. Both classes are compiled into the
+  SDK's `VRCSDK3A.dll` (GUID `67cc4cb7839cd3741b63733d5adf0442`), so the reference is
+  `{fileID: <class hash>, guid: <dll guid>, type: 3}` — `-1506855854` for `VRCExpressionParameters`,
+  `-340790334` for `VRCExpressionsMenu` (read off the SDK's own `DefaultExpressionParameters.asset`
+  / `DefaultExpressionsMenu.asset` in `com.vrchat.avatars` 3.10.4; stable since SDK3 launched).
+  `VRC_EXPRESSION_PARAMETERS_SCRIPT` / `VRC_EXPRESSIONS_MENU_SCRIPT` are the defaults;
+  `.script(ScriptRef)` overrides both halves and `.script_guid(g)` (CLI `--script-guid`) treats
+  the override as a loose `.cs` script (`11500000`) — a future SDK relocation is a flag, not a
+  code change (`PLAN.md` risk 3).
 - **Main-object fileID.** Both emit at Unity's ScriptableObject convention `&11400000`
   (`EXPRESSIONS_MAIN_FILE_ID`), which cross-asset references (`expressionsMenu:` on the descriptor,
   `subMenu:` on a control) expect.
@@ -177,6 +182,23 @@ contract points:
 **Round-trip validation** is through `avatar-vrc-descriptor`'s *structural* reader — the same
 classifier `avatar lint` trusts — so a generated asset is proven to read back as a Parameters/Menu
 asset with the expected budget and controls.
+
+### 4b. Gesture-driven FX layers (`gesture` module)
+
+`GestureLayer` emits the idiomatic SDK3 face-expression layer: an `AnimatorStateMachine` with a
+`Neutral` default state plus one state per gesture value that has a clip, and Any-State
+`AnimatorStateTransition`s conditioned `GestureLeft`/`GestureRight` **Equals n** (`m_ConditionMode`
+6), no exit time, fixed 0.1 s, `m_CanTransitionToSelf: 0` so a held gesture doesn't retrigger.
+Gesture values with no clip route to `Neutral`, so the layer is authoritative for all eight; states
+are Write Defaults off, so the `Neutral` clip should reset every shape the gesture clips touch.
+
+A layer may read **several** parameters (`GestureLayer::either_hand`): each gesture state then gets
+one transition per parameter and `Neutral` requires *all* of them to be 0 (multiple
+`m_Conditions` = AND). One either-hand layer is SDK2's semantics (an override slot fired for
+whichever hand made the gesture) and avoids the two-per-hand-layer clobber where the upper layer's
+Neutral, resetting shared shapes under WD off, wipes the lower hand's expression. `fx_gestures`
+wraps layers in the class-91 controller, declaring each `Int` parameter once. Used by
+[`avatar-migrate`](migrate.md) to rebuild SDK2 gesture overrides.
 
 ### 5. The toggle bundle (`avatar toggle`) — the end-to-end composite
 
@@ -245,7 +267,8 @@ accidentally collide if later combined), and the counter guarantees uniqueness w
 
 The canonical fixed ids Unity uses for sub-asset references are reproduced where they are
 load-bearing: a `.anim`'s AnimationClip is referenced from a blend tree as local fileID `7400000`,
-and a MonoBehaviour script as `11500000`.
+and a loose `.cs` MonoBehaviour script as `11500000` (a class inside a DLL uses Unity's per-class
+hash instead — see the expression assets above).
 
 ## How the YAML is emitted
 

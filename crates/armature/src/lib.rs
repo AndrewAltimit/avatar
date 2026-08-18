@@ -92,6 +92,26 @@ impl Skeleton {
         depth
     }
 
+    /// Height of the subtree rooted at `id`: 0 for a leaf, else 1 + the tallest child. Used to
+    /// tell a chain segment that *continues* the limb from a dead-end sibling (a zero-length
+    /// helper/IK bone parented at the same joint). Cycle-guarded like the other walkers.
+    pub fn subtree_height(&self, id: i64) -> usize {
+        let mut visited = HashSet::new();
+        self.subtree_height_inner(id, &mut visited)
+    }
+
+    fn subtree_height_inner(&self, id: i64, visited: &mut HashSet<i64>) -> usize {
+        if !visited.insert(id) {
+            return 0;
+        }
+        self.bones
+            .iter()
+            .filter(|b| b.parent == Some(id))
+            .map(|child| 1 + self.subtree_height_inner(child.id, visited))
+            .max()
+            .unwrap_or(0)
+    }
+
     /// True if `id` or any of its descendants is a bone-like node (used to tell an armature
     /// root apart from a plain mesh root).
     fn subtree_has_bone(&self, id: i64) -> bool {
@@ -294,13 +314,23 @@ fn assign_chain(
     let mut chosen: Vec<Option<usize>> = vec![None; slots.len()];
 
     // Upper slots (distal-first), each matched to the deepest unused bone of its own category.
+    // Depth ties (two siblings at one joint — e.g. `Left knee` next to a zero-length `Left leg 2`
+    // helper) go to the bone whose subtree continues the limb; a dead-end sibling never beats
+    // the segment the foot hangs off. Reverse-name as the last tie-break keeps the pick stable
+    // and independent of `members` order.
     for si in (1..slots.len()).rev() {
         let want = group[si];
         let pick = members
             .iter()
             .enumerate()
             .filter(|&(i, b)| !used[i] && b.info.category == Some(want))
-            .max_by_key(|&(i, _)| skeleton.depth(members[i].id))
+            .max_by_key(|&(i, b)| {
+                (
+                    skeleton.depth(b.id),
+                    skeleton.subtree_height(b.id),
+                    std::cmp::Reverse(members[i].name.clone()),
+                )
+            })
             .map(|(i, _)| i);
         if let Some(i) = pick {
             used[i] = true;
@@ -482,6 +512,45 @@ mod tests {
         );
         // The regression: bare "Leg" is the lower leg, not a duplicate upper leg.
         assert_eq!(m.slots[&HumanBone::LeftLowerLeg], vec!["mixamorig:LeftLeg"]);
+    }
+
+    /// A knee joint with a dead-end helper bone next to it (the mikunpc rig: `Left leg` ->
+    /// `Left knee` -> `Left ankle` -> `Left toe`, plus a zero-length, zero-weight `Left leg 2`
+    /// also parented under `Left leg`). Three leg-category bones compete for two slots, and the
+    /// two candidates for LowerLeg tie on depth: the knee — the segment the foot hangs off — must
+    /// win over the leaf helper regardless of name order.
+    #[test]
+    fn leg_chain_prefers_segment_that_continues_the_limb_over_dead_end_sibling() {
+        let sk = Skeleton {
+            bones: vec![
+                bone(1, "Hips", None),
+                bone(2, "Left leg", Some(1)),
+                bone(3, "Left knee", Some(2)),
+                bone(4, "Left ankle", Some(3)),
+                bone(5, "Left toe", Some(4)),
+                bone(6, "Left leg 2", Some(2)),
+                bone(7, "Right leg", Some(1)),
+                // Same shape, but the helper sorts *before* the knee by name.
+                bone(8, "Right knee", Some(7)),
+                bone(9, "Right ankle", Some(8)),
+                bone(10, "Right toe", Some(9)),
+                bone(11, "Right aux", Some(7)),
+            ],
+        };
+        let m = map_humanoid(&sk);
+        assert_eq!(m.slots[&HumanBone::LeftUpperLeg], vec!["Left leg"]);
+        assert_eq!(m.slots[&HumanBone::LeftLowerLeg], vec!["Left knee"]);
+        assert_eq!(m.slots[&HumanBone::LeftFoot], vec!["Left ankle"]);
+        assert_eq!(m.slots[&HumanBone::RightUpperLeg], vec!["Right leg"]);
+        assert_eq!(m.slots[&HumanBone::RightLowerLeg], vec!["Right knee"]);
+        assert!(
+            !m.assigned_ids.contains(&6),
+            "Left leg 2 must stay unmapped"
+        );
+        assert!(
+            !m.assigned_ids.contains(&11),
+            "Right aux must stay unmapped"
+        );
     }
 
     #[test]

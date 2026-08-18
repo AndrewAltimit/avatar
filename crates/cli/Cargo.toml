@@ -29,6 +29,7 @@ avatar-lint = { path = "../lint" }
 avatar-stats = { path = "../stats" }
 avatar-unitypackage = { path = "../unitypackage" }
 avatar-anim-gen = { path = "../anim-gen" }
+avatar-migrate = { path = "../migrate" }
 avatar-osc = { path = "../osc" }
 avatar-osc-gestures = { path = "../osc-gestures" }
 # MCP (Model Context Protocol) stdio server — `avatar mcp serve` wraps the read/diagnose surface as
@@ -51,6 +52,7 @@ schema = [
     "avatar-lint/schema",
     "avatar-stats/schema",
     "avatar-armature/schema",
+    "avatar-migrate/schema",
 ]
 
 [dev-dependencies]

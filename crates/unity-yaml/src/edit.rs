@@ -24,9 +24,24 @@
 //!
 //! Supported edits: replacing a **scalar** value at a path (including a subfield *inside* a flow
 //! map, e.g. a reference's `guid`/`fileID`), and replacing a whole **reference** (`{fileID, …}`).
-//! Paths descend through nested mappings (`Key`) and sequences (`Index`). Structural edits — adding
-//! or removing keys / sequence elements — are deliberately out of scope here; they need careful
-//! indentation reflowing and are better served by the generators in `avatar-anim-gen`.
+//! Paths descend through nested mappings (`Key`) and sequences (`Index`).
+//!
+//! On top of the value edits sit a small set of **structural** edits, still span-based and still
+//! leaving every untouched byte alone: removing a whole document ([`remove_document`]),
+//! swapping a document's body for new text while keeping its `&fileID` header — and therefore
+//! every reference to it — intact ([`replace_document_body`]), appending a new document
+//! ([`append_document`]), and appending to / removing from a **block sequence** such as a
+//! `GameObject`'s `m_Component` list or a `Transform`'s `m_Children`
+//! ([`append_sequence_item`], [`remove_sequence_item`]). These are what a prefab-level rewrite
+//! (strip a subtree, swap one component type for another, bolt on a new component) needs; adding
+//! or removing *mapping keys* is still out of scope — a body that needs a different key set is
+//! regenerated whole and swapped in with `replace_document_body`.
+//!
+//! [`remove_document`]: EditableUnityFile::remove_document
+//! [`replace_document_body`]: EditableUnityFile::replace_document_body
+//! [`append_document`]: EditableUnityFile::append_document
+//! [`append_sequence_item`]: EditableUnityFile::append_sequence_item
+//! [`remove_sequence_item`]: EditableUnityFile::remove_sequence_item
 //!
 //! ```
 //! use avatar_unity_yaml::{EditableUnityFile, Scalar, parse_path};
@@ -172,6 +187,16 @@ impl Line {
     }
 }
 
+/// A located block sequence: the key's (empty or `[]`) value range, the indent its `- ` elements
+/// sit at, each element's byte range (from its `- ` line start through its last continuation
+/// line's newline), and the offset just past the block.
+struct SeqLoc {
+    key_value: Range<usize>,
+    base: usize,
+    elems: Vec<Range<usize>>,
+    block_end: usize,
+}
+
 impl EditableUnityFile {
     /// Parse a Unity YAML stream for editing. Fails if the text is not a parseable Unity file (so a
     /// caller never edits something it has misread); the strict parse mirrors [`UnityFile::parse`].
@@ -255,6 +280,248 @@ impl EditableUnityFile {
         };
         self.replace(vr, &rendered)
             .context("reference edit produced malformed Unity YAML")
+    }
+
+    // ---- structural edits ---------------------------------------------------
+
+    /// Remove document `doc` entirely (its `--- !u!… &…` header line and body). Nothing else
+    /// moves; any *reference* to the removed fileID elsewhere in the file is left as-is (Unity
+    /// treats a dangling local reference as `{fileID: 0}`), so callers stripping a component
+    /// should also [`remove_sequence_item`](Self::remove_sequence_item) it from its owner's list.
+    pub fn remove_document(&mut self, doc: usize) -> Result<()> {
+        let d = self
+            .docs
+            .get(doc)
+            .with_context(|| format!("document index {doc} out of range"))?;
+        let range = d.header.start..d.body.end;
+        self.replace(range, "")
+            .context("document removal produced malformed Unity YAML")
+    }
+
+    /// Replace the **body** of document `doc` (everything after its header line) with `body`,
+    /// keeping the `--- !u!<class> &<fileID>` header — and so the object's identity and every
+    /// reference to it — exactly as it was. `body` must start with the top-level `Type:` line and
+    /// end with a newline (one is added if missing). This is how a component is swapped for a
+    /// different type at the same fileID (e.g. a `DynamicBone` MonoBehaviour re-typed as a
+    /// `VRCPhysBone` one: same `&id`, same slot in the owning `GameObject`'s `m_Component`).
+    ///
+    /// The header's *class id* is not changed here; when the new body's class differs, pass the
+    /// new class via [`retag_document`](Self::retag_document).
+    pub fn replace_document_body(&mut self, doc: usize, body: &str) -> Result<()> {
+        let d = self
+            .docs
+            .get(doc)
+            .with_context(|| format!("document index {doc} out of range"))?;
+        let mut new_body = body.to_string();
+        if !new_body.ends_with('\n') {
+            new_body.push('\n');
+        }
+        let range = d.body.clone();
+        self.replace(range, &new_body)
+            .context("document body replacement produced malformed Unity YAML")
+    }
+
+    /// Rewrite document `doc`'s header to `--- !u!<class_id> &<file_id>` (keeping a `stripped`
+    /// marker if present). Use with [`replace_document_body`](Self::replace_document_body) when a
+    /// document changes Unity class (rare — a MonoBehaviour swapped for another MonoBehaviour
+    /// keeps class 114 and needs no retag).
+    pub fn retag_document(&mut self, doc: usize, class_id: u32, file_id: i64) -> Result<()> {
+        let d = self
+            .docs
+            .get(doc)
+            .with_context(|| format!("document index {doc} out of range"))?;
+        let stripped = if d.stripped { " stripped" } else { "" };
+        let header = format!("--- !u!{class_id} &{file_id}{stripped}\n");
+        let range = d.header.clone();
+        self.replace(range, &header)
+            .context("document retag produced malformed Unity YAML")
+    }
+
+    /// Append a new document `--- !u!<class_id> &<file_id>` with `body` (which must start with the
+    /// top-level `Type:` line) at the end of the file. Returns the new document's index. Fails if
+    /// `file_id` is already used by another document in the file.
+    pub fn append_document(&mut self, class_id: u32, file_id: i64, body: &str) -> Result<usize> {
+        if self.doc_by_file_id(file_id).is_some() {
+            bail!("fileID {file_id} already exists in this file");
+        }
+        let mut chunk = String::new();
+        if !self.text.is_empty() && !self.text.ends_with('\n') {
+            chunk.push('\n');
+        }
+        chunk.push_str(&format!("--- !u!{class_id} &{file_id}\n"));
+        chunk.push_str(body);
+        if !body.ends_with('\n') {
+            chunk.push('\n');
+        }
+        let at = self.text.len();
+        self.replace(at..at, &chunk)
+            .context("document append produced malformed Unity YAML")?;
+        self.doc_by_file_id(file_id)
+            .context("appended document not found after re-parse")
+    }
+
+    /// Append one element to the block sequence at `path` in document `doc` (e.g.
+    /// `m_Component`, `m_Children`, `colliders`). `item` is the element's text **without** the
+    /// leading `- `; a multi-line item's continuation lines are re-indented under the element.
+    /// An empty flow sequence (`key: []`) is converted to block form. Elements are written at the
+    /// key's own indent, the way Unity serializes them.
+    pub fn append_sequence_item(&mut self, doc: usize, path: &[Seg], item: &str) -> Result<()> {
+        let loc = self.locate_sequence(doc, path)?;
+        let pad = " ".repeat(loc.base);
+        let mut rendered = String::new();
+        for (i, line) in item.lines().enumerate() {
+            if i == 0 {
+                rendered.push_str(&format!("{pad}- {line}\n"));
+            } else {
+                rendered.push_str(&format!("{pad}  {line}\n"));
+            }
+        }
+        if loc.elems.is_empty() {
+            // `key: []` -> `key:` + block. Insert the block first (the later offset), then blank
+            // the `[]` (and the single space Unity puts before it) at the earlier, still-valid one.
+            let insert_at = loc.block_end;
+            let needs_nl = insert_at > 0 && self.text.as_bytes()[insert_at - 1] != b'\n';
+            let chunk = if needs_nl {
+                format!("\n{rendered}")
+            } else {
+                rendered
+            };
+            self.text.replace_range(insert_at..insert_at, &chunk);
+            let mut vs = loc.key_value.start;
+            let ve = loc.key_value.end;
+            if vs > 0 && self.text.as_bytes()[vs - 1] == b' ' {
+                vs -= 1;
+            }
+            self.text.replace_range(vs..ve, "");
+            self.docs = Self::compute_docs(&self.text);
+            return UnityFile::parse(&self.text)
+                .map(|_| ())
+                .context("sequence append produced malformed Unity YAML");
+        }
+        let at = loc.block_end;
+        let needs_nl = at > 0 && self.text.as_bytes()[at - 1] != b'\n';
+        let chunk = if needs_nl {
+            format!("\n{rendered}")
+        } else {
+            rendered
+        };
+        self.replace(at..at, &chunk)
+            .context("sequence append produced malformed Unity YAML")
+    }
+
+    /// Remove element `index` from the block sequence at `path` in document `doc`. Removing the
+    /// last remaining element leaves `key: []`.
+    pub fn remove_sequence_item(&mut self, doc: usize, path: &[Seg], index: usize) -> Result<()> {
+        let loc = self.locate_sequence(doc, path)?;
+        let Some(range) = loc.elems.get(index).cloned() else {
+            bail!(
+                "sequence index {index} out of range ({} element(s))",
+                loc.elems.len()
+            );
+        };
+        self.text.replace_range(range, "");
+        if loc.elems.len() == 1 {
+            // Element came after the key line, so the key's value offset is unchanged.
+            let vs = loc.key_value.start;
+            let lead = if vs > 0 && self.text.as_bytes()[vs - 1] == b':' {
+                " []"
+            } else {
+                "[]"
+            };
+            self.text.replace_range(vs..vs, lead);
+        }
+        self.docs = Self::compute_docs(&self.text);
+        UnityFile::parse(&self.text)
+            .map(|_| ())
+            .context("sequence removal produced malformed Unity YAML")
+    }
+
+    /// The number of elements in the block (or empty flow) sequence at `path`.
+    pub fn sequence_len(&self, doc: usize, path: &[Seg]) -> Result<usize> {
+        Ok(self.locate_sequence(doc, path)?.elems.len())
+    }
+
+    /// Byte ranges of the sequence's elements are private; this returns each element's text
+    /// (the `- ` line and its continuation lines) so callers can find the one to remove.
+    pub fn sequence_items(&self, doc: usize, path: &[Seg]) -> Result<Vec<String>> {
+        let loc = self.locate_sequence(doc, path)?;
+        Ok(loc
+            .elems
+            .iter()
+            .map(|r| self.text[r.clone()].to_string())
+            .collect())
+    }
+
+    /// Locate the block sequence introduced by the mapping key at `path`.
+    fn locate_sequence(&self, doc: usize, path: &[Seg]) -> Result<SeqLoc> {
+        let body = self.doc_body(doc)?;
+        let lines = self.body_lines(&body);
+        let key_value = self.resolve_path(&lines, path)?;
+        let vtext = &self.text[key_value.clone()];
+        if !(vtext.is_empty() || vtext == "[]") {
+            bail!("path does not resolve to a block sequence (value is `{vtext}`)");
+        }
+        // The key line is the one containing the value range.
+        let key_idx = lines
+            .iter()
+            .position(|l| {
+                let start = l.content_start - l.indent;
+                start <= key_value.start && key_value.start <= l.end
+            })
+            .context("could not locate the sequence key line")?;
+        let key_line = lines[key_idx];
+        let key_indent = key_line.indent;
+        let after_key = key_line.end + 1; // past the newline (or == body.end)
+        if vtext == "[]" {
+            return Ok(SeqLoc {
+                key_value,
+                base: key_indent,
+                elems: Vec::new(),
+                block_end: after_key.min(body.end),
+            });
+        }
+        // First non-blank line after the key decides the element indent (Unity: the key's own).
+        let Some(first) = ((key_idx + 1)..lines.len()).find(|&j| lines[j].nonblank()) else {
+            bail!("sequence key has no following lines");
+        };
+        let fl = lines[first];
+        if fl.indent < key_indent || !self.text[fl.content_start..fl.end].starts_with('-') {
+            bail!("sequence key is not followed by `- ` elements");
+        }
+        let base = fl.indent;
+        let mut elems: Vec<Range<usize>> = Vec::new();
+        let mut cur_start: Option<usize> = None;
+        let mut block_end = fl.content_start - fl.indent;
+        for lj in lines.iter().skip(first) {
+            let line_start = lj.content_start - lj.indent;
+            if !lj.nonblank() {
+                continue;
+            }
+            let is_dash = self.text[lj.content_start..lj.end].starts_with('-');
+            if lj.indent == base && is_dash {
+                if let Some(s) = cur_start {
+                    elems.push(s..line_start);
+                }
+                cur_start = Some(line_start);
+                block_end = (lj.end + 1).min(body.end);
+                continue;
+            }
+            if lj.indent > base {
+                block_end = (lj.end + 1).min(body.end);
+                continue;
+            }
+            // Same-or-shallower non-dash line: block over.
+            break;
+        }
+        if let Some(s) = cur_start {
+            elems.push(s..block_end);
+        }
+        Ok(SeqLoc {
+            key_value,
+            base,
+            elems,
+            block_end,
+        })
     }
 
     // ---- internals ---------------------------------------------------------
@@ -863,5 +1130,197 @@ AnimatorStateMachine:
             ]
         );
         assert_eq!(parse_path("/m_Name/"), vec![Seg::Key("m_Name".into())]);
+    }
+}
+
+#[cfg(test)]
+mod structural_tests {
+    use super::*;
+
+    const PREFAB: &str = "\
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &100
+GameObject:
+  m_ObjectHideFlags: 0
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 400}
+  - component: {fileID: 11400}
+  - component: {fileID: 18300}
+  m_Layer: 0
+  m_Name: Root
+--- !u!4 &400
+Transform:
+  m_GameObject: {fileID: 100}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_Children: []
+  m_Father: {fileID: 0}
+--- !u!114 &11400
+MonoBehaviour:
+  m_GameObject: {fileID: 100}
+  m_Script: {fileID: 11500000, guid: aaaa0000aaaa0000aaaa0000aaaa0000, type: 3}
+  m_Name:
+  m_Damping: 0.2
+--- !u!183 &18300
+Cloth:
+  m_GameObject: {fileID: 100}
+  m_Enabled: 1
+--- !u!1107 &1107000
+AnimatorStateMachine:
+  m_Name: SM
+  m_ChildStates:
+  - serializedVersion: 1
+    m_State: {fileID: 1102001}
+    m_Position: {x: 200, y: 0, z: 0}
+  - serializedVersion: 1
+    m_State: {fileID: 1102002}
+    m_Position: {x: 200, y: 120, z: 0}
+  m_DefaultState: {fileID: 1102001}
+";
+
+    fn file() -> EditableUnityFile {
+        EditableUnityFile::parse(PREFAB).unwrap()
+    }
+
+    #[test]
+    fn remove_document_drops_header_and_body_only() {
+        let mut f = file();
+        let cloth = f.doc_by_file_id(18300).unwrap();
+        f.remove_document(cloth).unwrap();
+        assert!(!f.text().contains("Cloth:"));
+        assert!(!f.text().contains("&18300"));
+        // Neighbours are byte-identical.
+        assert!(
+            f.text()
+                .contains("  m_Damping: 0.2\n--- !u!1107 &1107000\n")
+        );
+        assert!(f.doc_by_file_id(18300).is_none());
+        assert_eq!(f.documents().len(), 4);
+    }
+
+    #[test]
+    fn replace_document_body_keeps_header_and_references() {
+        let mut f = file();
+        let mb = f.doc_by_file_id(11400).unwrap();
+        f.replace_document_body(
+            mb,
+            "MonoBehaviour:\n  m_GameObject: {fileID: 100}\n  m_Script: {fileID: 1661641543, guid: 2a2c05204084d904aa4945ccff20d8e5, type: 3}\n  pull: 0.5",
+        )
+        .unwrap();
+        assert!(f.text().contains("--- !u!114 &11400\nMonoBehaviour:\n  m_GameObject: {fileID: 100}\n  m_Script: {fileID: 1661641543"));
+        assert!(!f.text().contains("m_Damping"));
+        // The owning GameObject still lists it.
+        assert!(f.text().contains("- component: {fileID: 11400}"));
+        // Trailing newline was added; the next header is intact.
+        assert!(f.text().contains("  pull: 0.5\n--- !u!183 &18300\n"));
+    }
+
+    #[test]
+    fn retag_document_rewrites_header() {
+        let mut f = file();
+        let d = f.doc_by_file_id(18300).unwrap();
+        f.retag_document(d, 114, 18300).unwrap();
+        assert!(f.text().contains("--- !u!114 &18300\nCloth:"));
+        assert_eq!(f.documents()[d].class_id, 114);
+    }
+
+    #[test]
+    fn append_document_adds_at_end_and_rejects_duplicate_ids() {
+        let mut f = file();
+        let idx = f
+            .append_document(
+                114,
+                999,
+                "MonoBehaviour:\n  m_GameObject: {fileID: 100}\n  m_Name: New",
+            )
+            .unwrap();
+        assert_eq!(idx, f.documents().len() - 1);
+        assert!(f.text().ends_with(
+            "--- !u!114 &999\nMonoBehaviour:\n  m_GameObject: {fileID: 100}\n  m_Name: New\n"
+        ));
+        assert!(
+            f.append_document(114, 999, "MonoBehaviour:\n  m_Name: Dup")
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn append_sequence_item_converts_empty_flow_list_to_block() {
+        let mut f = file();
+        let tr = f.doc_by_file_id(400).unwrap();
+        f.append_sequence_item(tr, &parse_path("m_Children"), "{fileID: 401}")
+            .unwrap();
+        assert!(
+            f.text()
+                .contains("  m_Children:\n  - {fileID: 401}\n  m_Father: {fileID: 0}\n")
+        );
+        assert_eq!(f.sequence_len(tr, &parse_path("m_Children")).unwrap(), 1);
+        f.append_sequence_item(tr, &parse_path("m_Children"), "{fileID: 402}")
+            .unwrap();
+        assert!(
+            f.text()
+                .contains("  - {fileID: 401}\n  - {fileID: 402}\n  m_Father")
+        );
+    }
+
+    #[test]
+    fn append_sequence_item_multiline_element() {
+        let mut f = file();
+        let sm = f.doc_by_file_id(1107000).unwrap();
+        f.append_sequence_item(
+            sm,
+            &parse_path("m_ChildStates"),
+            "serializedVersion: 1\nm_State: {fileID: 1102003}\nm_Position: {x: 200, y: 240, z: 0}",
+        )
+        .unwrap();
+        assert!(f.text().contains(
+            "    m_Position: {x: 200, y: 120, z: 0}\n  - serializedVersion: 1\n    m_State: {fileID: 1102003}\n    m_Position: {x: 200, y: 240, z: 0}\n  m_DefaultState:"
+        ));
+        assert_eq!(f.sequence_len(sm, &parse_path("m_ChildStates")).unwrap(), 3);
+    }
+
+    #[test]
+    fn remove_sequence_item_middle_and_last() {
+        let mut f = file();
+        let go = f.doc_by_file_id(100).unwrap();
+        let p = parse_path("m_Component");
+        let items = f.sequence_items(go, &p).unwrap();
+        assert_eq!(items.len(), 3);
+        assert_eq!(items[1], "  - component: {fileID: 11400}\n");
+        f.remove_sequence_item(go, &p, 1).unwrap();
+        assert!(f.text().contains("  m_Component:\n  - component: {fileID: 400}\n  - component: {fileID: 18300}\n  m_Layer: 0\n"));
+        f.remove_sequence_item(go, &p, 1).unwrap();
+        f.remove_sequence_item(go, &p, 0).unwrap();
+        assert!(f.text().contains("  m_Component: []\n  m_Layer: 0\n"));
+        assert_eq!(f.sequence_len(go, &p).unwrap(), 0);
+        assert!(f.remove_sequence_item(go, &p, 0).is_err());
+        // Round-trips back to block form.
+        f.append_sequence_item(go, &p, "component: {fileID: 400}")
+            .unwrap();
+        assert!(
+            f.text()
+                .contains("  m_Component:\n  - component: {fileID: 400}\n  m_Layer: 0\n")
+        );
+    }
+
+    #[test]
+    fn remove_sequence_item_multiline_element() {
+        let mut f = file();
+        let sm = f.doc_by_file_id(1107000).unwrap();
+        f.remove_sequence_item(sm, &parse_path("m_ChildStates"), 0)
+            .unwrap();
+        assert!(f.text().contains(
+            "  m_ChildStates:\n  - serializedVersion: 1\n    m_State: {fileID: 1102002}\n    m_Position: {x: 200, y: 120, z: 0}\n  m_DefaultState:"
+        ));
+    }
+
+    #[test]
+    fn locate_sequence_rejects_scalars_and_flow_maps() {
+        let f = file();
+        let go = f.doc_by_file_id(100).unwrap();
+        assert!(f.sequence_len(go, &parse_path("m_Name")).is_err());
+        let tr = f.doc_by_file_id(400).unwrap();
+        assert!(f.sequence_len(tr, &parse_path("m_Father")).is_err());
     }
 }

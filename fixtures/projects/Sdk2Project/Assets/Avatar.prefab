@@ -1,0 +1,425 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &100
+GameObject:
+  m_ObjectHideFlags: 0
+  m_Component:
+  - component: {fileID: 400}
+  - component: {fileID: 9500}
+  - component: {fileID: 11400}
+  - component: {fileID: 11401}
+  m_Name: MikuFixture
+  m_IsActive: 1
+--- !u!4 &400
+Transform:
+  m_GameObject: {fileID: 100}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 0.75, y: 0.75, z: 0.75}
+  m_Children:
+  - {fileID: 401}
+  - {fileID: 420}
+  - {fileID: 421}
+  m_Father: {fileID: 0}
+--- !u!95 &9500
+Animator:
+  m_GameObject: {fileID: 100}
+  m_Enabled: 1
+  m_Avatar: {fileID: 9000000, guid: aaaaaaaa00000000aaaaaaaa00000001, type: 3}
+  m_Controller: {fileID: 9100000, guid: aaaaaaaa00000000aaaaaaaa00000009, type: 2}
+  m_CullingMode: 0
+  m_UpdateMode: 0
+  m_ApplyRootMotion: 1
+--- !u!114 &11400
+MonoBehaviour:
+  m_GameObject: {fileID: 100}
+  m_Enabled: 1
+  m_Script: {fileID: -1230582229, guid: aaaaaaaa00000000aaaaaaaa00000002, type: 3}
+  m_Name: 
+  Name: 
+  ViewPosition: {x: 0, y: 0.995, z: 0.06}
+  Animations: 1
+  ScaleIPD: 1
+  lipSync: 3
+  lipSyncJawBone: {fileID: 0}
+  VisemeSkinnedMesh: {fileID: 13700}
+  MouthOpenBlendShapeName: Facial_Blends.Jaw_Down
+  VisemeBlendShapes:
+  - vrc.v_sil
+  - vrc.v_pp
+  - vrc.v_aa
+  portraitCameraPositionOffset: {x: 0, y: 0, z: 0}
+  portraitCameraRotationOffset: {x: 0, y: 1, z: 0, w: 0}
+  CustomStandingAnims: {fileID: 22100000, guid: aaaaaaaa00000000aaaaaaaa00000010, type: 2}
+  CustomSittingAnims: {fileID: 0}
+--- !u!114 &11401
+MonoBehaviour:
+  m_GameObject: {fileID: 100}
+  m_Enabled: 1
+  m_Script: {fileID: -1427037861, guid: aaaaaaaa00000000aaaaaaaa00000003, type: 3}
+  m_Name: 
+  launchedFromSDKPipeline: 0
+  completedSDKPipeline: 1
+  blueprintId: avtr_00000000-0000-0000-0000-000000000000
+  contentType: 0
+  fallbackStatus: 0
+--- !u!1 &101
+GameObject:
+  m_Component:
+  - component: {fileID: 401}
+  m_Name: Armature
+  m_IsActive: 1
+--- !u!4 &401
+Transform:
+  m_GameObject: {fileID: 101}
+  m_LocalRotation: {x: -0.7071068, y: 0, z: 0, w: 0.7071068}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_Children:
+  - {fileID: 402}
+  m_Father: {fileID: 400}
+--- !u!1 &102
+GameObject:
+  m_Component:
+  - component: {fileID: 402}
+  m_Name: Hips
+  m_IsActive: 1
+--- !u!4 &402
+Transform:
+  m_GameObject: {fileID: 102}
+  m_LocalRotation: {x: -0.7071068, y: 0, z: 0, w: 0.7071068}
+  m_LocalPosition: {x: 0, y: -0.037, z: 0.967}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_Children:
+  - {fileID: 403}
+  - {fileID: 410}
+  - {fileID: 412}
+  - {fileID: 415}
+  m_Father: {fileID: 401}
+--- !u!1 &103
+GameObject:
+  m_Component:
+  - component: {fileID: 403}
+  m_Name: Spine
+  m_IsActive: 1
+--- !u!4 &403
+Transform:
+  m_GameObject: {fileID: 103}
+  m_LocalRotation: {x: 1, y: 0, z: 0, w: 0}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_Children:
+  - {fileID: 404}
+  m_Father: {fileID: 402}
+--- !u!1 &104
+GameObject:
+  m_Component:
+  - component: {fileID: 404}
+  - component: {fileID: 11404}
+  m_Name: Head
+  m_IsActive: 1
+--- !u!4 &404
+Transform:
+  m_GameObject: {fileID: 104}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0.3, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_Children:
+  - {fileID: 405}
+  - {fileID: 406}
+  - {fileID: 407}
+  - {fileID: 430}
+  m_Father: {fileID: 403}
+--- !u!114 &11404
+MonoBehaviour:
+  m_GameObject: {fileID: 104}
+  m_Enabled: 1
+  m_Script: {fileID: 11500000, guid: baedd976e12657241bf7ff2d1c685342, type: 3}
+  m_Name: 
+  m_Direction: 1
+  m_Center: {x: 0, y: 0.05, z: 0}
+  m_Bound: 0
+  m_Radius: 0.07
+  m_Height: 0
+--- !u!1 &105
+GameObject:
+  m_Component:
+  - component: {fileID: 405}
+  m_Name: Eye_L
+  m_IsActive: 1
+--- !u!4 &405
+Transform:
+  m_GameObject: {fileID: 105}
+  m_LocalRotation: {x: -0.057, y: 0.7026, z: 0.7026, w: 0.0976}
+  m_LocalPosition: {x: 0.028, y: 0.049, z: 0.023}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_Children: []
+  m_Father: {fileID: 404}
+--- !u!1 &106
+GameObject:
+  m_Component:
+  - component: {fileID: 406}
+  m_Name: Eye_R
+  m_IsActive: 1
+--- !u!4 &406
+Transform:
+  m_GameObject: {fileID: 106}
+  m_LocalRotation: {x: 0.057, y: 0.7026, z: 0.7026, w: -0.0976}
+  m_LocalPosition: {x: -0.028, y: 0.049, z: 0.023}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_Children: []
+  m_Father: {fileID: 404}
+--- !u!1 &107
+GameObject:
+  m_Component:
+  - component: {fileID: 407}
+  - component: {fileID: 11407}
+  m_Name: Hair
+  m_IsActive: 1
+--- !u!4 &407
+Transform:
+  m_GameObject: {fileID: 107}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0.1, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_Children:
+  - {fileID: 408}
+  m_Father: {fileID: 404}
+--- !u!114 &11407
+MonoBehaviour:
+  m_GameObject: {fileID: 107}
+  m_Enabled: 1
+  m_Script: {fileID: 11500000, guid: f9ac8d30c6a0d9642a11e5be4c440740, type: 3}
+  m_Name: 
+  m_Root: {fileID: 407}
+  m_UpdateRate: 60
+  m_UpdateMode: 0
+  m_Damping: 0.2
+  m_DampingDistrib:
+    serializedVersion: 2
+    m_Curve: []
+  m_Elasticity: 0.05
+  m_Stiffness: 0.28
+  m_Inert: 0.9
+  m_Radius: 0.02
+  m_EndLength: 0
+  m_EndOffset: {x: 0, y: 0, z: 0}
+  m_Gravity: {x: 0, y: -0.01, z: 0}
+  m_Force: {x: 0, y: 0, z: 0}
+  m_Colliders:
+  - {fileID: 11404}
+  m_Exclusions: []
+  m_FreezeAxis: 0
+--- !u!1 &108
+GameObject:
+  m_Component:
+  - component: {fileID: 408}
+  m_Name: Hair_1
+  m_IsActive: 1
+--- !u!4 &408
+Transform:
+  m_GameObject: {fileID: 108}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: -0.2, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_Children:
+  - {fileID: 409}
+  m_Father: {fileID: 407}
+--- !u!1 &109
+GameObject:
+  m_Component:
+  - component: {fileID: 409}
+  m_Name: Hair_2
+  m_IsActive: 1
+--- !u!4 &409
+Transform:
+  m_GameObject: {fileID: 109}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: -0.2, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_Children: []
+  m_Father: {fileID: 408}
+--- !u!1 &110
+GameObject:
+  m_Component:
+  - component: {fileID: 410}
+  m_Name: Left leg
+  m_IsActive: 1
+--- !u!4 &410
+Transform:
+  m_GameObject: {fileID: 110}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0.065, y: 0.104, z: 0.013}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_Children:
+  - {fileID: 411}
+  m_Father: {fileID: 402}
+--- !u!1 &111
+GameObject:
+  m_Component:
+  - component: {fileID: 411}
+  - component: {fileID: 13611}
+  m_Name: L cap
+  m_IsActive: 1
+--- !u!4 &411
+Transform:
+  m_GameObject: {fileID: 111}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_Children: []
+  m_Father: {fileID: 410}
+--- !u!136 &13611
+CapsuleCollider:
+  m_GameObject: {fileID: 111}
+  m_Material: {fileID: 0}
+  m_IsTrigger: 0
+  m_Enabled: 1
+  m_Radius: 0.08
+  m_Height: 0.34
+  m_Direction: 1
+  m_Center: {x: 0, y: -0.09, z: 0}
+--- !u!1 &112
+GameObject:
+  m_Component:
+  - component: {fileID: 412}
+  m_Name: Skirt_0
+  m_IsActive: 1
+--- !u!4 &412
+Transform:
+  m_GameObject: {fileID: 112}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0.1, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_Children:
+  - {fileID: 413}
+  m_Father: {fileID: 402}
+--- !u!1 &113
+GameObject:
+  m_Component:
+  - component: {fileID: 413}
+  m_Name: Skirt_1
+  m_IsActive: 1
+--- !u!4 &413
+Transform:
+  m_GameObject: {fileID: 113}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0.15, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_Children: []
+  m_Father: {fileID: 412}
+--- !u!1 &115
+GameObject:
+  m_Component:
+  - component: {fileID: 415}
+  - component: {fileID: 9515}
+  m_Name: Vest
+  m_IsActive: 1
+--- !u!4 &415
+Transform:
+  m_GameObject: {fileID: 115}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_Children:
+  - {fileID: 416}
+  m_Father: {fileID: 402}
+--- !u!95 &9515
+Animator:
+  m_GameObject: {fileID: 115}
+  m_Enabled: 1
+  m_Avatar: {fileID: 0}
+  m_Controller: {fileID: 0}
+  m_ApplyRootMotion: 0
+--- !u!1 &116
+GameObject:
+  m_Component:
+  - component: {fileID: 416}
+  - component: {fileID: 2016}
+  m_Name: VestCam
+  m_IsActive: 1
+--- !u!4 &416
+Transform:
+  m_GameObject: {fileID: 116}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_Children: []
+  m_Father: {fileID: 415}
+--- !u!20 &2016
+Camera:
+  m_GameObject: {fileID: 116}
+  m_Enabled: 1
+--- !u!1 &120
+GameObject:
+  m_Component:
+  - component: {fileID: 420}
+  - component: {fileID: 13700}
+  m_Name: Body
+  m_IsActive: 1
+--- !u!4 &420
+Transform:
+  m_GameObject: {fileID: 120}
+  m_LocalRotation: {x: -0.7071068, y: 0, z: 0, w: 0.7071068}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_Children: []
+  m_Father: {fileID: 400}
+--- !u!137 &13700
+SkinnedMeshRenderer:
+  m_GameObject: {fileID: 120}
+  m_Enabled: 1
+  m_Materials:
+  - {fileID: 2100000, guid: aaaaaaaa00000000aaaaaaaa00000020, type: 2}
+  m_Mesh: {fileID: 4300000, guid: aaaaaaaa00000000aaaaaaaa00000001, type: 3}
+  m_Bones:
+  - {fileID: 402}
+  m_BlendShapeWeights: []
+  m_RootBone: {fileID: 402}
+--- !u!1 &121
+GameObject:
+  m_Component:
+  - component: {fileID: 421}
+  - component: {fileID: 13701}
+  - component: {fileID: 18300}
+  m_Name: skirt
+  m_IsActive: 1
+--- !u!4 &421
+Transform:
+  m_GameObject: {fileID: 121}
+  m_LocalRotation: {x: -0.7071068, y: 0, z: 0, w: 0.7071068}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_Children: []
+  m_Father: {fileID: 400}
+--- !u!137 &13701
+SkinnedMeshRenderer:
+  m_GameObject: {fileID: 121}
+  m_Enabled: 1
+  m_Materials:
+  - {fileID: 2100000, guid: aaaaaaaa00000000aaaaaaaa00000020, type: 2}
+  m_Mesh: {fileID: 4300002, guid: aaaaaaaa00000000aaaaaaaa00000001, type: 3}
+  m_Bones:
+  - {fileID: 412}
+  m_RootBone: {fileID: 402}
+--- !u!183 &18300
+Cloth:
+  m_GameObject: {fileID: 121}
+  m_Enabled: 1
+  m_StretchingStiffness: 1
+  m_CapsuleColliders:
+  - {fileID: 13611}
+--- !u!1 &130
+GameObject:
+  m_Component:
+  - component: {fileID: 430}
+  m_Name: Ear
+  m_IsActive: 1
+--- !u!4 &430
+Transform:
+  m_GameObject: {fileID: 130}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0.1, y: 0.1, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_Children: []
+  m_Father: {fileID: 404}

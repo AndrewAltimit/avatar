@@ -6,11 +6,15 @@
 //! `controls` list — so generation is a straightforward single-document emit. The interesting
 //! contract points are:
 //!
-//! - **The script GUID.** VRChat's SDK ships `VRCExpressionParameters.cs` /
-//!   `VRCExpressionsMenu.cs` with stable GUIDs that have not changed since SDK3 launched (they are
-//!   what every avatar asset in the wild references). We default to those
-//!   ([`VRC_EXPRESSION_PARAMETERS_SCRIPT_GUID`], [`VRC_EXPRESSIONS_MENU_SCRIPT_GUID`]) and let the
-//!   caller override, so a future SDK relocation is a flag, not a code change (`PLAN.md` risk 3).
+//! - **The script reference.** `VRCExpressionParameters` / `VRCExpressionsMenu` are compiled into
+//!   the SDK's `VRCSDK3A.dll` (GUID `67cc4cb7839cd3741b63733d5adf0442`), so an asset's `m_Script`
+//!   is `{fileID: <class hash>, guid: <dll guid>, type: 3}` — the fileID is Unity's per-class
+//!   hash inside the DLL, *not* the `11500000` a loose `.cs` script gets. The values here
+//!   ([`VRC_EXPRESSION_PARAMETERS_SCRIPT`], [`VRC_EXPRESSIONS_MENU_SCRIPT`]) were read off the
+//!   SDK's own `DefaultExpressionParameters.asset` / `DefaultExpressionsMenu.asset` in
+//!   `com.vrchat.avatars` 3.10.4 and have been stable since SDK3 launched. The caller can still
+//!   override both halves ([`ExpressionParams::script`]) so a future relocation is a flag, not a
+//!   code change (`PLAN.md` risk 3).
 //! - **The main-object fileID.** Unity's convention for a single-object ScriptableObject asset is
 //!   `&11400000` ([`EXPRESSIONS_MAIN_FILE_ID`]); cross-asset references (`expressionsMenu:` on the
 //!   descriptor, `subMenu:` on a control) expect it.
@@ -22,10 +26,38 @@
 
 use crate::yaml_emit::{Emitter, ObjectRef, UNITY_PREAMBLE};
 
-/// GUID of the SDK's `VRCExpressionParameters` script (stable across SDK3 releases).
-pub const VRC_EXPRESSION_PARAMETERS_SCRIPT_GUID: &str = "03a6d797deb62f0429471c4e17aa99e7";
-/// GUID of the SDK's `VRCExpressionsMenu` script (stable across SDK3 releases).
-pub const VRC_EXPRESSIONS_MENU_SCRIPT_GUID: &str = "f0f530a3d8d61f04280c2643090e8711";
+/// A MonoBehaviour `m_Script` reference: the class fileID plus the GUID of the asset that holds
+/// it (a `.cs` file → `11500000`; a class inside a DLL → Unity's per-class hash).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ScriptRef {
+    pub file_id: i64,
+    pub guid: String,
+}
+
+impl ScriptRef {
+    /// A reference to a class compiled into a DLL (fileID = Unity's class hash).
+    pub fn new(file_id: i64, guid: impl Into<String>) -> Self {
+        ScriptRef {
+            file_id,
+            guid: guid.into(),
+        }
+    }
+    /// A reference to a loose `.cs` script (Unity's fixed `11500000` main-object id).
+    pub fn cs(guid: impl Into<String>) -> Self {
+        ScriptRef::new(11500000, guid)
+    }
+    /// Render as Unity writes it: `{fileID: N, guid: G, type: 3}`.
+    pub fn render(&self) -> String {
+        format!("{{fileID: {}, guid: {}, type: 3}}", self.file_id, self.guid)
+    }
+}
+
+/// GUID of the SDK's `VRCSDK3A.dll`, which holds the avatar-side runtime classes.
+pub const VRCSDK3A_DLL_GUID: &str = "67cc4cb7839cd3741b63733d5adf0442";
+/// `m_Script` reference of `VRC.SDK3.Avatars.ScriptableObjects.VRCExpressionParameters`.
+pub const VRC_EXPRESSION_PARAMETERS_SCRIPT: (i64, &str) = (-1506855854, VRCSDK3A_DLL_GUID);
+/// `m_Script` reference of `VRC.SDK3.Avatars.ScriptableObjects.VRCExpressionsMenu`.
+pub const VRC_EXPRESSIONS_MENU_SCRIPT: (i64, &str) = (-340790334, VRCSDK3A_DLL_GUID);
 /// Unity's conventional main-object fileID for a single-object ScriptableObject asset.
 pub const EXPRESSIONS_MAIN_FILE_ID: i64 = 11400000;
 
@@ -129,24 +161,32 @@ impl ExpressionParamSpec {
 #[derive(Debug, Clone)]
 pub struct ExpressionParams {
     pub name: String,
-    pub script_guid: String,
+    pub script: ScriptRef,
     pub parameters: Vec<ExpressionParamSpec>,
 }
 
 impl ExpressionParams {
-    /// A new, empty parameters asset named `name`, pointing at the SDK's default script GUID.
+    /// A new, empty parameters asset named `name`, pointing at the SDK's script reference.
     pub fn new(name: impl Into<String>) -> Self {
         ExpressionParams {
             name: name.into(),
-            script_guid: VRC_EXPRESSION_PARAMETERS_SCRIPT_GUID.to_string(),
+            script: ScriptRef::new(
+                VRC_EXPRESSION_PARAMETERS_SCRIPT.0,
+                VRC_EXPRESSION_PARAMETERS_SCRIPT.1,
+            ),
             parameters: Vec::new(),
         }
     }
 
-    /// Override the `m_Script` GUID (for a relocated / future SDK).
-    pub fn script_guid(mut self, guid: impl Into<String>) -> Self {
-        self.script_guid = guid.into();
+    /// Override the `m_Script` reference (for a relocated / future SDK).
+    pub fn script(mut self, script: ScriptRef) -> Self {
+        self.script = script;
         self
+    }
+
+    /// Override only the `m_Script` GUID, treating it as a loose `.cs` script (`11500000`).
+    pub fn script_guid(self, guid: impl Into<String>) -> Self {
+        self.script(ScriptRef::cs(guid))
     }
 
     /// Add a parameter (builder-style).
@@ -164,7 +204,7 @@ impl ExpressionParams {
     pub fn to_unity_yaml(&self, file_id: i64) -> String {
         let mut e = Emitter::new();
         e.doc_header(114, file_id);
-        emit_monobehaviour_head(&mut e, &self.name, &self.script_guid);
+        emit_monobehaviour_head(&mut e, &self.name, &self.script);
         e.indented(|e| {
             if self.parameters.is_empty() {
                 e.kv("parameters", "[]");
@@ -268,24 +308,29 @@ impl MenuControlSpec {
 #[derive(Debug, Clone)]
 pub struct ExpressionsMenu {
     pub name: String,
-    pub script_guid: String,
+    pub script: ScriptRef,
     pub controls: Vec<MenuControlSpec>,
 }
 
 impl ExpressionsMenu {
-    /// A new, empty menu asset named `name`, pointing at the SDK's default script GUID.
+    /// A new, empty menu asset named `name`, pointing at the SDK's script reference.
     pub fn new(name: impl Into<String>) -> Self {
         ExpressionsMenu {
             name: name.into(),
-            script_guid: VRC_EXPRESSIONS_MENU_SCRIPT_GUID.to_string(),
+            script: ScriptRef::new(VRC_EXPRESSIONS_MENU_SCRIPT.0, VRC_EXPRESSIONS_MENU_SCRIPT.1),
             controls: Vec::new(),
         }
     }
 
-    /// Override the `m_Script` GUID (for a relocated / future SDK).
-    pub fn script_guid(mut self, guid: impl Into<String>) -> Self {
-        self.script_guid = guid.into();
+    /// Override the `m_Script` reference (for a relocated / future SDK).
+    pub fn script(mut self, script: ScriptRef) -> Self {
+        self.script = script;
         self
+    }
+
+    /// Override only the `m_Script` GUID, treating it as a loose `.cs` script (`11500000`).
+    pub fn script_guid(self, guid: impl Into<String>) -> Self {
+        self.script(ScriptRef::cs(guid))
     }
 
     /// Add a control (builder-style).
@@ -298,7 +343,7 @@ impl ExpressionsMenu {
     pub fn to_unity_yaml(&self, file_id: i64) -> String {
         let mut e = Emitter::new();
         e.doc_header(114, file_id);
-        emit_monobehaviour_head(&mut e, &self.name, &self.script_guid);
+        emit_monobehaviour_head(&mut e, &self.name, &self.script);
         e.indented(|e| {
             if self.controls.is_empty() {
                 e.kv("controls", "[]");
@@ -337,7 +382,7 @@ impl ExpressionsMenu {
 
 /// The shared `MonoBehaviour:` header fields both assets open with (through
 /// `m_EditorClassIdentifier`), matching Unity's serialization order byte-for-byte.
-fn emit_monobehaviour_head(e: &mut Emitter, name: &str, script_guid: &str) {
+fn emit_monobehaviour_head(e: &mut Emitter, name: &str, script: &ScriptRef) {
     e.line("MonoBehaviour:");
     e.indented(|e| {
         e.kv("m_ObjectHideFlags", "0");
@@ -347,10 +392,7 @@ fn emit_monobehaviour_head(e: &mut Emitter, name: &str, script_guid: &str) {
         e.kv("m_GameObject", "{fileID: 0}");
         e.kv("m_Enabled", "1");
         e.kv("m_EditorHideFlags", "0");
-        e.kv(
-            "m_Script",
-            &format!("{{fileID: 11500000, guid: {script_guid}, type: 3}}"),
-        );
+        e.kv("m_Script", &script.render());
         e.kv("m_Name", name);
         e.key("m_EditorClassIdentifier");
     });
@@ -377,9 +419,9 @@ mod tests {
     fn params_emit_expected_fields() {
         let yaml = toggle_params().to_unity_yaml(EXPRESSIONS_MAIN_FILE_ID);
         assert!(yaml.contains("--- !u!114 &11400000"));
-        assert!(yaml.contains(&format!(
-            "m_Script: {{fileID: 11500000, guid: {VRC_EXPRESSION_PARAMETERS_SCRIPT_GUID}, type: 3}}"
-        )));
+        assert!(yaml.contains(
+            "m_Script: {fileID: -1506855854, guid: 67cc4cb7839cd3741b63733d5adf0442, type: 3}"
+        ));
         assert!(yaml.contains("m_Name: Parameters"));
         assert!(yaml.contains("- name: Hat"));
         assert!(yaml.contains("valueType: 2"));
@@ -397,10 +439,7 @@ mod tests {
             panic!("expected the structural reader to classify a Parameters asset");
         };
         assert_eq!(p.asset_name.as_deref(), Some("Parameters"));
-        assert_eq!(
-            p.script_guid.as_deref(),
-            Some(VRC_EXPRESSION_PARAMETERS_SCRIPT_GUID)
-        );
+        assert_eq!(p.script_guid.as_deref(), Some(VRCSDK3A_DLL_GUID));
         assert_eq!(p.parameters.len(), 3);
         // Bool(1) + Int(8) synced; the local Float contributes 0.
         assert_eq!(p.synced_bits(), 9);

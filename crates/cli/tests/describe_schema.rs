@@ -88,14 +88,28 @@ fn describe_human_output_is_readable() {
 fn schema_lists_available_names() {
     let (code, out) = run(&["schema"]);
     assert_eq!(code, 0);
-    for name in ["describe", "lint", "stats", "armature", "fbx-inspect"] {
+    for name in [
+        "describe",
+        "lint",
+        "stats",
+        "armature",
+        "fbx-inspect",
+        "migrate",
+    ] {
         assert!(out.contains(name), "lists schema '{name}'");
     }
 }
 
 #[test]
 fn schema_emits_valid_json_schema_per_type() {
-    for name in ["describe", "lint", "stats", "armature", "fbx-inspect"] {
+    for name in [
+        "describe",
+        "lint",
+        "stats",
+        "armature",
+        "fbx-inspect",
+        "migrate",
+    ] {
         let (code, out) = run(&["schema", name]);
         assert_eq!(code, 0, "schema {name} exits 0");
         let v: serde_json::Value =

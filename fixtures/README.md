@@ -13,6 +13,7 @@ makes the corpus browsable in one place.
 | `projects/DynamicsProject/` | Synthetic project exercising the PhysBone / Avatar-Dynamics rules (VRC050–052), avatar-level Write-Defaults (VRC045), viseme entries (VRC038). | same |
 | `projects/ClipProject/` | Synthetic project exercising the animation-clip rules (VRC046 missing motion, VRC047 FX transform curves, VRC049 empty clip). | same |
 | `projects/QuestProject/` | Synthetic project exercising the hygiene/Android rules (VRC060 missing script, VRC061 non-mobile shader vs a whitelisted `VRChat/Mobile/*` one). | same |
+| `projects/Sdk2Project/` | Synthetic **SDK2** avatar project (SDK2 descriptor + PipelineManager, root motion on, DynamicBone + collider, Cloth skirt + capsule, a strippable vest subtree with a camera, eye bones, a gesture override controller with a muscle-carrying clip, a material whose shader has a missing `#include`). | `avatar-migrate` golden + assertion tests |
 
 There is deliberately **no committed FBX or `.unitypackage`** here. Two reasons:
 

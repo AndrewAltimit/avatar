@@ -48,6 +48,9 @@ fn entries() -> &'static [Entry] {
         ("fbx-inspect", || {
             serde_json::to_value(schema_for!(crate::cmd::fbx::InspectSummary)).unwrap()
         }),
+        ("migrate", || {
+            serde_json::to_value(schema_for!(avatar_migrate::MigrationReport)).unwrap()
+        }),
     ];
     entries
 }

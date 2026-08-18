@@ -61,6 +61,12 @@ Crate dirs are unprefixed; package names `avatar-<slug>`; lib names `avatar_<slu
   deterministic fileIDs, reader-validated round-trip + a real-editor import gate in CI.
   **[built: M4 — library + `avatar anim-gen clip|blendtree|controller` CLI; full FX animator-layer
   assembly done; CLI-generated assets gated against a real Unity editor]**
+- `avatar-migrate` — SDK2 → SDK3 migration of an avatar project: the SDK2 prefab rewritten in place
+  over `EditableUnityFile` (descriptor/PipelineManager retyped at their fileIDs, root motion off,
+  DynamicBone → PhysBone with the SDK's own disassembled conversion rules, Cloth → PhysBone skirt,
+  subtree stripping, gesture overrides → FX layer, rig-derived eye look) + a VCC-openable project
+  tree. **[built — library + `avatar migrate sdk3` CLI; golden-tested on a synthetic SDK2 fixture,
+  validated on a real 2021 export; Unity import is the user's last mile]**
 
 **Runtime**
 - `avatar-osc` — `rosc`-backed VRChat OSC parameter protocol: `/avatar/parameters/*`, `/input/*` axes

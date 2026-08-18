@@ -1,0 +1,27 @@
+[package]
+name = "avatar-migrate"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "avatar_migrate"
+path = "src/lib.rs"
+
+[dependencies]
+anyhow.workspace = true
+serde = { workspace = true }
+serde_json.workspace = true
+avatar-unity-yaml = { path = "../unity-yaml" }
+avatar-unity-asset = { path = "../unity-asset" }
+avatar-anim-gen = { path = "../anim-gen" }
+avatar-fbx = { path = "../fbx" }
+avatar-vpm = { path = "../vpm" }
+schemars = { workspace = true, optional = true }
+zip = { version = "6", default-features = false, features = ["deflate"] }
+
+[features]
+schema = ["schemars"]
+
+[dev-dependencies]
+avatar-testkit = { path = "../testkit" }

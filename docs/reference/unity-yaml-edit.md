@@ -95,7 +95,19 @@ behind the guard — it is deliberately *not* exposed over the read-only MCP ser
 
 ## Scope
 
-In scope: editing the **value** at a path — scalars, reference re-targets, flow-map subfields. Out of
-scope: **structural** edits (adding/removing keys or sequence elements), which need indentation
-reflowing and are better served by the asset generators in
-[`avatar-anim-gen`](anim-gen.md). One edit can only change a value that already exists.
+In scope: editing the **value** at a path — scalars, reference re-targets, flow-map subfields — and
+the **document-level structural** edits a prefab rewrite needs, still span-based and still leaving
+every untouched byte alone:
+
+| Method | What it does |
+|---|---|
+| `remove_document(doc)` | Drop a whole `--- !u!… &id` document (header + body). References to it elsewhere are left as-is (Unity reads a dangling local ref as null), so pair it with `remove_sequence_item` on the owner's list. |
+| `replace_document_body(doc, body)` | Swap the body while keeping the header — the object's fileID and every reference to it stay valid. This is how a component is **retyped** at the same slot (`DynamicBone` → `VRCPhysBone`, SDK2 descriptor → SDK3). |
+| `retag_document(doc, class_id, file_id)` | Rewrite the header (for a class change, e.g. `CapsuleCollider` 136 → MonoBehaviour 114). |
+| `append_document(class_id, file_id, body)` | Add a new document at the end (fileID must be unused). |
+| `append_sequence_item(doc, path, item)` / `remove_sequence_item(doc, path, i)` | Add to / remove from a **block sequence** such as `m_Component` or `m_Children` (converting `[]` ↔ block form; multi-line items re-indented under their `- `). `sequence_items` / `sequence_len` read them. |
+
+Still out of scope: adding or removing *mapping keys* inside a body — a body that needs a different
+key set is regenerated whole (the generators in [`avatar-anim-gen`](anim-gen.md), the component
+emitters in [`avatar-migrate`](migrate.md)) and swapped in with `replace_document_body`. A value edit
+can only change a value that already exists.

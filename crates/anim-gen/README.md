@@ -37,6 +37,10 @@ output back** in tests.
 - `expressions`: `ExpressionParams`/`ExpressionParamSpec` + `ExpressionsMenu`/`MenuControlSpec` —
   emit `VRCExpressionParameters` / `VRCExpressionsMenu` MonoBehaviour assets (stable SDK script
   GUIDs as overridable defaults; validated by `avatar-vrc-descriptor`'s structural reader).
+- `gesture`: `GestureLayer::new(layer, "GestureLeft", neutral)` / `GestureLayer::either_hand(layer,
+  neutral)` + `.motion(n, clip)` → `.to_state_fragment(&mut IdGen)`; `fx_gestures(name, &layers,
+  &extra, &mut IdGen)` — gesture-driven FX layers (Neutral + one state per gesture clip, Any-State
+  `Equals` transitions, Write Defaults off), the SDK3 counterpart of SDK2's override slots.
 - `toggle`: `generate_toggle(ToggleSpec) -> ToggleBundle` — the five-asset toggle composite
   (On/Off clips, two-state FX controller, params, menu) plus `.meta` sidecars carrying
   `deterministic_guid` GUIDs so cross-references resolve on first import.
