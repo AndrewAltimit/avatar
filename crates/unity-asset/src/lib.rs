@@ -310,9 +310,18 @@ pub struct FloatCurveBinding {
     pub attribute: String,
     /// The Unity class the curve binds to (137 SkinnedMeshRenderer, 1 GameObject, 95 Animator).
     pub class_id: i64,
+    /// The curve's keyframes as `(time, value)` pairs, in file order (empty if the curve has no
+    /// `m_Curve` entries or they are malformed). Enough for "what does this clip set X to" —
+    /// tangents/weights are not read.
+    pub keys: Vec<(f32, f32)>,
 }
 
 impl FloatCurveBinding {
+    /// The value of the last keyframe (what a static pose clip holds), if any.
+    pub fn final_value(&self) -> Option<f32> {
+        self.keys.last().map(|&(_, v)| v)
+    }
+
     /// True if this is a humanoid muscle / root-motion curve (bound to the `Animator`, class 95).
     pub fn is_muscle(&self) -> bool {
         self.class_id == ANIMATOR_COMPONENT
@@ -352,6 +361,19 @@ impl AnimationClip {
                         path: field_str(c, "path").unwrap_or_default().to_string(),
                         attribute: field_str(c, "attribute").unwrap_or_default().to_string(),
                         class_id: field_i64(c, "classID").unwrap_or(0),
+                        keys: c["curve"]["m_Curve"]
+                            .as_vec()
+                            .map(|ks| {
+                                ks.iter()
+                                    .filter_map(|k| {
+                                        Some((
+                                            field_f64(k, "time")? as f32,
+                                            field_f64(k, "value")? as f32,
+                                        ))
+                                    })
+                                    .collect()
+                            })
+                            .unwrap_or_default(),
                     })
                     .collect()
             })
