@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use avatar_migrate::physbone::{
-    self, FlareReport, FlareTarget, PhysBoneInfo, SplitChain, StretchReport, Tuning,
+    self, FlareReport, FlareTarget, PhysBoneInfo, SplitChain, StretchAmount, StretchReport, Tuning,
 };
 use avatar_migrate::rewrite::PrefabRewriter;
 use avatar_migrate::sdk3::{Curve, LimitType};
@@ -287,9 +287,14 @@ pub struct StretchArgs {
     prefab: PathBuf,
     /// The PhysBone whose chains to lengthen (root name/path, GameObject, or `&fileID`).
     target: String,
-    /// Length multiplier for the bone offsets (1.5 = 50% longer).
-    #[arg(long)]
-    factor: f64,
+    /// Length multiplier for the bone offsets (1.5 = 50% longer). Chains with more bones grow more.
+    #[arg(long, conflicts_with = "by", required_unless_present = "by")]
+    factor: Option<f64>,
+    /// Add this length (metres, avatar space) to every chain instead — each chain gets its own
+    /// factor, so chains of unequal bone count grow by the same amount and an even hem stays
+    /// even. Negative shortens.
+    #[arg(long, required_unless_present = "factor", allow_hyphen_values = true)]
+    by: Option<f64>,
     /// First depth below the PhysBone root whose offsets are scaled (1 = the root's children, 2 =
     /// grandchildren, …; the root never moves). Default 2 keeps the root's children — a skirt's
     /// hinges — in place; use 1 for a component rooted on a chain's own first bone.
@@ -574,15 +579,23 @@ pub fn split(args: &SplitArgs) -> Result<()> {
 pub fn stretch(args: &StretchArgs) -> Result<()> {
     let (_, mut rw) = load(&args.prefab)?;
     let id = physbone::find(rw.scene(), &args.target)?;
-    let r: StretchReport = physbone::stretch(&mut rw, id, args.factor, args.from_depth)?;
+    let amount = match (args.factor, args.by) {
+        (Some(f), _) => StretchAmount::Factor(f),
+        (None, Some(b)) => StretchAmount::By(b),
+        (None, None) => anyhow::bail!("pass --factor F or --by METERS"),
+    };
+    let r: StretchReport = physbone::stretch_with(&mut rw, id, amount, args.from_depth)?;
     let report = json!({
         "physbone": id,
         "stretch": r,
     });
     finish(&args.prefab, rw, &args.out, report, || {
         println!(
-            "stretched PhysBone &{id} chains by x{} ({} bone offset(s) scaled, from depth {}):",
-            r.factor,
+            "stretched PhysBone &{id} chains {} ({} bone offset(s) scaled, from depth {}):",
+            match r.by {
+                Some(b) => format!("by {b:+} m each"),
+                None => format!("by x{}", r.factor),
+            },
             r.bones.len(),
             args.from_depth
         );

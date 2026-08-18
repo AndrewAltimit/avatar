@@ -13,7 +13,7 @@ on any SDK3 prefab, migrated or not.
 avatar physbone list    Avatar.prefab [--json]
 avatar physbone set     Avatar.prefab <TARGET> [tuning…] [--ignore N]… [--collider N]… -o Avatar.prefab --force
 avatar physbone split   Avatar.prefab <TARGET> --chain Hair_1 --chain Hair_2 [tuning…] -o … --force
-avatar physbone stretch Avatar.prefab <TARGET> --factor 1.5 [--from-depth 2] -o … --force
+avatar physbone stretch Avatar.prefab <TARGET> --factor 1.5 | --by 0.077 [--from-depth 2] -o … --force
 avatar physbone flare   Avatar.prefab <TARGET> --angle 10 | --scale 0.5 [--hinge-depth 1] -o … --force
 ```
 
@@ -83,7 +83,12 @@ from the bone path (stable across runs). Component count goes up by one per chai
 
 `--factor F` multiplies the local position (the offset from the parent bone) of every chain
 transform at depth ≥ `--from-depth` below the PhysBone root (1 = the root's children, 2 =
-grandchildren, …; the root itself never moves). The skinned mesh follows its bones, so what hangs
+grandchildren, …; the root itself never moves). **`--by METERS`** instead adds the same length
+(avatar space) to every chain — each chain gets its own factor `1 + by / length` — which is what
+you want when chains have unequal bone counts: a uniform factor grows a 5-bone chain more than
+its 4-bone neighbours and the hem grows peaks there (the mikunpc skirt: three front chains have
+five bones), equal added length keeps an even hem even. Negative shortens; going past zero is
+refused. The skinned mesh follows its bones, so what hangs
 off the chain gets longer: each ring of vertices bound to a deeper bone moves further down the
 chain and the faces between rings stretch. Only translations change — no rotation, no
 non-uniform scale, so **no shear**, and PhysBone sees ordinary (longer) bones with the same
@@ -141,6 +146,11 @@ avatar physbone list    $P
 avatar physbone stretch $P SkirtRoot --factor 1.3 -o $P --force     # x1.95 in total
 avatar physbone flare   $P SkirtRoot --angle 10 -o $P --force       # chains were 13–33° out
 avatar render --avatar final.fbx --pose $P -o preview.png            # what Unity will show
+# round three: 10° was a touch too vertical, and the uniform factor had grown the three
+# 5-bone front chains more than the rest (two peaks in the hem) — undo, add equal length, re-aim
+avatar physbone stretch $P SkirtRoot --factor 0.512820513 -o $P --force   # back to the original offsets
+avatar physbone stretch $P SkirtRoot --by 0.077 -o $P --force            # +7.7 cm on every chain
+avatar physbone flare   $P SkirtRoot --angle 16 -o $P --force
 ```
 
 `avatar lint` stays clean and `avatar stats` reports the change (5 PhysBone components: Good;

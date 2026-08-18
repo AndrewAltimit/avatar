@@ -641,7 +641,10 @@ pub struct StretchedBone {
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct StretchReport {
+    /// The uniform factor (`stretch`), or `NaN`-free 0 when `--by` was used (see `by`).
     pub factor: f64,
+    /// The length added per chain when [`StretchAmount::By`] was used.
+    pub by: Option<f64>,
     pub bones: Vec<StretchedBone>,
     /// Per chain: leaf path, length before → after (avatar space).
     pub chains: Vec<(String, f64, f64)>,
@@ -664,6 +667,37 @@ pub fn stretch(
     if !(factor.is_finite() && factor > 0.0) {
         bail!("stretch factor must be > 0 (got {factor})");
     }
+    stretch_with(rw, file_id, StretchAmount::Factor(factor), from_depth)
+}
+
+/// How much [`stretch_with`] lengthens each chain.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum StretchAmount {
+    /// Multiply every scaled offset by this (a 5-bone chain grows more than a 4-bone one).
+    Factor(f64),
+    /// Add this length (avatar space, metres) to every chain — each chain gets its own factor
+    /// `1 + by / length`, so chains of unequal bone count grow by the same amount and an even hem
+    /// stays even. Negative shortens.
+    By(f64),
+}
+
+/// [`stretch`] with a per-chain amount; see [`StretchAmount`]. Chains sharing a bone (a
+/// branching root) use the factor of the first chain that reaches it.
+pub fn stretch_with(
+    rw: &mut PrefabRewriter,
+    file_id: i64,
+    amount: StretchAmount,
+    from_depth: usize,
+) -> Result<StretchReport> {
+    let factor = match amount {
+        StretchAmount::Factor(f) => f,
+        StretchAmount::By(b) => {
+            if !b.is_finite() {
+                bail!("stretch --by must be a finite length (got {b})");
+            }
+            f64::NAN // per chain, below
+        }
+    };
     if from_depth < 1 {
         bail!("--from-depth must be ≥ 1 (the root transform itself never moves)");
     }
@@ -699,8 +733,36 @@ pub fn stretch(
         d
     };
     let mut seen: HashSet<i64> = HashSet::new();
-    let mut plan: Vec<(i64, String, f64, crate::math::Vec3)> = Vec::new();
+    let mut plan: Vec<(i64, String, f64, crate::math::Vec3, f64)> = Vec::new();
     for c in &chains_t {
+        // This chain's factor: uniform, or `1 + by / (length of the part being scaled)` so the
+        // chain grows by exactly `by`.
+        let f = match amount {
+            StretchAmount::Factor(f) => f,
+            StretchAmount::By(b) => {
+                let scaled: f64 = c
+                    .windows(2)
+                    .filter(|w| depth_below_root(w[1]) >= from_depth)
+                    .map(|w| {
+                        scene
+                            .world(w[1])
+                            .position
+                            .distance(scene.world(w[0]).position)
+                    })
+                    .sum();
+                if scaled <= 1e-9 {
+                    continue;
+                }
+                let f = 1.0 + b / scaled;
+                if f <= 0.0 {
+                    bail!(
+                        "stretch --by {b}: chain to '{}' is only {scaled:.4} m long, it would invert",
+                        scene.path_of(*c.last().unwrap())
+                    );
+                }
+                f
+            }
+        };
         for &t in c {
             if t == root || depth_below_root(t) < from_depth || !seen.insert(t) {
                 continue;
@@ -708,11 +770,11 @@ pub fn stretch(
             let tr = &scene.transforms[&t];
             let p = tr.local.position;
             let parent_scale = scene.world(tr.parent).scale;
-            plan.push((t, scene.path_of(t), (p * parent_scale).length(), p));
+            plan.push((t, scene.path_of(t), (p * parent_scale).length(), p, f));
         }
     }
     let mut bones = Vec::new();
-    for (t, path, before_len, p) in plan {
+    for (t, path, before_len, p, factor) in plan {
         {
             let np = p.scale(factor);
             for (k, v) in [("x", np.x), ("y", np.y), ("z", np.z)] {
@@ -729,7 +791,7 @@ pub fn stretch(
             });
         }
     }
-    if spec.endpoint_position.length() > 0.0 {
+    if spec.endpoint_position.length() > 0.0 && factor.is_finite() {
         spec.endpoint_position = spec.endpoint_position.scale(factor);
         rw.replace_component_body(file_id, &spec.to_body())?;
     }
@@ -757,7 +819,11 @@ pub fn stretch(
         })
         .collect();
     Ok(StretchReport {
-        factor,
+        factor: if factor.is_finite() { factor } else { 0.0 },
+        by: match amount {
+            StretchAmount::By(b) => Some(b),
+            StretchAmount::Factor(_) => None,
+        },
         bones,
         chains: chains_report,
     })
@@ -1112,6 +1178,20 @@ mod tests {
         let b3 = b.chains.iter().find(|c| c.leaf.ends_with("B3")).unwrap();
         assert!((b3.flare_deg - 5.0).abs() < 0.01, "{}", b3.flare_deg);
         assert!(flare(&mut rw2, 900, FlareTarget::Scale(-1.0), 1).is_err());
+    }
+
+    #[test]
+    fn stretch_by_adds_the_same_length_to_every_chain() {
+        // Chain A: A→A2 (0.1 scaled part); chain B: B→B2→B3 (0.4 scaled part). +0.2 each.
+        let mut rw = PrefabRewriter::new(&prefab()).unwrap();
+        let r = stretch_with(&mut rw, 900, StretchAmount::By(0.2), 2).unwrap();
+        assert_eq!(r.by, Some(0.2));
+        for (leaf, b, a) in &r.chains {
+            assert!((a - b - 0.2).abs() < 1e-9, "{leaf}: {b} -> {a}");
+        }
+        // Shortening past zero is refused.
+        let mut rw2 = PrefabRewriter::new(&prefab()).unwrap();
+        assert!(stretch_with(&mut rw2, 900, StretchAmount::By(-0.5), 2).is_err());
     }
 
     #[test]
