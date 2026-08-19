@@ -132,7 +132,8 @@ READMEs. What exists today, with its doc:
   performance ranking ([`performance-stats.md`](docs/reference/performance-stats.md)); `avatar
   describe` one-shot consolidated snapshot.
 - **FBX** — read (incl. blendshape channels) + native binary write-back (`avatar_fbx::FbxDocument`);
-  `avatar armature check|fix` — canonical humanoid renames applied natively;
+  `avatar armature check|fix` — canonical humanoid renames applied natively; `avatar fbx reslot` —
+  per-polygon material-slot reassignment by region/brightness (a glowing strand → the black slot);
   topology/scale/orientation flagged **and** emitted as a headless-Blender repair script
   (`--blender-script`, [`armature-repair.md`](docs/reference/armature-repair.md)).
 - **Generate (M4)** — `avatar anim-gen clip|blendtree|controller|params|menu`: Unity-YAML `.anim`,

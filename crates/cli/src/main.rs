@@ -3,6 +3,7 @@
 //! Subcommands:
 //!   - `avatar describe <path>`           — one-shot snapshot: FBX structure+armature+perf, or project lint+perf
 //!   - `avatar fbx inspect <path>`        — dump an FBX's structure and flag unit/orientation issues
+//!   - `avatar fbx reslot <path> …`       — move a mesh region's polygons onto another material slot (writes FBX)
 //!   - `avatar armature check <path>`     — validate the skeleton against VRChat humanoid requirements
 //!   - `avatar armature fix <path> -o …`  — write a repaired FBX (canonical bone names, topology)
 //!   - `avatar lint <project>`            — SDK3-compliance report over a Unity/VRChat project
@@ -126,6 +127,9 @@ fn run() -> Result<ExitCode> {
     match cli.command {
         Command::Fbx(FbxCommand::Inspect(args)) => {
             cmd::fbx::inspect(&args).map(|()| ExitCode::SUCCESS)
+        }
+        Command::Fbx(FbxCommand::Reslot(args)) => {
+            cmd::fbx::reslot(&args).map(|()| ExitCode::SUCCESS)
         }
         Command::Armature(ArmatureCommand::Check(args)) => cmd::fbx::armature_check(&args),
         Command::Armature(ArmatureCommand::Fix(args)) => {

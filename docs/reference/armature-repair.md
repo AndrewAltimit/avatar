@@ -109,6 +109,27 @@ and the flagged reparent is *not* applied.
 semantically identical and accepted by Unity; it is a property of `fbxcel`'s `write_tree`, not a
 correctness issue.
 
+## Beyond the armature: `avatar fbx reslot` (per-polygon material slots)
+
+The same writer carries the one *mesh* edit that keeps coming up on converted avatars: a region
+of polygons on the wrong material — an MMD-conversion strand on the hair material whose emission
+map makes it glow where the rest of the scalp is black. `avatar fbx reslot <fbx> --mesh <Model>
+--to-slot N [--from-slot M] [--near-bone BONE --radius R] [--min-z Z] [--max-z Z] [--exclude-bone
+GLOB [--exclude-weight W]] [--brighter-than TEXTURE.png:LUM] [--any-corner] -o out.fbx` selects
+triangles (all given criteria must hold: currently on slot M; centroid — or, with `--any-corner`,
+nearest corner — within R of a bone's bind position; height band; not skinned to an excluded
+bone; brighter than LUM at any corner or the centroid of the given texture, i.e. "the ones lit
+by this emission map") and rewrites their polygons' entries in `LayerElementMaterial` to slot N
+(`FbxDocument::set_polygon_materials`; `RawMesh::polygon_of_triangle` maps triangles back to
+polygons; an `AllSame` layer is expanded to `ByPolygon`). Slots index the materials connected to
+the model in connection order — the same order Unity's renderer lists them, so `--to-slot 10` on
+a mesh whose 11th material is a plain black one is a pure "make this black" with no texture or
+mesh-topology change. Nothing else in the file is touched (materials, skin, blendshapes, the
+armature). Preview the selection before writing: `avatar render --avatar out.fbx
+--material-texture "HairMat=Hair_Emission.png" --material-texture "BlackMat=black.png"` draws
+each material with the given image, so the glow map itself becomes the diffuse and the moved
+polygons show black exactly where in-game will.
+
 ## Acceptance: what's proven, and the last mile
 
 Confidence in `armature fix` comes in three layers:

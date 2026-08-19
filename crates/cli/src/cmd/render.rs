@@ -43,6 +43,11 @@ pub struct ViewArgs {
     /// Unity. FBX avatars only.
     #[arg(long, value_name = "PREFAB")]
     pose: Option<PathBuf>,
+    /// Draw an FBX material with this image instead of its own diffuse texture:
+    /// `MATERIAL_NAME=IMAGE.png` (repeatable). Preview a texture edit, or draw a material with
+    /// its emission/mask map to see where that map lands on the mesh.
+    #[arg(long, value_name = "NAME=IMAGE")]
+    material_texture: Vec<String>,
 }
 
 #[derive(Args, Debug)]
@@ -83,6 +88,11 @@ pub struct RenderArgs {
     /// Unity. FBX avatars only.
     #[arg(long, value_name = "PREFAB")]
     pose: Option<PathBuf>,
+    /// Draw an FBX material with this image instead of its own diffuse texture:
+    /// `MATERIAL_NAME=IMAGE.png` (repeatable). Preview a texture edit, or draw a material with
+    /// its emission/mask map to see where that map lands on the mesh.
+    #[arg(long, value_name = "NAME=IMAGE")]
+    material_texture: Vec<String>,
 }
 
 /// Camera framing target for `avatar render`.
@@ -108,12 +118,19 @@ fn assemble_scene(
     pitch: f32,
     frame: Option<FrameTarget>,
     how: &AvatarPose,
+    material_textures: &[String],
 ) -> Result<avatar_render::Scene> {
     if avatar.is_none() && world.is_none() {
         bail!("nothing to render: pass --avatar <model> and/or --world <scene|project>");
     }
     let mut meshes = Vec::new();
     let mut textures = texture::TextureSet::new();
+    for spec in material_textures {
+        let Some((name, img)) = spec.split_once('=') else {
+            bail!("--material-texture '{spec}' is not NAME=IMAGE");
+        };
+        textures.override_material(name.trim(), PathBuf::from(img.trim()));
+    }
     // Where to drop the avatar inside the world, and the bounds to frame on if framing on it.
     let mut spawn = None;
     let mut avatar_bounds = None;
@@ -195,6 +212,7 @@ pub fn render(args: &RenderArgs) -> Result<()> {
             stretch: args.stretch.clone(),
             pose_prefab: args.pose.clone(),
         },
+        &args.material_texture,
     )?;
     let tris: usize = scene.meshes.iter().map(|m| m.indices.len() / 3).sum();
     println!(
@@ -224,6 +242,7 @@ pub fn view(args: &ViewArgs) -> Result<()> {
             stretch: args.stretch.clone(),
             pose_prefab: args.pose.clone(),
         },
+        &args.material_texture,
     )?;
     let tris: usize = scene.meshes.iter().map(|m| m.indices.len() / 3).sum();
     println!(

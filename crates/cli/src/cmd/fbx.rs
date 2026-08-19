@@ -13,6 +13,321 @@ use clap::{Args, Subcommand};
 pub enum FbxCommand {
     /// Print the structure of an FBX file (objects, hierarchy, global settings).
     Inspect(FileArgs),
+    /// Move a region of a mesh's polygons onto another material slot (e.g. a glowing hair patch
+    /// onto the plain black slot), selecting by bone proximity / height / texture brightness.
+    Reslot(ReslotArgs),
+}
+
+#[derive(Args, Debug)]
+pub struct ReslotArgs {
+    /// Path to a binary FBX file.
+    path: std::path::PathBuf,
+    /// The mesh `Model` node to edit, by name (or object id).
+    #[arg(long)]
+    mesh: String,
+    /// Destination material slot (index into the mesh's material list; `avatar fbx inspect` /
+    /// the Unity renderer's material list show the order).
+    #[arg(long)]
+    to_slot: u32,
+    /// Only polygons currently on this slot.
+    #[arg(long)]
+    from_slot: Option<u32>,
+    /// Only polygons whose triangles' centroids lie within `--radius` of this bone's bind
+    /// position (bone by name).
+    #[arg(long, requires = "radius")]
+    near_bone: Option<String>,
+    /// Test each triangle by its *nearest corner* (and highest/lowest corner for `--min-z` /
+    /// `--max-z`) instead of its centroid — catches long, thin strand triangles whose centroid
+    /// lies far from where they start.
+    #[arg(long)]
+    any_corner: bool,
+    /// Radius (mesh units) for `--near-bone`.
+    #[arg(long)]
+    radius: Option<f32>,
+    /// Only triangles whose centroid Z (mesh space, the file's up axis for Blender exports) is
+    /// at least this.
+    #[arg(long)]
+    min_z: Option<f32>,
+    /// Only triangles whose centroid Z is at most this.
+    #[arg(long)]
+    max_z: Option<f32>,
+    /// Skip triangles that are skinned (weight ≥ `--exclude-weight`) to a bone matching this
+    /// name glob (`*` allowed) — e.g. keep an ahoge strand as it is.
+    #[arg(long, value_name = "GLOB")]
+    exclude_bone: Option<String>,
+    /// Weight threshold for `--exclude-bone`.
+    #[arg(long, default_value_t = 0.5)]
+    exclude_weight: f32,
+    /// Only triangles whose UV centroid samples brighter than LUM (0..255 mean of RGB) in this
+    /// texture — "the ones lit by this emission map".
+    #[arg(long, value_name = "TEXTURE.png:LUM")]
+    brighter_than: Option<String>,
+    /// Write the edited FBX here. Without this, runs as a dry run (prints the selection only).
+    #[arg(short, long)]
+    output: Option<std::path::PathBuf>,
+    /// Allow `--output` to overwrite the input file or any existing output file.
+    #[arg(long)]
+    force: bool,
+    /// Emit a machine-readable JSON report.
+    #[arg(long)]
+    json: bool,
+}
+
+/// `*`-wildcard match (no other metacharacters).
+fn glob_match(pattern: &str, text: &str) -> bool {
+    let parts: Vec<&str> = pattern.split('*').collect();
+    if parts.len() == 1 {
+        return pattern == text;
+    }
+    let mut rest = text;
+    for (i, part) in parts.iter().enumerate() {
+        if i == 0 {
+            let Some(r) = rest.strip_prefix(part) else {
+                return false;
+            };
+            rest = r;
+        } else if i == parts.len() - 1 {
+            return rest.ends_with(part);
+        } else if part.is_empty() {
+            continue;
+        } else {
+            let Some(pos) = rest.find(part) else {
+                return false;
+            };
+            rest = &rest[pos + part.len()..];
+        }
+    }
+    true
+}
+
+pub fn reslot(args: &ReslotArgs) -> Result<()> {
+    use avatar_armature::Skeleton;
+    let mut doc = FbxDocument::load(&args.path)?;
+    let scene = doc.scene();
+    let meshes = doc.meshes()?;
+    let model_id = match args.mesh.parse::<i64>() {
+        Ok(id) => id,
+        Err(_) => scene
+            .models()
+            .find(|o| o.name == args.mesh)
+            .map(|o| o.id)
+            .with_context(|| format!("no Model named '{}'", args.mesh))?,
+    };
+    let mesh = meshes
+        .iter()
+        .find(|m| m.model_id == model_id)
+        .with_context(|| format!("model '{}' has no geometry", args.mesh))?;
+    if (args.to_slot as usize) >= mesh.material_slot_count().max(1) {
+        bail!(
+            "--to-slot {} out of range: mesh has {} material slot(s) ({})",
+            args.to_slot,
+            mesh.material_slot_count(),
+            mesh.materials
+                .iter()
+                .map(|m| m.name.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+    }
+    if mesh.polygon_of_triangle.is_empty() {
+        bail!("mesh has no polygon map (not an FBX geometry?)");
+    }
+    let skeleton = Skeleton::from_scene(&scene);
+    // Bone bind position (mesh space): G⁻¹ · TransformLink of its cluster on this mesh.
+    let near = match (&args.near_bone, args.radius) {
+        (Some(name), Some(r)) => {
+            let bone = skeleton
+                .bones
+                .iter()
+                .find(|b| b.name == *name)
+                .with_context(|| format!("no bone named '{name}'"))?;
+            let cluster = mesh
+                .skin
+                .as_ref()
+                .and_then(|s| s.clusters.iter().find(|c| c.bone_id == bone.id))
+                .with_context(|| format!("bone '{name}' does not skin this mesh"))?;
+            let g = avatar_pose::model_global_matrix(&scene, mesh.model_id);
+            let link = avatar_pose::mat4_from_fbx(&cluster.transform_link);
+            let base = (g.inverse() * link).w_axis.truncate();
+            Some((base, r))
+        }
+        _ => None,
+    };
+    // Control points excluded by bone weight.
+    let mut excluded_cp: HashSet<usize> = HashSet::new();
+    if let (Some(glob), Some(skin)) = (&args.exclude_bone, &mesh.skin) {
+        for c in &skin.clusters {
+            let name = skeleton
+                .bone(c.bone_id)
+                .map(|b| b.name.as_str())
+                .unwrap_or("");
+            if glob_match(glob, name) {
+                for (&cp, &w) in c.indexes.iter().zip(&c.weights) {
+                    if w >= args.exclude_weight {
+                        excluded_cp.insert(cp as usize);
+                    }
+                }
+            }
+        }
+    }
+    // Brightness probe.
+    let bright = match &args.brighter_than {
+        Some(spec) => {
+            let (tex, lum) = spec
+                .rsplit_once(':')
+                .context("--brighter-than must be TEXTURE:LUM")?;
+            let lum: u32 = lum.trim().parse().context("--brighter-than LUM")?;
+            let img = image::open(tex.trim())
+                .with_context(|| format!("loading texture {tex}"))?
+                .to_rgba8();
+            Some((img, lum))
+        }
+        None => None,
+    };
+    if bright.is_some() && mesh.uvs.is_none() {
+        bail!("--brighter-than needs UVs, and this mesh has none");
+    }
+
+    let n_tri = mesh.indices.len() / 3;
+    let mut polys: std::collections::BTreeSet<u32> = Default::default();
+    let mut selected_tris = 0usize;
+    for t in 0..n_tri {
+        if let Some(from) = args.from_slot
+            && mesh.triangle_material(t) as u32 != from
+        {
+            continue;
+        }
+        let vi = [
+            mesh.indices[t * 3] as usize,
+            mesh.indices[t * 3 + 1] as usize,
+            mesh.indices[t * 3 + 2] as usize,
+        ];
+        if vi
+            .iter()
+            .any(|&v| excluded_cp.contains(&(mesh.control_point_of_vertex[v] as usize)))
+        {
+            continue;
+        }
+        let corners: Vec<glam::Vec3> = vi
+            .iter()
+            .map(|&v| glam::Vec3::from_array(mesh.positions[v]))
+            .collect();
+        let c = corners.iter().copied().sum::<glam::Vec3>() / 3.0;
+        let (dist, z_hi, z_lo) = if args.any_corner {
+            (
+                corners
+                    .iter()
+                    .map(|p| near.map_or(0.0, |(b, _)| p.distance(b)))
+                    .fold(f32::INFINITY, f32::min),
+                corners
+                    .iter()
+                    .map(|p| p.z)
+                    .fold(f32::NEG_INFINITY, f32::max),
+                corners.iter().map(|p| p.z).fold(f32::INFINITY, f32::min),
+            )
+        } else {
+            (near.map_or(0.0, |(b, _)| c.distance(b)), c.z, c.z)
+        };
+        if let Some((_, r)) = near
+            && dist > r
+        {
+            continue;
+        }
+        if let Some(z) = args.min_z
+            && z_hi < z
+        {
+            continue;
+        }
+        if let Some(z) = args.max_z
+            && z_lo > z
+        {
+            continue;
+        }
+        if let Some((img, lum)) = &bright {
+            // Brightest of the three corners and the centroid: a triangle straddling a
+            // gradient counts if any part of it is lit.
+            let uvs = mesh.uvs.as_ref().unwrap();
+            let (w, h) = img.dimensions();
+            let sample = |u: f32, v: f32| -> u32 {
+                let px = ((u.rem_euclid(1.0)) * w as f32) as u32;
+                let py = ((1.0 - v.rem_euclid(1.0)) * h as f32) as u32;
+                let p = img.get_pixel(px.min(w - 1), py.min(h - 1));
+                (p[0] as u32 + p[1] as u32 + p[2] as u32) / 3
+            };
+            let (mut u, mut v) = (0.0f32, 0.0f32);
+            let mut best = 0;
+            for &i in &vi {
+                u += uvs[i][0];
+                v += uvs[i][1];
+                best = best.max(sample(uvs[i][0], uvs[i][1]));
+            }
+            best = best.max(sample(u / 3.0, v / 3.0));
+            if best <= *lum {
+                continue;
+            }
+        }
+        selected_tris += 1;
+        polys.insert(mesh.polygon_of_triangle[t]);
+    }
+    let changes: Vec<(u32, u32)> = polys.iter().map(|&p| (p, args.to_slot)).collect();
+    if args.json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&serde_json::json!({
+                "path": args.path,
+                "mesh": args.mesh,
+                "model_id": model_id,
+                "to_slot": args.to_slot,
+                "to_material": mesh.materials.get(args.to_slot as usize).map(|m| m.name.clone()),
+                "selected_triangles": selected_tris,
+                "polygons": polys.iter().copied().collect::<Vec<_>>(),
+                "output": args.output,
+            }))?
+        );
+    } else {
+        println!(
+            "mesh '{}' (model {model_id}): {selected_tris} triangle(s) / {} polygon(s) selected -> slot {} ({})",
+            args.mesh,
+            polys.len(),
+            args.to_slot,
+            mesh.materials
+                .get(args.to_slot as usize)
+                .map(|m| m.name.as_str())
+                .unwrap_or("?")
+        );
+    }
+    let Some(out) = &args.output else {
+        if !args.json {
+            println!("  (dry run — pass -o <file> to write the edited FBX)");
+        }
+        return Ok(());
+    };
+    if polys.is_empty() {
+        bail!("nothing selected; not writing");
+    }
+    if !args.force {
+        if overwrites_input(&args.path, out) {
+            bail!(
+                "refusing to overwrite the input file {}; choose a different -o path or pass --force",
+                args.path.display()
+            );
+        }
+        if out.exists() {
+            bail!(
+                "refusing to overwrite existing file {} (pass --force to overwrite)",
+                out.display()
+            );
+        }
+    }
+    let changed = doc.set_polygon_materials(model_id, &changes)?;
+    doc.write(out)?;
+    if !args.json {
+        println!(
+            "  {changed} polygon(s) changed slot; wrote {}",
+            out.display()
+        );
+    }
+    Ok(())
 }
 
 #[derive(Subcommand, Debug)]

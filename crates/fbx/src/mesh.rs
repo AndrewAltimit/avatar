@@ -65,6 +65,7 @@ pub(crate) fn extract_meshes(tree: &Tree, scene: &FbxScene) -> Result<Vec<RawMes
             skin,
             materials,
             material_of_triangle,
+            polygon_of_triangle: tri.polygon_of_triangle.clone(),
         });
     }
     Ok(meshes)
