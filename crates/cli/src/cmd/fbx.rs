@@ -71,6 +71,73 @@ pub struct ReslotArgs {
     /// Emit a machine-readable JSON report.
     #[arg(long)]
     json: bool,
+    /// Also write a PNG mask (size `--uv-mask-size`) of the selected triangles' UV footprint —
+    /// white where they sample — and report every *unselected* triangle on the same slot that
+    /// overlaps it (they would be hit too by any texture edit under the mask). The texture-side
+    /// alternative when the FBX can't be rewritten.
+    #[arg(long, value_name = "MASK.png")]
+    uv_mask: Option<std::path::PathBuf>,
+    /// Mask resolution (square).
+    #[arg(long, default_value_t = 1024)]
+    uv_mask_size: u32,
+}
+
+/// Visit every pixel a UV triangle (pixel coords, y down) covers, with a half-pixel tolerance so
+/// thin slivers still register.
+fn for_each_tri_pixel(w: u32, h: u32, p: [(f32, f32); 3], mut f: impl FnMut(u32, u32)) {
+    let min_x = p
+        .iter()
+        .map(|q| q.0)
+        .fold(f32::INFINITY, f32::min)
+        .floor()
+        .max(0.0) as i64;
+    let max_x = (p
+        .iter()
+        .map(|q| q.0)
+        .fold(f32::NEG_INFINITY, f32::max)
+        .ceil() as i64)
+        .min(w as i64 - 1);
+    let min_y = p
+        .iter()
+        .map(|q| q.1)
+        .fold(f32::INFINITY, f32::min)
+        .floor()
+        .max(0.0) as i64;
+    let max_y = (p
+        .iter()
+        .map(|q| q.1)
+        .fold(f32::NEG_INFINITY, f32::max)
+        .ceil() as i64)
+        .min(h as i64 - 1);
+    let edge = |a: (f32, f32), b: (f32, f32), c: (f32, f32)| {
+        (c.0 - a.0) * (b.1 - a.1) - (c.1 - a.1) * (b.0 - a.0)
+    };
+    let area = edge(p[0], p[1], p[2]);
+    for y in min_y..=max_y {
+        for x in min_x..=max_x {
+            // Sample the pixel centre, with a half-pixel tolerance so thin slivers still mark.
+            let c = (x as f32 + 0.5, y as f32 + 0.5);
+            let (e0, e1, e2) = (
+                edge(p[1], p[2], c),
+                edge(p[2], p[0], c),
+                edge(p[0], p[1], c),
+            );
+            let tol = 0.75 * (area.abs().sqrt().max(1.0));
+            let inside = if area >= 0.0 {
+                e0 >= -tol && e1 >= -tol && e2 >= -tol
+            } else {
+                e0 <= tol && e1 <= tol && e2 <= tol
+            };
+            if inside {
+                f(x as u32, y as u32);
+            }
+        }
+    }
+}
+
+/// Rasterize a UV triangle into `mask` (row-major `w*h`).
+fn raster_tri(mask: &mut [u8], w: u32, h: u32, p: [(f32, f32); 3]) {
+    for_each_tri_pixel(w, h, p, |x, y| mask[(y * w + x) as usize] = 255);
 }
 
 /// `*`-wildcard match (no other metacharacters).
@@ -191,6 +258,7 @@ pub fn reslot(args: &ReslotArgs) -> Result<()> {
     let n_tri = mesh.indices.len() / 3;
     let mut polys: std::collections::BTreeSet<u32> = Default::default();
     let mut selected_tris = 0usize;
+    let mut selected: Vec<usize> = Vec::new();
     for t in 0..n_tri {
         if let Some(from) = args.from_slot
             && mesh.triangle_material(t) as u32 != from
@@ -267,9 +335,92 @@ pub fn reslot(args: &ReslotArgs) -> Result<()> {
             }
         }
         selected_tris += 1;
+        selected.push(t);
         polys.insert(mesh.polygon_of_triangle[t]);
     }
     let changes: Vec<(u32, u32)> = polys.iter().map(|&p| (p, args.to_slot)).collect();
+    // UV footprint mask + overlap report.
+    let mut overlap_report: Vec<serde_json::Value> = Vec::new();
+    if let Some(mask_path) = &args.uv_mask {
+        let uvs = mesh
+            .uvs
+            .as_ref()
+            .context("--uv-mask needs UVs, and this mesh has none")?;
+        let (w, h) = (args.uv_mask_size, args.uv_mask_size);
+        let px_of = |v: usize| -> (f32, f32) {
+            (
+                uvs[v][0].rem_euclid(1.0) * w as f32,
+                (1.0 - uvs[v][1].rem_euclid(1.0)) * h as f32,
+            )
+        };
+        let tri_px = |t: usize| -> [(f32, f32); 3] {
+            [
+                px_of(mesh.indices[t * 3] as usize),
+                px_of(mesh.indices[t * 3 + 1] as usize),
+                px_of(mesh.indices[t * 3 + 2] as usize),
+            ]
+        };
+        let mut mask = vec![0u8; (w * h) as usize];
+        for &t in &selected {
+            raster_tri(&mut mask, w, h, tri_px(t));
+        }
+        // Unselected triangles overlapping the mask (their own footprint hits a marked pixel).
+        let sel: HashSet<usize> = selected.iter().copied().collect();
+        let mut hits = 0usize;
+        for t in 0..n_tri {
+            if sel.contains(&t) {
+                continue;
+            }
+            // Only triangles that draw with the same material matter (a different slot samples
+            // a different texture, so it can't be hit by an edit under this mask).
+            if let Some(from) = args.from_slot
+                && mesh.triangle_material(t) as u32 != from
+            {
+                continue;
+            }
+            let mut shared = 0usize;
+            for_each_tri_pixel(w, h, tri_px(t), |x, y| {
+                if mask[(y * w + x) as usize] > 0 {
+                    shared += 1;
+                }
+            });
+            if shared > 0 {
+                hits += 1;
+                if overlap_report.len() < 400 {
+                    let vi = [
+                        mesh.indices[t * 3] as usize,
+                        mesh.indices[t * 3 + 1] as usize,
+                        mesh.indices[t * 3 + 2] as usize,
+                    ];
+                    let c = vi
+                        .iter()
+                        .map(|&v| glam::Vec3::from_array(mesh.positions[v]))
+                        .sum::<glam::Vec3>()
+                        / 3.0;
+                    overlap_report.push(serde_json::json!({
+                        "triangle": t,
+                        "slot": mesh.triangle_material(t),
+                        "shared_px": shared,
+                        "centroid": [c.x, c.y, c.z],
+                    }));
+                }
+            }
+        }
+        image::GrayImage::from_raw(w, h, mask)
+            .context("mask buffer")?
+            .save(mask_path)
+            .with_context(|| format!("writing {}", mask_path.display()))?;
+        if !args.json {
+            println!(
+                "  uv mask -> {} ({hits} unselected triangle(s) overlap the footprint)",
+                mask_path.display()
+            );
+            for o in overlap_report.iter().take(12) {
+                println!("    overlap: {o}");
+            }
+        }
+        overlap_report.insert(0, serde_json::json!({ "overlapping_triangles": hits }));
+    }
     if args.json {
         println!(
             "{}",
@@ -282,6 +433,8 @@ pub fn reslot(args: &ReslotArgs) -> Result<()> {
                 "selected_triangles": selected_tris,
                 "polygons": polys.iter().copied().collect::<Vec<_>>(),
                 "output": args.output,
+                "uv_mask": args.uv_mask,
+                "uv_mask_overlap": overlap_report,
             }))?
         );
     } else {

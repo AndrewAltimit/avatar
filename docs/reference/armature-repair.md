@@ -105,9 +105,18 @@ applies a full plan to a real Mixamo FBX. All assert the renames persisted, the 
 and the flagged reparent is *not* applied.
 
 **Known characteristic:** the writer re-emits array data (vertices, weights, keyframes)
-*uncompressed*, so a written FBX is typically larger than an original that used deflate. This is
-semantically identical and accepted by Unity; it is a property of `fbxcel`'s `write_tree`, not a
-correctness issue.
+*uncompressed*, so a written FBX is typically larger than an original that used deflate — a
+property of `fbxcel`'s `write_tree`.
+
+**Open problem — Unity import of a rewritten *skinned* avatar (2026-08-18):** a full-avatar
+FBX (Blender export, 3 skinned meshes, 148 bones, blendshapes) rewritten by this writer with only
+`LayerElementMaterial` changed re-loads fine here (same objects, geometry, skin, blendshapes,
+`avatar lint`/`stats`/`armature check` identical) but imported **invisible** in Unity 2022.3 —
+Unity re-imported it without visible geometry. Not yet diagnosed (candidates: something Unity
+requires that `write_tree` emits differently for large uncompressed arrays or the footer, or
+sub-asset ids shifting so the prefab's mesh references dangle). Until it is, treat any written
+FBX destined for Unity as **unverified**: keep the original, and prefer the texture-side route
+(`--uv-mask`, below) or a Blender re-export for mesh edits.
 
 ## Beyond the armature: `avatar fbx reslot` (per-polygon material slots)
 
@@ -129,6 +138,15 @@ armature). Preview the selection before writing: `avatar render --avatar out.fbx
 --material-texture "HairMat=Hair_Emission.png" --material-texture "BlackMat=black.png"` draws
 each material with the given image, so the glow map itself becomes the diffuse and the moved
 polygons show black exactly where in-game will.
+
+**`--uv-mask MASK.png [--uv-mask-size N]`** writes, instead of (or as well as) the FBX, a mask
+of the selected triangles' UV footprint — white where they sample — and reports every
+*unselected* triangle **on the same material slot** that overlaps it (with centroid position),
+i.e. exactly what a texture edit under the mask would also hit. That is the texture-side route
+when the FBX can't be rewritten: rasterize the offending polygons, check the overlap list is
+geometry you're happy to change too, dilate a couple of pixels, paint the map (black in an
+emission map) under it. Different slots sample different textures, so only same-slot overlaps
+matter. This is how the mikunpc crown was fixed after the FBX route failed to import.
 
 ## Acceptance: what's proven, and the last mile
 

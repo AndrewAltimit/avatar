@@ -133,7 +133,9 @@ READMEs. What exists today, with its doc:
   describe` one-shot consolidated snapshot.
 - **FBX** — read (incl. blendshape channels) + native binary write-back (`avatar_fbx::FbxDocument`);
   `avatar armature check|fix` — canonical humanoid renames applied natively; `avatar fbx reslot` —
-  per-polygon material-slot reassignment by region/brightness (a glowing strand → the black slot);
+  per-polygon material-slot reassignment by region/brightness (a glowing strand → the black slot),
+  or its `--uv-mask` footprint for a texture-side fix — **the writer's output is not yet proven to
+  import in Unity for a full skinned avatar** (see armature-repair.md);
   topology/scale/orientation flagged **and** emitted as a headless-Blender repair script
   (`--blender-script`, [`armature-repair.md`](docs/reference/armature-repair.md)).
 - **Generate (M4)** — `avatar anim-gen clip|blendtree|controller|params|menu`: Unity-YAML `.anim`,
@@ -181,7 +183,9 @@ discovery; running the generated Blender repair script under CI. See [`PLAN.md`]
   control points, not the per-cluster bind matrices, which ripped/MMD→FBX avatars ship broken
   ([`render.md`](docs/reference/render.md)).
 - **`fbxcel`'s `write_tree` re-emits arrays uncompressed** — a written FBX is larger than the input
-  but semantically identical ([`armature-repair.md`](docs/reference/armature-repair.md)).
+  and re-loads identically here, but a rewritten full skinned avatar imported *invisible* in Unity
+  2022.3 (open problem; [`armature-repair.md`](docs/reference/armature-repair.md)) — don't ship a
+  written FBX to Unity without checking it there.
 - **SDK3 script references are DLL class hashes, not `11500000`.** Every SDK3 runtime class lives in
   a DLL, so `m_Script` is `{fileID: <MD4 class hash>, guid: <dll guid>, type: 3}` —
   `avatar_unity_yaml::script_file_id(namespace, class)` derives the hash (test-pinned against the
