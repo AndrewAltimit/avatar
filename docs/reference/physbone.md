@@ -168,7 +168,17 @@ avatar physbone stretch $P SkirtRoot --by -0.077 -o $P --force            # undo
 avatar physbone stretch $P SkirtRoot --by 0.077 --chain Skirt_0_1=0.055 --chain Skirt_0_9=0.055 -o $P --force
 # round five: the top ring clipped through the underwear band at the sides — 8 mm out, all hinges
 avatar physbone nudge   $P SkirtRoot --out 0.008 -o $P --force
+# round six: fine in the editor, a cone again in-game — the *runtime* pushes chains off the thigh
+# colliders: 3 cm bone radius + 0.08 leg capsules (x largest axis) held chain centres ~10 cm off
+# the thigh axis. Thin fabric radius, smaller capsules, real weight:
+avatar physbone set     $P SkirtRoot --radius 0.012 --gravity 0.15 --gravity-falloff 0.3 --immobile 0.7 -o $P --force
+avatar asset set $P --doc <L cap collider fileID> --path radius --value 0.06 -o $P --force   # and R cap
 ```
+
+Lesson from that last round: the rest pose you see in the editor is not what PhysBone shows
+in-game — collision radius (bone *and* collider, the collider scaled by the transform's largest
+axis) sets how far a chain can hang from a limb, and gravity/immobile set how it moves. `list`
+prints both radii; check them against the limb before blaming the pose.
 
 `avatar lint` stays clean and `avatar stats` reports the change (5 PhysBone components: Good;
 transforms/collision checks unchanged: Medium).
