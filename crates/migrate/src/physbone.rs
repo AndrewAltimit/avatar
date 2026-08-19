@@ -996,6 +996,114 @@ pub fn flare(
     Ok(FlareReport { chains: out })
 }
 
+/// One hinge moved by [`nudge`].
+#[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct NudgedHinge {
+    pub hinge: String,
+    /// Avatar-space offset applied (metres).
+    pub offset: (f64, f64, f64),
+}
+
+/// Result of [`nudge`].
+#[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct NudgeReport {
+    pub hinges: Vec<NudgedHinge>,
+}
+
+/// Move each chain's hinge (the transform at `hinge_depth` below the root, as in [`flare`])
+/// **radially** in avatar space: `out` metres away from the root's vertical axis in the XZ plane
+/// (negative = inward), plus `up` metres along +Y. The panel that hangs off the hinge shifts
+/// rigidly, so a few millimetres outward on a skirt's side hinges lift its top ring off a
+/// waistband it clips through, without changing the drape. `only` restricts it to chains
+/// containing those transforms (empty = every chain).
+pub fn nudge(
+    rw: &mut PrefabRewriter,
+    file_id: i64,
+    out: f64,
+    up: f64,
+    hinge_depth: usize,
+    only: &[i64],
+) -> Result<NudgeReport> {
+    if !(out.is_finite() && up.is_finite()) {
+        bail!("nudge offsets must be finite");
+    }
+    let spec = spec_of(rw.scene(), file_id)?;
+    let root = root_transform(rw.scene(), &spec).context("PhysBone has no root transform")?;
+    let chains_t = chains(rw.scene(), &spec);
+    if chains_t.is_empty() {
+        bail!("PhysBone &{file_id} drives no chain");
+    }
+    let scene = rw.scene();
+    let root_pos = scene.world(root).position;
+    let mut seen: HashSet<i64> = HashSet::new();
+    let mut plan: Vec<(i64, String, crate::math::Vec3, crate::math::Vec3)> = Vec::new();
+    for c in &chains_t {
+        if !only.is_empty() && !only.iter().any(|t| c.contains(t)) {
+            continue;
+        }
+        let mut path_from_root: Vec<i64> = Vec::new();
+        let mut cur = *c.last().unwrap();
+        while cur != root {
+            path_from_root.push(cur);
+            match scene.transforms.get(&cur) {
+                Some(tr) if tr.parent != 0 => cur = tr.parent,
+                _ => break,
+            }
+        }
+        path_from_root.reverse();
+        let hinge = if hinge_depth == 0 {
+            root
+        } else {
+            match path_from_root.get(hinge_depth - 1) {
+                Some(h) => *h,
+                None => continue,
+            }
+        };
+        if !seen.insert(hinge) {
+            continue;
+        }
+        let hw = scene.world(hinge);
+        let mut radial =
+            crate::math::Vec3::new(hw.position.x - root_pos.x, 0.0, hw.position.z - root_pos.z);
+        if radial.length() < 1e-6 {
+            radial = crate::math::Vec3::new(0.0, 0.0, 1.0);
+        }
+        let delta = radial.normalized().scale(out) + crate::math::Vec3::new(0.0, up, 0.0);
+        // Into the hinge's parent frame: undo the parent's world rotation, then its scale.
+        let tr = &scene.transforms[&hinge];
+        let pw = scene.world(tr.parent);
+        let d_local = pw.rotation.inverse().rotate(delta);
+        let d_local = crate::math::Vec3::new(
+            d_local.x / pw.scale.x.max(1e-9),
+            d_local.y / pw.scale.y.max(1e-9),
+            d_local.z / pw.scale.z.max(1e-9),
+        );
+        plan.push((
+            hinge,
+            scene.path_of(hinge),
+            tr.local.position + d_local,
+            delta,
+        ));
+    }
+    let mut hinges = Vec::new();
+    for (hinge, path, np, delta) in plan {
+        for (k, v) in [("x", np.x), ("y", np.y), ("z", np.z)] {
+            rw.set_scalar(
+                hinge,
+                &format!("m_LocalPosition/{k}"),
+                avatar_unity_yaml::Scalar::Float(v),
+            )?;
+        }
+        hinges.push(NudgedHinge {
+            hinge: path,
+            offset: (delta.x, delta.y, delta.z),
+        });
+    }
+    Ok(NudgeReport { hinges })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1218,6 +1326,30 @@ mod tests {
         let a = r.chains.iter().find(|c| c.0.ends_with("A2")).unwrap();
         let b = r.chains.iter().find(|c| c.0.ends_with("B3")).unwrap();
         assert!((a.2 - a.1 - 0.2).abs() < 1e-9 && (b.2 - b.1 - 0.1).abs() < 1e-9);
+    }
+
+    #[test]
+    fn nudge_moves_hinges_radially() {
+        // Hinges A and B sit at (0, y, 0) exactly above the root — radial is undefined, falls
+        // back to +Z. Give B a sideways offset first so it has a real radial direction.
+        let text = prefab().replace(
+            "--- !u!4 &405\nTransform:\n  m_GameObject: {fileID: 105}\n  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}\n  m_LocalPosition: {x: 0, y: 0.1, z: 0}",
+            "--- !u!4 &405\nTransform:\n  m_GameObject: {fileID: 105}\n  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}\n  m_LocalPosition: {x: 0.2, y: 0.1, z: 0}",
+        );
+        let mut rw = PrefabRewriter::new(&text).unwrap();
+        let r = nudge(&mut rw, 900, 0.05, 0.01, 1, &[405]).unwrap();
+        assert_eq!(r.hinges.len(), 1);
+        assert_eq!(r.hinges[0].hinge, "Hips/Hair/B");
+        let (dx, dy, dz) = r.hinges[0].offset;
+        assert!((dx - 0.05).abs() < 1e-9 && (dy - 0.01).abs() < 1e-9 && dz.abs() < 1e-9);
+        let again = PrefabRewriter::new(rw.text()).unwrap();
+        let p = again.scene().transforms[&405].local.position;
+        assert!(
+            (p.x - 0.25).abs() < 1e-9 && (p.y - 0.11).abs() < 1e-9,
+            "{p:?}"
+        );
+        // A untouched.
+        assert!((again.scene().transforms[&403].local.position.y - 0.1).abs() < 1e-9);
     }
 
     #[test]

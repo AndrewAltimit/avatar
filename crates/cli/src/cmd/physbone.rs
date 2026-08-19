@@ -11,7 +11,8 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use avatar_migrate::physbone::{
-    self, FlareReport, FlareTarget, PhysBoneInfo, SplitChain, StretchAmount, StretchReport, Tuning,
+    self, FlareReport, FlareTarget, NudgeReport, PhysBoneInfo, SplitChain, StretchAmount,
+    StretchReport, Tuning,
 };
 use avatar_migrate::rewrite::PrefabRewriter;
 use avatar_migrate::sdk3::{Curve, LimitType};
@@ -32,6 +33,8 @@ pub enum PhysBoneCommand {
     Stretch(StretchArgs),
     /// Re-angle a PhysBone's chains toward/away from straight down (a funnel skirt hugs the legs).
     Flare(FlareArgs),
+    /// Shift chain hinges radially out/in (and up/down): lift a skirt's top ring off a waistband.
+    Nudge(NudgeArgs),
 }
 
 #[derive(Args, Debug)]
@@ -328,6 +331,29 @@ pub struct FlareArgs {
     hinge_depth: usize,
     #[command(flatten)]
     out: EditOut,
+}
+
+#[derive(Args, Debug)]
+pub struct NudgeArgs {
+    /// The SDK3 prefab (`.prefab`) to edit.
+    prefab: PathBuf,
+    /// The PhysBone whose chain hinges to move (root name/path, GameObject, or `&fileID`).
+    target: String,
+    /// Metres to move each hinge away from the root's vertical axis (negative = inward).
+    #[arg(long, default_value_t = 0.0, allow_hyphen_values = true)]
+    out: f64,
+    /// Metres to move each hinge up (negative = down).
+    #[arg(long, default_value_t = 0.0, allow_hyphen_values = true)]
+    up: f64,
+    /// Only chains containing this transform (name/path). Repeatable; default = every chain.
+    #[arg(long = "chain", value_name = "NAME|PATH")]
+    chains: Vec<String>,
+    /// Which transform of each chain to move: depth below the PhysBone root (1 = the root's
+    /// children — a skirt's hinge ring).
+    #[arg(long, default_value_t = 1)]
+    hinge_depth: usize,
+    #[command(flatten)]
+    out_opts: EditOut,
 }
 
 fn load(prefab: &Path) -> Result<(String, PrefabRewriter)> {
@@ -650,6 +676,38 @@ pub fn flare(args: &FlareArgs) -> Result<()> {
         );
         for c in &r.chains {
             println!("  {}: {:.1}° -> {:.1}°", c.hinge, c.before_deg, c.after_deg);
+        }
+    })
+}
+
+pub fn nudge(args: &NudgeArgs) -> Result<()> {
+    let (_, mut rw) = load(&args.prefab)?;
+    let id = physbone::find(rw.scene(), &args.target)?;
+    if args.out == 0.0 && args.up == 0.0 {
+        anyhow::bail!("pass --out METERS and/or --up METERS");
+    }
+    let mut only = Vec::new();
+    for n in &args.chains {
+        only.push(
+            rw.scene()
+                .transform_by_path(n)
+                .with_context(|| format!("--chain {n}"))?,
+        );
+    }
+    let r: NudgeReport = physbone::nudge(&mut rw, id, args.out, args.up, args.hinge_depth, &only)?;
+    let report = json!({ "physbone": id, "nudge": r });
+    finish(&args.prefab, rw, &args.out_opts, report, || {
+        println!(
+            "nudged {} hinge(s) of PhysBone &{id} (out {:+} m, up {:+} m):",
+            r.hinges.len(),
+            args.out,
+            args.up
+        );
+        for h in &r.hinges {
+            println!(
+                "  {}: ({:+.4}, {:+.4}, {:+.4})",
+                h.hinge, h.offset.0, h.offset.1, h.offset.2
+            );
         }
     })
 }

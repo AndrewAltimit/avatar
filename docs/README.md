@@ -34,7 +34,7 @@ Documentation for the [avatar](../README.md) monorepo. Start with the root
 - [`reference/migrate.md`](reference/migrate.md) — `avatar migrate sdk3`: SDK2 → SDK3 migration of an
   avatar project (descriptor, PhysBones by the SDK's own rules, Cloth → PhysBone, FX from gesture
   overrides, rig-derived eye look, output project layout, limits).
-- [`reference/physbone.md`](reference/physbone.md) — `avatar physbone list|set|split|stretch|flare`:
+- [`reference/physbone.md`](reference/physbone.md) — `avatar physbone list|set|split|stretch|flare|nudge`:
   inspect and retune a prefab's `VRCPhysBone`s in place (values + per-chain curves, split chains onto
   their own components, lengthen a skirt/tail by scaling bone offsets, re-angle chains toward
   vertical), and the `avatar render --pose <prefab>` / `--stretch` previews.

@@ -1,4 +1,4 @@
-# PhysBone tuning — `avatar physbone list|set|split|stretch|flare`
+# PhysBone tuning — `avatar physbone list|set|split|stretch|flare|nudge`
 
 The first thing anyone does after wearing a migrated (or freshly authored) avatar is retune its
 PhysBones: the hair is too floppy, the skirt flaps, the tips of a long chain go wild. That is a
@@ -15,6 +15,7 @@ avatar physbone set     Avatar.prefab <TARGET> [tuning…] [--ignore N]… [--co
 avatar physbone split   Avatar.prefab <TARGET> --chain Hair_1 --chain Hair_2 [tuning…] -o … --force
 avatar physbone stretch Avatar.prefab <TARGET> --factor 1.5 | --by 0.077 [--from-depth 2] -o … --force
 avatar physbone flare   Avatar.prefab <TARGET> --angle 10 | --scale 0.5 [--hinge-depth 1] -o … --force
+avatar physbone nudge   Avatar.prefab <TARGET> --out 0.008 [--up M] [--chain N]… [--hinge-depth 1] -o … --force
 ```
 
 `TARGET` is the PhysBone's **root transform** (a unique bone name or an `A/B/C` path from the
@@ -128,6 +129,13 @@ them (thighs), which is exactly the "drape over the legs" you want. `list` shows
 angles; note it measures from the chain's *first simulated bone*, which is the hinge for a
 many-chain root but the root itself for a single-chain component.
 
+## `nudge` — shift the hinge ring
+
+`--out METERS` moves each chain's hinge radially away from the root's vertical axis (negative =
+inward), `--up METERS` along +Y; `--chain NAME` restricts it to those chains. The panel hanging
+off the hinge shifts rigidly — drape, angle and hem shape untouched — which is the fix when
+`flare` has swung a skirt's top ring inside a waistband (mikunpc: 8 mm out on every hinge).
+
 ## Example — the mikunpc pass
 
 The pigtails go on their own components with weight and damped tips, the bangs/antenna/sideburns
@@ -158,6 +166,8 @@ avatar physbone flare   $P SkirtRoot --angle 16 -o $P --force
 # round four: two hem points still low in-game — they sit on the two front-diagonal chains
 avatar physbone stretch $P SkirtRoot --by -0.077 -o $P --force            # undo (exact per chain)
 avatar physbone stretch $P SkirtRoot --by 0.077 --chain Skirt_0_1=0.055 --chain Skirt_0_9=0.055 -o $P --force
+# round five: the top ring clipped through the underwear band at the sides — 8 mm out, all hinges
+avatar physbone nudge   $P SkirtRoot --out 0.008 -o $P --force
 ```
 
 `avatar lint` stays clean and `avatar stats` reports the change (5 PhysBone components: Good;
