@@ -148,6 +148,15 @@ geometry you're happy to change too, dilate a couple of pixels, paint the map (b
 emission map) under it. Different slots sample different textures, so only same-slot overlaps
 matter. This is how the mikunpc crown was fixed after the FBX route failed to import.
 
+**`avatar fbx blendshapes <fbx> [--filter NAME] [--json]`** is the read-only companion for emote
+shading bugs: it lists every blendshape channel with the **material slots its target vertices
+render with** (`FbxDocument::blendshape_target_indexes` — the union of the channel's `Shape`
+geometries' `Indexes` arrays — joined to `RawMesh::material_of_triangle`). A shape that slides
+hidden geometry into view (an MMD cheek-blush or tear overlay) renders with whatever material
+that geometry's slot carries; when the emote shows an opaque white patch, this command names the
+material to fix (on mikunpc: `Cheek Blush`/`Blue Fading`/`Cold Sweat` all sit on the one overlay
+slot, whose Unity material had lost its transparent preset in the unitypackage export).
+
 ## Acceptance: what's proven, and the last mile
 
 Confidence in `armature fix` comes in three layers:

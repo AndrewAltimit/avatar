@@ -22,8 +22,11 @@ project around it that the VRChat Creator Companion can open:
   retyped as PhysBone colliders, and new PhysBone chains added on named roots (Cloth skirt →
   PhysBone skirt).
 - Named subtrees stripped (haptics vests, stray cameras).
-- SDK2 gesture overrides → clean blendshape clips + an either-hand gesture FX layer
-  ([`avatar-anim-gen`](../anim-gen/README.md)); empty expression menu/params generated.
+- SDK2 gesture overrides → clean blendshape clips + an either-hand gesture FX layer with
+  per-hand analog blend trees on `GestureLeftWeight`/`GestureRightWeight` (trigger depth =
+  expression depth, SDK2 Vive style; `analog_gestures: false` / `--no-analog-gestures` for
+  discrete states) ([`avatar-anim-gen`](../anim-gen/README.md)); empty expression menu/params
+  generated.
 - `Assets/` copied minus exclusions (SDK2 `VRCSDK`, examples, DynamicBone scripts), plus
   `Packages/vpm-manifest.json` (`com.vrchat.avatars`), a VCC-template `manifest.json` (incl.
   `com.unity.test-framework`, without which the SDK doesn't compile) and `ProjectVersion.txt`.

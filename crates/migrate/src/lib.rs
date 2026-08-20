@@ -148,6 +148,9 @@ pub struct MigrateOptions {
     pub blink_shape: Option<String>,
     /// Build the FX layer from the SDK2 gesture overrides.
     pub fx_from_overrides: bool,
+    /// Analog gestures: each FX gesture state blends `Neutral` → its clip on the hand's
+    /// `GestureLeftWeight`/`GestureRightWeight` (SDK2 Vive-wand trigger-depth semantics).
+    pub analog_gestures: bool,
     /// Assets-relative directories not to copy (SDK2's `VRCSDK`, examples, DynamicBone…).
     pub exclude: Vec<String>,
     /// `com.vrchat.avatars` version to pin in `vpm-manifest.json`.
@@ -185,6 +188,7 @@ impl MigrateOptions {
             eye_look_angles: EyeLookAngles::default(),
             blink_shape: None,
             fx_from_overrides: true,
+            analog_gestures: true,
             exclude: vec!["VRCSDK".into(), "VRChat Examples".into()],
             sdk_version: "3.10.4".into(),
             unity_version: "2022.3.22f1".into(),
@@ -783,7 +787,13 @@ pub fn migrate(opts: &MigrateOptions) -> Result<MigrationReport> {
                     dir: &format!("{gen_dir}/FX"),
                     controller_name: "FX",
                 };
-                match build_fx_from_overrides(&assets_root, &guid_index, guid, &layout) {
+                match build_fx_from_overrides(
+                    &assets_root,
+                    &guid_index,
+                    guid,
+                    &layout,
+                    opts.analog_gestures,
+                ) {
                     Ok(bundle) => {
                         for f in &bundle.files {
                             generated_files.push((f.rel_path.clone(), f.content.clone()));
@@ -1112,7 +1122,11 @@ pub fn migrate(opts: &MigrateOptions) -> Result<MigrationReport> {
     next_steps.push("Open the output folder with the VRChat Creator Companion (Projects → Add Existing Project) so it resolves com.vrchat.avatars, then open it in Unity.".into());
     next_steps.push(format!("Drag Assets/{out_prefab_rel} into a scene; check the Avatar Descriptor's View Position and the FX layer, then Build & Publish from the VRChat SDK panel."));
     if fx_bundle.is_some() {
-        next_steps.push("Test each hand gesture: expressions come from the generated 'Gestures' FX layer (either hand triggers).".into());
+        next_steps.push(if opts.analog_gestures {
+            "Test each hand gesture: expressions come from the generated 'Gestures' FX layer (either hand; trigger depth blends the expression, SDK2 Vive style).".into()
+        } else {
+            "Test each hand gesture: expressions come from the generated 'Gestures' FX layer (either hand triggers).".into()
+        });
     }
     if !opts.physbone_roots.is_empty() || !sdk2.dynamic_bones.is_empty() {
         next_steps.push("Play-test the PhysBones (hair/skirt) and tune Pull/Spring/Gravity in the inspector if needed.".into());

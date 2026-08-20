@@ -424,6 +424,46 @@ impl FbxDocument {
         Ok(())
     }
 
+    /// The control-point indexes a named blendshape channel deforms: the union of the `Indexes`
+    /// arrays of the channel's target `Shape` geometries, sorted and deduplicated. Errors if no
+    /// channel has that name; a channel whose shapes carry no `Indexes` array (some exporters
+    /// write full-mesh shapes without one) yields an empty list.
+    ///
+    /// Together with [`Self::meshes`] (`control_point_of_vertex` / `material_of_triangle`) this
+    /// answers "which material slots does this blendshape touch" — e.g. which material an emote
+    /// overlay (a blush patch a shape slides into view) actually renders with.
+    pub fn blendshape_target_indexes(&self, channel_name: &str) -> Result<Vec<u32>> {
+        let scene = self.scene();
+        let channel = scene
+            .objects
+            .iter()
+            .find(|o| o.subclass == "BlendShapeChannel" && o.name == channel_name)
+            .with_context(|| format!("no blendshape channel named '{channel_name}'"))?;
+        // `Shape` geometries connect *into* the channel (Shape → Channel), so they are its
+        // connection children.
+        let shape_ids: Vec<i64> = scene
+            .children_of(channel.id)
+            .into_iter()
+            .filter(|id| scene.object(*id).is_some_and(|o| o.subclass == "Shape"))
+            .collect();
+        let mut out: Vec<u32> = Vec::new();
+        let root = self.tree.root();
+        let objects = child_named(&root, "Objects").context("FBX has no Objects node")?;
+        for n in objects.children() {
+            let Some(id) = n.attributes().first().and_then(as_i64) else {
+                continue;
+            };
+            if shape_ids.contains(&id)
+                && let Some(idx) = mesh::node_i32_array(&n, "Indexes")
+            {
+                out.extend(idx.into_iter().map(|i| i as u32));
+            }
+        }
+        out.sort_unstable();
+        out.dedup();
+        Ok(out)
+    }
+
     /// The `Geometry` object connected under mesh `Model` `model_id`, if any.
     pub fn geometry_of_model(&self, model_id: i64) -> Option<i64> {
         let scene = self.scene();
@@ -910,6 +950,50 @@ mod tests {
         }
         // A scene without morphs has none.
         assert!(doc().scene().blendshape_channels().is_empty());
+    }
+
+    /// `blendshape_target_indexes` unions the target shapes' `Indexes` (two shapes on one
+    /// channel dedup + sort), returns empty for an index-less shape, and errors on an unknown
+    /// channel name.
+    #[test]
+    fn blendshape_target_indexes_reads_shape_indexes() {
+        let tree = tree_v7400! {
+            Objects: {
+                Model: [10i64, "Body\u{0}\u{1}Model", "Mesh"] {},
+                Geometry: [20i64, "Body\u{0}\u{1}Geometry", "Mesh"] {
+                    Vertices: [vec![0.0f64, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0]] {},
+                    PolygonVertexIndex: [vec![0i32, 1, -3]] {},
+                },
+                Deformer: [40i64, "\u{0}\u{1}Deformer", "BlendShape"] {},
+                Deformer: [50i64, "Blush\u{0}\u{1}SubDeformer", "BlendShapeChannel"] {},
+                Deformer: [51i64, "Flat\u{0}\u{1}SubDeformer", "BlendShapeChannel"] {},
+                // Two target shapes on `Blush` with overlapping index sets; `Flat`'s shape has
+                // no `Indexes` array at all.
+                Geometry: [60i64, "Blush\u{0}\u{1}Geometry", "Shape"] {
+                    Indexes: [vec![2i32, 0]] {},
+                },
+                Geometry: [61i64, "Blush2\u{0}\u{1}Geometry", "Shape"] {
+                    Indexes: [vec![0i32, 1]] {},
+                },
+                Geometry: [62i64, "Flat\u{0}\u{1}Geometry", "Shape"] {},
+            },
+            Connections: {
+                C: ["OO", 20i64, 10i64] {},
+                C: ["OO", 40i64, 20i64] {},
+                C: ["OO", 50i64, 40i64] {},
+                C: ["OO", 51i64, 40i64] {},
+                C: ["OO", 60i64, 50i64] {},
+                C: ["OO", 61i64, 50i64] {},
+                C: ["OO", 62i64, 51i64] {},
+            },
+        };
+        let d = FbxDocument::from_bytes(&to_fbx_bytes(&tree)).unwrap();
+        assert_eq!(d.blendshape_target_indexes("Blush").unwrap(), vec![0, 1, 2]);
+        assert_eq!(
+            d.blendshape_target_indexes("Flat").unwrap(),
+            Vec::<u32>::new()
+        );
+        assert!(d.blendshape_target_indexes("Nope").is_err());
     }
 
     /// A minimal skinned mesh: one quad (4 control points) skinned to two bones, each cluster

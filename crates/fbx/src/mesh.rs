@@ -476,7 +476,7 @@ fn node_f64_array(node: &NodeHandle, name: &str) -> Option<Vec<f64>> {
 }
 
 /// Read a named child node's first attribute as an `i32` array (downcasting an `i64` array).
-fn node_i32_array(node: &NodeHandle, name: &str) -> Option<Vec<i32>> {
+pub(crate) fn node_i32_array(node: &NodeHandle, name: &str) -> Option<Vec<i32>> {
     match first_attr(node, name)? {
         AttributeValue::ArrI32(a) => Some(a.clone()),
         AttributeValue::ArrI64(a) => Some(a.iter().map(|&x| x as i32).collect()),

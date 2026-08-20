@@ -24,6 +24,7 @@
 //! recommended Write Defaults **off** (which is what the emitted states use).
 
 use crate::IdGen;
+use crate::blendtree::{BlendTree, ChildMotion};
 use crate::controller::{AnimatorController, AnimatorParameter};
 use crate::yaml_emit::{Emitter, ObjectRef, UNITY_PREAMBLE};
 
@@ -57,6 +58,15 @@ pub struct GestureLayer {
     pub motions: [Option<ObjectRef>; 7],
     /// Cross-fade duration in seconds for every transition (0.1 is the common choice for faces).
     pub transition_duration: f32,
+    /// **Analog gestures** (SDK2 Vive-wand semantics): each gesture state's motion becomes a 1D
+    /// [`BlendTree`](crate::BlendTree) on the gesture parameter's weight float (`GestureLeft` →
+    /// `GestureLeftWeight`), blending `Neutral` (threshold 0) → the gesture clip (threshold 1),
+    /// so trigger depth *is* expression depth. With several parameters each gesture gets one
+    /// state **per parameter** (`Fist L` / `Fist R`) so each hand blends on its own weight —
+    /// still one layer, so the either-hand conflict rule (first parameter wins) is unchanged.
+    /// On controllers whose weight only tracks an analog axis for some gestures (Index: Fist),
+    /// other gestures need the trigger held to show — the same trade SDK2 made on wands.
+    pub analog: bool,
 }
 
 /// Backwards-compatible name for a single-parameter [`GestureLayer`].
@@ -75,6 +85,7 @@ impl GestureLayer {
             neutral,
             motions: Default::default(),
             transition_duration: 0.1,
+            analog: false,
         }
     }
 
@@ -86,7 +97,14 @@ impl GestureLayer {
             neutral,
             motions: Default::default(),
             transition_duration: 0.1,
+            analog: false,
         }
+    }
+
+    /// Analog mode (builder-style): blend each gesture state on its parameter's weight float.
+    pub fn analog(mut self) -> Self {
+        self.analog = true;
+        self
     }
 
     /// Set the motion for gesture value `gesture` (1..=7). Out-of-range values are ignored.
@@ -97,22 +115,60 @@ impl GestureLayer {
         self
     }
 
-    /// Emit this hand's state-machine fragment (SM + states + Any-State transitions). Returns the
-    /// fragment text and the state-machine fileID for the layer's `m_StateMachine`.
+    /// The hand suffix a parameter contributes to an analog state name (`GestureLeft` → `L`).
+    fn hand_suffix(parameter: &str) -> &str {
+        if parameter.contains("Left") {
+            "L"
+        } else if parameter.contains("Right") {
+            "R"
+        } else {
+            parameter
+        }
+    }
+
+    /// Emit this hand's state-machine fragment (SM + states + Any-State transitions; in analog
+    /// mode also the per-state `BlendTree`s). Returns the fragment text and the state-machine
+    /// fileID for the layer's `m_StateMachine`.
     pub fn to_state_fragment(&self, ids: &mut IdGen) -> (String, i64) {
         let sm_id = ids.alloc();
-        // States: Neutral (index 0) then one per gesture with a motion.
+        // States: Neutral (index 0) then one per gesture with a motion — in analog mode one per
+        // (gesture, parameter) pair, each with its own BlendTree id, so each hand's state blends
+        // on that hand's weight.
         let neutral_state = ids.alloc();
-        let gesture_states: Vec<(usize, i64, &ObjectRef)> = self
-            .motions
-            .iter()
-            .enumerate()
-            .filter_map(|(i, m)| m.as_ref().map(|m| (i + 1, ids.alloc(), m)))
-            .collect();
+        let mut gesture_states: Vec<GState> = Vec::new();
+        for (i, m) in self.motions.iter().enumerate() {
+            let Some(m) = m else { continue };
+            if self.analog {
+                for (param_idx, p) in self.parameters.iter().enumerate() {
+                    let name = if self.parameters.len() > 1 {
+                        format!("{} {}", GESTURE_NAMES[i + 1], Self::hand_suffix(p))
+                    } else {
+                        GESTURE_NAMES[i + 1].to_string()
+                    };
+                    gesture_states.push(GState {
+                        gesture: i + 1,
+                        param_idx,
+                        state_id: ids.alloc(),
+                        tree_id: Some(ids.alloc()),
+                        name,
+                        motion: m.clone(),
+                    });
+                }
+            } else {
+                gesture_states.push(GState {
+                    gesture: i + 1,
+                    param_idx: 0,
+                    state_id: ids.alloc(),
+                    tree_id: None,
+                    name: GESTURE_NAMES[i + 1].to_string(),
+                    motion: m.clone(),
+                });
+            }
+        }
         // Any-State transitions. Neutral: one transition requiring every parameter == 0. Each
-        // gesture value 1..=7: one transition per parameter (Equals g), targeting its state or
-        // Neutral (unclipped gestures still leave the previous expression). Parameter order in
-        // the list is priority order.
+        // gesture value 1..=7: one transition per parameter (Equals g), targeting its state (in
+        // analog mode, the state for *that* parameter) or Neutral (unclipped gestures still
+        // leave the previous expression). Parameter order in the list is priority order.
         let mut transitions: Vec<Transition> = Vec::new();
         transitions.push(Transition {
             id: ids.alloc(),
@@ -120,12 +176,12 @@ impl GestureLayer {
             dst: neutral_state,
         });
         for g in 1..8usize {
-            let dst = gesture_states
-                .iter()
-                .find(|(gi, _, _)| *gi == g)
-                .map(|(_, id, _)| *id)
-                .unwrap_or(neutral_state);
-            for p in &self.parameters {
+            for (param_idx, p) in self.parameters.iter().enumerate() {
+                let dst = gesture_states
+                    .iter()
+                    .find(|st| st.gesture == g && (!self.analog || st.param_idx == param_idx))
+                    .map(|st| st.state_id)
+                    .unwrap_or(neutral_state);
                 transitions.push(Transition {
                     id: ids.alloc(),
                     conditions: vec![(p.clone(), g as i64)],
@@ -152,10 +208,10 @@ impl GestureLayer {
                     e.kv_ref("m_State", &ObjectRef::local(neutral_state));
                     e.kv("m_Position", "{x: 300, y: 0, z: 0}");
                 });
-                for (row, (_, id, _)) in gesture_states.iter().enumerate() {
+                for (row, st) in gesture_states.iter().enumerate() {
                     e.line("- serializedVersion: 1");
                     e.indented(|e| {
-                        e.kv_ref("m_State", &ObjectRef::local(*id));
+                        e.kv_ref("m_State", &ObjectRef::local(st.state_id));
                         e.kv(
                             "m_Position",
                             &format!("{{x: 300, y: {}, z: 0}}", 60 * (row as i64 + 1)),
@@ -182,8 +238,12 @@ impl GestureLayer {
 
         // --- AnimatorStates (1102)
         emit_state(&mut e, neutral_state, GESTURE_NAMES[0], &self.neutral);
-        for (g, id, motion) in &gesture_states {
-            emit_state(&mut e, *id, GESTURE_NAMES[*g], motion);
+        for st in &gesture_states {
+            let motion = match st.tree_id {
+                Some(tree_id) => ObjectRef::local(tree_id),
+                None => st.motion.clone(),
+            };
+            emit_state(&mut e, st.state_id, &st.name, &motion);
         }
 
         // --- Any-State AnimatorStateTransitions (1101)
@@ -191,8 +251,33 @@ impl GestureLayer {
             emit_any_state_transition(&mut e, t, self.transition_duration);
         }
 
+        // --- BlendTrees (206), analog mode: Neutral at weight 0 → the gesture clip at 1.
+        for st in &gesture_states {
+            if let Some(tree_id) = st.tree_id {
+                BlendTree::analog_gesture(
+                    &st.name,
+                    format!("{}Weight", self.parameters[st.param_idx]),
+                )
+                .child(ChildMotion::motion(self.neutral.clone(), 0.0))
+                .child(ChildMotion::motion(st.motion.clone(), 1.0))
+                .emit_tree(&mut e, tree_id);
+            }
+        }
+
         (e.into_string(), sm_id)
     }
+}
+
+/// One gesture state of a layer: which gesture value and (in analog mode) which parameter it
+/// serves, its ids, display name, and the clip it plays (directly, or via its blend tree).
+struct GState {
+    gesture: usize,
+    param_idx: usize,
+    state_id: i64,
+    /// `Some` in analog mode: the state's 1D BlendTree fileID.
+    tree_id: Option<i64>,
+    name: String,
+    motion: ObjectRef,
 }
 
 fn emit_state(e: &mut Emitter, state_id: i64, name: &str, motion: &ObjectRef) {
@@ -289,6 +374,13 @@ pub fn fx_gestures(
             if !declared.contains(p) {
                 controller = controller.parameter(AnimatorParameter::int(p));
                 declared.push(p.clone());
+            }
+            if layer.analog {
+                let w = format!("{p}Weight");
+                if !declared.contains(&w) {
+                    controller = controller.parameter(AnimatorParameter::float(&w));
+                    declared.push(w);
+                }
             }
         }
         let (fragment, sm_id) = layer.to_state_fragment(ids);
@@ -463,5 +555,103 @@ mod tests {
             &mut IdGen::new("FX"),
         );
         assert_eq!(yaml, again);
+    }
+
+    /// Analog either-hand layer: one state *per (gesture, hand)* named `Fist L`/`Fist R`, each
+    /// playing a local 1D BlendTree on that hand's weight float (`Neutral` clip at 0 → the
+    /// gesture clip at 1); transitions route each hand's gesture value to that hand's state; the
+    /// controller declares the weight floats.
+    #[test]
+    fn analog_layer_blends_each_hand_on_its_weight() {
+        let neutral = ObjectRef::external(7400000, "a000000000000000000000000000000a", 2);
+        let fist = ObjectRef::external(7400000, "a000000000000000000000000000000b", 2);
+        let layer = GestureLayer::either_hand("Gestures", neutral)
+            .motion(1, fist)
+            .analog();
+        let yaml = fx_gestures("FX", &[layer], &[], &mut IdGen::new("FX"));
+        let file = UnityFile::parse(&yaml).unwrap();
+
+        // Params: both gesture ints and both weight floats (m_Type 1).
+        let ctrl = ReaderController::from_file(&file).unwrap();
+        let params: Vec<(String, i64)> = ctrl
+            .parameters
+            .iter()
+            .map(|p| (p.name.clone(), p.raw_type))
+            .collect();
+        assert!(params.contains(&("GestureLeftWeight".into(), 1)));
+        assert!(params.contains(&("GestureRightWeight".into(), 1)));
+
+        // States: Neutral + Fist L + Fist R, each Fist playing a local BlendTree.
+        let states: Vec<_> = file
+            .documents
+            .iter()
+            .filter(|d| d.class_id == 1102)
+            .collect();
+        let names: Vec<&str> = states.iter().map(|d| d.name().unwrap()).collect();
+        assert_eq!(names, vec!["Neutral", "Fist L", "Fist R"]);
+        let trees: Vec<_> = file
+            .documents
+            .iter()
+            .filter(|d| d.class_id == 206)
+            .collect();
+        assert_eq!(trees.len(), 2);
+        for (state, param) in states[1..]
+            .iter()
+            .zip(["GestureLeftWeight", "GestureRightWeight"])
+        {
+            let tree_id = state.body["m_Motion"]["fileID"].as_i64().unwrap();
+            let tree = trees.iter().find(|t| t.file_id == tree_id).unwrap();
+            assert_eq!(tree.body["m_BlendParameter"].as_str(), Some(param));
+            let childs = tree.body["m_Childs"].as_vec().unwrap();
+            assert_eq!(childs.len(), 2);
+            assert_eq!(childs[0]["m_Threshold"].as_i64(), Some(0));
+            assert_eq!(
+                childs[0]["m_Motion"]["guid"].as_str(),
+                Some("a000000000000000000000000000000a"),
+                "threshold 0 plays the Neutral clip"
+            );
+            assert_eq!(childs[1]["m_Threshold"].as_i64(), Some(1));
+            assert_eq!(
+                childs[1]["m_Motion"]["guid"].as_str(),
+                Some("a000000000000000000000000000000b"),
+                "threshold 1 plays the gesture clip"
+            );
+        }
+
+        // Each hand's Fist transition targets that hand's state.
+        let transitions: Vec<_> = file
+            .documents
+            .iter()
+            .filter(|d| d.class_id == 1101)
+            .collect();
+        for (param, state_name) in [("GestureLeft", "Fist L"), ("GestureRight", "Fist R")] {
+            let t = transitions
+                .iter()
+                .find(|t| {
+                    let c = &t.body["m_Conditions"][0];
+                    t.body["m_Conditions"].as_vec().unwrap().len() == 1
+                        && c["m_ConditionEvent"].as_str() == Some(param)
+                        && c["m_EventTreshold"].as_i64() == Some(1)
+                })
+                .unwrap();
+            let dst = t.body["m_DstState"]["fileID"].as_i64().unwrap();
+            let dst_state = states.iter().find(|s| s.file_id == dst).unwrap();
+            assert_eq!(dst_state.name(), Some(state_name));
+        }
+
+        // Deterministic.
+        let layer2 = GestureLayer::either_hand(
+            "Gestures",
+            ObjectRef::external(7400000, "a000000000000000000000000000000a", 2),
+        )
+        .motion(
+            1,
+            ObjectRef::external(7400000, "a000000000000000000000000000000b", 2),
+        )
+        .analog();
+        assert_eq!(
+            yaml,
+            fx_gestures("FX", &[layer2], &[], &mut IdGen::new("FX"))
+        );
     }
 }

@@ -16,6 +16,123 @@ pub enum FbxCommand {
     /// Move a region of a mesh's polygons onto another material slot (e.g. a glowing hair patch
     /// onto the plain black slot), selecting by bone proximity / height / texture brightness.
     Reslot(ReslotArgs),
+    /// List blendshape channels and the material slots each one's target vertices render with —
+    /// which material an emote shape (a blush patch a shape slides into view) actually uses.
+    Blendshapes(BlendshapesArgs),
+}
+
+#[derive(Args, Debug)]
+pub struct BlendshapesArgs {
+    /// Path to a binary FBX file.
+    path: std::path::PathBuf,
+    /// Only channels whose name contains this (case-insensitive).
+    #[arg(long)]
+    filter: Option<String>,
+    /// Emit a machine-readable JSON report instead of human-readable text.
+    #[arg(long)]
+    json: bool,
+}
+
+#[derive(serde::Serialize)]
+struct BlendshapeReport {
+    channel: String,
+    mesh: Option<String>,
+    /// Control points the shape moves (empty if the exporter wrote no index array).
+    target_vertices: usize,
+    /// Material slots those vertices' triangles render with: `(slot, material name, triangles)`.
+    slots: Vec<BlendshapeSlot>,
+}
+
+#[derive(serde::Serialize)]
+struct BlendshapeSlot {
+    slot: u32,
+    material: String,
+    triangles: usize,
+}
+
+pub fn blendshapes(args: &BlendshapesArgs) -> Result<()> {
+    let doc = FbxDocument::load(&args.path)?;
+    let scene = doc.scene();
+    let meshes = doc.meshes()?;
+    let mut reports: Vec<BlendshapeReport> = Vec::new();
+    for ch in scene.blendshape_channels() {
+        if let Some(f) = &args.filter
+            && !ch.name.to_lowercase().contains(&f.to_lowercase())
+        {
+            continue;
+        }
+        let targets: HashSet<u32> = doc
+            .blendshape_target_indexes(&ch.name)?
+            .into_iter()
+            .collect();
+        // Count, per material slot, the triangles of the channel's mesh that touch a target
+        // control point.
+        let mesh = meshes.iter().find(|m| {
+            scene
+                .object(m.model_id)
+                .map(|o| Some(&o.name) == ch.mesh_model_name.as_ref())
+                .unwrap_or(false)
+        });
+        let mut slot_tris: std::collections::BTreeMap<u32, usize> = Default::default();
+        if let Some(m) = mesh {
+            for tri in 0..m.indices.len() / 3 {
+                let touched = (0..3).any(|c| {
+                    let v = m.indices[tri * 3 + c] as usize;
+                    targets.contains(&m.control_point_of_vertex[v])
+                });
+                if touched {
+                    *slot_tris
+                        .entry(m.triangle_material(tri) as u32)
+                        .or_default() += 1;
+                }
+            }
+        }
+        let slots = slot_tris
+            .into_iter()
+            .map(|(slot, triangles)| BlendshapeSlot {
+                slot,
+                material: mesh
+                    .and_then(|m| m.materials.get(slot as usize))
+                    .map(|mat| mat.name.clone())
+                    .unwrap_or_default(),
+                triangles,
+            })
+            .collect();
+        reports.push(BlendshapeReport {
+            channel: ch.name.clone(),
+            mesh: ch.mesh_model_name.clone(),
+            target_vertices: targets.len(),
+            slots,
+        });
+    }
+
+    if args.json {
+        println!("{}", serde_json::to_string_pretty(&reports)?);
+        return Ok(());
+    }
+    println!(
+        "Blendshapes: {} ({} channel(s))",
+        args.path.display(),
+        reports.len()
+    );
+    for r in &reports {
+        println!(
+            "  {:<28} mesh {:<8} {:>5} vert(s)  slots: {}",
+            r.channel,
+            r.mesh.as_deref().unwrap_or("?"),
+            r.target_vertices,
+            if r.slots.is_empty() {
+                "(none)".to_string()
+            } else {
+                r.slots
+                    .iter()
+                    .map(|s| format!("{} ({}, {} tris)", s.slot, s.material, s.triangles))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            }
+        );
+    }
+    Ok(())
 }
 
 #[derive(Args, Debug)]

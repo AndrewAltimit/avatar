@@ -159,6 +159,7 @@ pub fn build_fx_from_overrides(
     guid_index: &HashMap<String, PathBuf>,
     override_guid: &str,
     layout: &FxLayout,
+    analog: bool,
 ) -> Result<FxBundle> {
     let override_path = guid_index.get(override_guid).with_context(|| {
         format!("override controller guid {override_guid} not found in the project")
@@ -323,9 +324,13 @@ pub fn build_fx_from_overrides(
         content: native_asset_meta(&neutral_guid, 7400000),
     });
 
-    // The controller: one either-hand layer.
+    // The controller: one either-hand layer; in analog mode each gesture state is a per-hand
+    // BlendTree on GestureLeftWeight/GestureRightWeight (SDK2 Vive trigger-depth semantics).
     let mut layer =
         GestureLayer::either_hand("Gestures", ObjectRef::external(7400000, neutral_guid, 2));
+    if analog {
+        layer = layer.analog();
+    }
     for (g, (fid, guid)) in &motions {
         layer = layer.motion(*g, ObjectRef::external(*fid, guid.clone(), 2));
     }

@@ -22,8 +22,10 @@ clear error — re-export as binary.
   `parent_of(id)`, `blendshape_channels()` (the morph-channel names Unity imports as blendshapes,
   each traced to its mesh), plus `global_settings`, `objects`, `connections`.
 - `FbxDocument` — the writable document: `load(path)` / `from_bytes(&[u8])`, `scene()` (recomputed
-  read view), and id-addressed mutators `rename_object`, `reparent_object`,
-  `set_global_setting_f64/i32`, `scale_object`, then `to_bytes()` / `write(path)`.
+  read view), `blendshape_target_indexes(channel)` (the control points a morph channel deforms —
+  join with `meshes()` for "which material slots does this blendshape touch"), and id-addressed
+  mutators `rename_object`, `reparent_object`, `set_global_setting_f64/i32`, `scale_object`, then
+  `to_bytes()` / `write(path)`.
 - `FbxObject`, `Connection`, `GlobalSettings`, `LocalTransform` — the typed pieces of the scene.
 
 Mutators address objects by FBX **object id** — the stable identifier skin clusters and animation

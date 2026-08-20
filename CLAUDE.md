@@ -135,7 +135,8 @@ READMEs. What exists today, with its doc:
   `avatar armature check|fix` — canonical humanoid renames applied natively; `avatar fbx reslot` —
   per-polygon material-slot reassignment by region/brightness (a glowing strand → the black slot),
   or its `--uv-mask` footprint for a texture-side fix — **the writer's output is not yet proven to
-  import in Unity for a full skinned avatar** (see armature-repair.md);
+  import in Unity for a full skinned avatar** (see armature-repair.md); `avatar fbx blendshapes` —
+  per-channel material slots (which material an emote overlay shape renders with);
   topology/scale/orientation flagged **and** emitted as a headless-Blender repair script
   (`--blender-script`, [`armature-repair.md`](docs/reference/armature-repair.md)).
 - **Generate (M4)** — `avatar anim-gen clip|blendtree|controller|params|menu`: Unity-YAML `.anim`,
@@ -150,7 +151,9 @@ READMEs. What exists today, with its doc:
 - **Migrate (SDK2 → SDK3)** — `avatar migrate sdk3 <extracted-project> -o <out> --name N …`: rewrites
   the SDK2 avatar prefab in place (descriptor + PipelineManager retyped at their fileIDs, root motion
   off, DynamicBone → PhysBone with the SDK's own conversion rules, optional Cloth → PhysBone skirt,
-  `--strip` subtrees, gesture overrides → an either-hand FX layer, rig-derived eye look + blink) and
+  `--strip` subtrees, gesture overrides → an either-hand FX layer with analog trigger-depth blend trees
+  (`GestureLeftWeight`/`GestureRightWeight`; `--no-analog-gestures` for discrete), rig-derived eye
+  look + blink) and
   assembles a VCC-openable project around it (`--vpm-package` bundles e.g. a shader package,
   `--relink-locked-shaders` re-points locked materials at their original shader); `--dry-run` / `--json`
   ([`migrate.md`](docs/reference/migrate.md)). Post-migration **PhysBone tuning** — `avatar physbone

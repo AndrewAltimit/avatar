@@ -95,6 +95,14 @@ to be 0 — exactly SDK2's semantics (an override fired for whichever hand made 
 immune to the two-layer Write-Defaults-off clobber. Empty `Parameters.asset` / `Menu.asset` are
 generated alongside so toggles can be added later (`avatar toggle`).
 
+By default the layer is **analog** (`GestureLayer::analog()`, [anim-gen.md](anim-gen.md)): each
+gesture gets a per-hand state (`Fist L` / `Fist R`) whose motion is a 1D BlendTree on that hand's
+`GestureLeftWeight`/`GestureRightWeight`, blending `Gesture_Neutral` (0) → the gesture clip (1) —
+SDK2's Vive "advanced controls", where trigger depth is expression depth. `--no-analog-gestures`
+emits the old discrete states instead (one static state per gesture). Note the platform trade:
+on Index-style controllers only Fist's weight tracks an analog axis, so with analog gestures the
+other expressions need the trigger held — exactly how the SDK2 avatar behaved on wands.
+
 ## Eye look and blink
 
 SDK3 eye look stores the **local rotation of each eye bone** per look state. It is derived

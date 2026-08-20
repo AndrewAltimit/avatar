@@ -200,6 +200,16 @@ Neutral, resetting shared shapes under WD off, wipes the lower hand's expression
 wraps layers in the class-91 controller, declaring each `Int` parameter once. Used by
 [`avatar-migrate`](migrate.md) to rebuild SDK2 gesture overrides.
 
+**Analog mode** (`GestureLayer::analog()`): each gesture state's motion becomes a 1D
+[BlendTree](#2-analog-gesture-1d-blendtree-class-id-206) on the gesture parameter's weight float
+(`GestureLeft` → `GestureLeftWeight`), blending `Neutral` (threshold 0) → the gesture clip
+(threshold 1) — trigger depth *is* expression depth, SDK2's Vive-wand "advanced controls"
+semantics. In a multi-parameter (either-hand) layer each gesture gets one state **per parameter**
+(`Fist L` / `Fist R`) so each hand blends on its own weight, still inside the single layer (the
+first-parameter-wins conflict rule is unchanged), and `fx_gestures` declares the weight `Float`s.
+Caveat: on controllers whose weight only tracks an analog axis for some gestures (Index: Fist),
+other gestures need the trigger held to show — the same trade SDK2 made on wands.
+
 ### 5. The toggle bundle (`avatar toggle`) — the end-to-end composite
 
 A working in-game toggle needs five cooperating assets; the `toggle` module assembles all of them

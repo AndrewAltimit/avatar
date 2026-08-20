@@ -131,6 +131,9 @@ fn run() -> Result<ExitCode> {
         Command::Fbx(FbxCommand::Reslot(args)) => {
             cmd::fbx::reslot(&args).map(|()| ExitCode::SUCCESS)
         }
+        Command::Fbx(FbxCommand::Blendshapes(args)) => {
+            cmd::fbx::blendshapes(&args).map(|()| ExitCode::SUCCESS)
+        }
         Command::Armature(ArmatureCommand::Check(args)) => cmd::fbx::armature_check(&args),
         Command::Armature(ArmatureCommand::Fix(args)) => {
             cmd::fbx::armature_fix(&args).map(|()| ExitCode::SUCCESS)
