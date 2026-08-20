@@ -46,6 +46,7 @@ use std::net::{ToSocketAddrs, UdpSocket};
 use anyhow::{Context, Result};
 use rosc::{OscMessage, OscPacket};
 
+pub mod capture;
 pub mod codec;
 pub mod query;
 

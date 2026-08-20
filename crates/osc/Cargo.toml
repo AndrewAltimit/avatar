@@ -13,3 +13,7 @@ anyhow.workspace = true
 serde = { workspace = true }
 serde_json.workspace = true
 rosc = "0.11"
+
+[[bin]]
+name = "avatar-gesture-capture"
+path = "src/bin/gesture_capture.rs"

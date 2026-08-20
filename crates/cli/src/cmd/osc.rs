@@ -17,6 +17,10 @@ pub enum OscCommand {
     Input(OscInputArgs),
     /// Listen for the avatar parameters VRChat broadcasts and print each update.
     Monitor(OscMonitorArgs),
+    /// Record the parameter stream and reduce it to a report: per-parameter counts/values, plus
+    /// the gesture cross-tab (which `GestureLeft`/`GestureRight` values arrived, and the weight
+    /// range each covered while held) — the ground truth for "what does my controller deliver?".
+    Capture(OscCaptureArgs),
     /// Request VRChat switch avatars: `/avatar/change <blueprint-id>`.
     Change(OscChangeArgs),
     /// Parse an avatar's OSCQuery config JSON and list its parameters (offline; no socket).
@@ -74,6 +78,76 @@ pub struct OscChangeArgs {
     id: String,
     #[command(flatten)]
     target: OscTarget,
+}
+
+#[derive(Args, Debug)]
+pub struct OscCaptureArgs {
+    /// Address to listen on (VRChat's default OSC-out port is 9001).
+    #[arg(long, default_value = "127.0.0.1")]
+    host: String,
+    /// Port to listen on for VRChat's outgoing parameters.
+    #[arg(long, default_value_t = avatar_osc::VRCHAT_SEND_PORT)]
+    port: u16,
+    /// Capture length. The summary prints when it elapses.
+    #[arg(long, default_value_t = 60)]
+    seconds: u64,
+    /// Also append every raw event as JSON lines here (written as it arrives, so a cut-short
+    /// session still keeps its data).
+    #[arg(short, long)]
+    output: Option<std::path::PathBuf>,
+    /// Don't echo each update live (the summary still prints).
+    #[arg(long)]
+    quiet: bool,
+    /// Print the summary as JSON instead of the table.
+    #[arg(long)]
+    json: bool,
+}
+
+pub fn capture(args: &OscCaptureArgs) -> Result<()> {
+    use std::io::Write as _;
+    let mut client = ParamClient::new(
+        (args.host.as_str(), args.port),
+        ("127.0.0.1", avatar_osc::VRCHAT_RECV_PORT),
+    )
+    .context("binding OSC capture socket")?;
+    let mut sink = match &args.output {
+        Some(path) => Some(std::io::BufWriter::new(
+            std::fs::File::create(path).with_context(|| format!("creating {}", path.display()))?,
+        )),
+        None => None,
+    };
+    eprintln!(
+        "capturing VRChat parameters on {}:{} for {}s — sweep the touchpad and trigger now          (make sure OSC is enabled: Action Menu → Options → OSC)…",
+        args.host, args.port, args.seconds
+    );
+    let mut cap = avatar_osc::capture::Capture::new();
+    let deadline = Instant::now() + Duration::from_secs(args.seconds);
+    while Instant::now() < deadline {
+        for update in client.poll()? {
+            let e = cap.record(&update.name, update.value);
+            if let Some(sink) = &mut sink {
+                serde_json::to_writer(&mut *sink, e)?;
+                sink.write_all(b"\n")?;
+            }
+            if !args.quiet {
+                println!("{:8.3}s {} = {:?}", e.t, e.name, update.value);
+            }
+        }
+        if let Some(sink) = &mut sink {
+            sink.flush()?;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    let summary = cap.summary();
+    if args.json {
+        println!("{}", serde_json::to_string_pretty(&summary)?);
+    } else {
+        print!("{}", avatar_osc::capture::render_summary(&summary));
+    }
+    if let Some(path) = &args.output {
+        eprintln!("raw events: {}", path.display());
+    }
+    Ok(())
 }
 
 #[derive(Args, Debug)]

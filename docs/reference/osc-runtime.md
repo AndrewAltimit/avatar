@@ -121,6 +121,26 @@ deliberately ignored — the point of reading the file offline is the schema, no
 Field renames (`FULL_PATH` → `full_path`, …) are `serde(rename)`; an embedded-JSON fixture asserts
 the parse (param count, types, access, the `/avatar/change` exclusion, and the malformed/empty cases).
 
+## Parameter capture (`avatar osc capture` / `avatar-gesture-capture.exe`)
+
+`avatar_osc::capture` records the parameter stream VRChat broadcasts (OSC out, port 9001) and
+reduces it to the report that answers *"what does my controller actually deliver?"*: per-parameter
+update counts and value ranges, plus the **gesture cross-tab** — for every `GestureLeft`/
+`GestureRight` value that was held, how many times it was entered and the range its
+`…Weight` float covered while held. A row that never appears (e.g. `1 = Fist` missing after a
+full Vive-touchpad sweep) or a weight range stuck at `0.000..0.000` localizes a gesture bug to
+the input/binding side in one session; healthy rows mean the animator is receiving everything
+and the FX layer is at fault. `avatar osc capture [--seconds N] [-o events.jsonl] [--json]`
+echoes updates live, appends raw events as JSON lines as they arrive (a cut-short session keeps
+its data), and prints the summary when the clock runs out.
+
+The same logic ships as a **standalone, dependency-slim binary** `avatar-gesture-capture`
+(`crates/osc/src/bin/gesture_capture.rs`, `[[bin]]` in the crate) precisely so it cross-compiles
+to a double-clickable Windows `.exe` (`cargo build -p avatar-osc --bins --release --target
+x86_64-pc-windows-gnu`) for capture sessions on the machine that actually runs VRChat: it takes
+`[seconds] [port]` positionally, writes `gesture-capture.jsonl` beside itself, and waits for
+Enter before closing so the table survives a double-click launch.
+
 ## Analog-gesture daemon (`avatar-osc-gestures`)
 
 The "Vive advanced controls on any hardware" feature (PLAN §4) lives in a separate crate built on

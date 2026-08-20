@@ -163,8 +163,10 @@ READMEs. What exists today, with its doc:
   chains onto own components, chain stretch for a longer skirt, chain re-angling so a skirt hugs the
   legs; `avatar render --pose <prefab>` draws the FBX in a prefab's pose to preview it)
   ([`physbone.md`](docs/reference/physbone.md)).
-- **OSC runtime (M5)** — `avatar osc send|input|monitor|change|query` + the analog-gesture daemon
-  `avatar osc gestures` ([`osc-runtime.md`](docs/reference/osc-runtime.md)).
+- **OSC runtime (M5)** — `avatar osc send|input|monitor|capture|change|query` + the analog-gesture
+  daemon `avatar osc gestures`; `capture` reduces VRChat's parameter stream to a gesture/weight
+  cross-tab (also a standalone Windows-cross-compilable `avatar-gesture-capture` bin)
+  ([`osc-runtime.md`](docs/reference/osc-runtime.md)).
 - **Packaging / preview** — `avatar unitypackage info|list|extract|testbed`
   ([`unitypackage.md`](docs/reference/unitypackage.md)); `avatar render` / `avatar view` wgpu preview
   ([`render.md`](docs/reference/render.md)).
