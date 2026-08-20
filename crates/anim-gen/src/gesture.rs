@@ -10,12 +10,17 @@
 //! `Neutral` through their own Any-State transition, so the layer is authoritative for all eight.
 //!
 //! A layer can also read **several** gesture parameters at once ([`GestureLayer::parameters`]):
-//! each gesture state then gets one Any-State transition per parameter and `Neutral` requires
-//! *all* of them to be 0. That single "either hand" layer is exactly SDK2's semantics (an
-//! override slot fired for whichever hand made the gesture) and sidesteps the classic two-layer
-//! problem where the upper hand's Neutral clip, resetting shared blendshapes, clobbers the lower
-//! hand's expression under Write Defaults off. When both hands hold different gestures, the
-//! parameter listed first wins (its transitions come first in `m_AnyStateTransitions`).
+//! each gesture then gets Any-State transitions per parameter and `Neutral` requires *all* of
+//! them to be 0. That single "either hand" layer is exactly SDK2's semantics (an override slot
+//! fired for whichever hand made the gesture) and sidesteps the classic two-layer problem where
+//! the upper hand's Neutral clip, resetting shared blendshapes, clobbers the lower hand's
+//! expression under Write Defaults off. Transition conditions are built **mutually exclusive**
+//! (at most one target valid at any parameter state) — two simultaneously-valid Any-State
+//! transitions to different states ping-pong every crossfade, i.e. a visible oscillation.
+//! **Later parameters win** (list `GestureLeft` then `GestureRight`: the right hand takes the
+//! face when both act, VRChat's own hands-layer convention); in analog mode "act" is
+//! weight-gated ([`WEIGHT_ON`]/[`WEIGHT_OFF`]) so a wand thumb resting on the touchpad (Fist at
+//! weight 0) can never mask the other hand's real expression.
 //!
 //! Clips here are expected to be *face-only* (blendshapes) — SDK3 hand poses come from the
 //! Gesture playable layer, so an SDK2 gesture clip that also carried finger muscles must be split
@@ -30,6 +35,16 @@ use crate::yaml_emit::{Emitter, ObjectRef, UNITY_PREAMBLE};
 
 /// `m_ConditionMode` on an `AnimatorCondition`: `Equals`.
 pub const CONDITION_EQUALS: i64 = 6;
+/// `m_ConditionMode`: `Greater` (float parameters).
+pub const CONDITION_GREATER: i64 = 3;
+/// `m_ConditionMode`: `Less` (float parameters).
+pub const CONDITION_LESS: i64 = 4;
+
+/// Analog mode: a higher-priority hand must be squeezing at least this hard to claim the face…
+pub const WEIGHT_ON: f32 = 0.05;
+/// …and below this it releases its claim (the gap is hysteresis, so a trigger hovering at one
+/// threshold can't chatter between hands).
+pub const WEIGHT_OFF: f32 = 0.02;
 
 /// VRChat's gesture names, indexed by the `GestureLeft`/`GestureRight` value.
 pub const GESTURE_NAMES: [&str; 8] = [
@@ -165,14 +180,29 @@ impl GestureLayer {
                 });
             }
         }
-        // Any-State transitions. Neutral: one transition requiring every parameter == 0. Each
-        // gesture value 1..=7: one transition per parameter (Equals g), targeting its state (in
-        // analog mode, the state for *that* parameter) or Neutral (unclipped gestures still
-        // leave the previous expression). Parameter order in the list is priority order.
+        // Any-State transitions, built so that at most one target is ever valid at a time —
+        // two simultaneously-valid transitions to different states would ping-pong every
+        // `transition_duration` (the crossfade re-arms `canTransitionToSelf`-exempt targets),
+        // which is exactly the wild oscillation two active hands used to cause. Rules:
+        //
+        // - Neutral: every parameter == 0.
+        // - **Later parameters win** (list `GestureLeft` then `GestureRight` and the right hand
+        //   takes the face when both act — VRChat's own hands-layer convention): a parameter's
+        //   transitions require every *later* parameter to be inactive.
+        // - Analog mode adds weight gating: "active" means *squeezing* ([`WEIGHT_ON`]), not just
+        //   gesturing — on Vive wands a thumb resting on the touchpad centre reports Fist at
+        //   weight 0, and without the gate that phantom would mask (and oscillate against) the
+        //   other hand's real expression. Inactive = `param == 0` OR `weight <` [`WEIGHT_OFF`]
+        //   (one transition per alternative), so a higher-priority hand that stops squeezing
+        //   hands the face back.
         let mut transitions: Vec<Transition> = Vec::new();
         transitions.push(Transition {
             id: ids.alloc(),
-            conditions: self.parameters.iter().map(|p| (p.clone(), 0)).collect(),
+            conditions: self
+                .parameters
+                .iter()
+                .map(|p| Cond::Eq(p.clone(), 0))
+                .collect(),
             dst: neutral_state,
         });
         for g in 1..8usize {
@@ -182,11 +212,36 @@ impl GestureLayer {
                     .find(|st| st.gesture == g && (!self.analog || st.param_idx == param_idx))
                     .map(|st| st.state_id)
                     .unwrap_or(neutral_state);
-                transitions.push(Transition {
-                    id: ids.alloc(),
-                    conditions: vec![(p.clone(), g as i64)],
-                    dst,
-                });
+                // The transition's own trigger, plus (analog, non-lowest-priority) the gate that
+                // this hand is actually squeezing.
+                let mut base = vec![Cond::Eq(p.clone(), g as i64)];
+                if self.analog && param_idx > 0 {
+                    base.push(Cond::Greater(format!("{p}Weight"), WEIGHT_ON));
+                }
+                // One transition per way every higher-priority parameter can be inactive.
+                let higher: Vec<&String> = self.parameters[param_idx + 1..].iter().collect();
+                let mut alt_sets: Vec<Vec<Cond>> = vec![base];
+                for h in higher {
+                    let mut next: Vec<Vec<Cond>> = Vec::new();
+                    for set in &alt_sets {
+                        let mut a = set.clone();
+                        a.push(Cond::Eq((*h).clone(), 0));
+                        next.push(a);
+                        if self.analog {
+                            let mut b = set.clone();
+                            b.push(Cond::Less(format!("{h}Weight"), WEIGHT_OFF));
+                            next.push(b);
+                        }
+                    }
+                    alt_sets = next;
+                }
+                for conditions in alt_sets {
+                    transitions.push(Transition {
+                        id: ids.alloc(),
+                        conditions,
+                        dst,
+                    });
+                }
             }
         }
 
@@ -311,10 +366,21 @@ fn emit_state(e: &mut Emitter, state_id: i64, name: &str, motion: &ObjectRef) {
     });
 }
 
-/// An Any-State transition: all `conditions` (`parameter Equals value`) must hold.
+/// One `AnimatorCondition`: `parameter <mode> threshold`.
+#[derive(Clone)]
+enum Cond {
+    /// `Equals` on an `Int` parameter.
+    Eq(String, i64),
+    /// `Greater` on a `Float` parameter.
+    Greater(String, f32),
+    /// `Less` on a `Float` parameter.
+    Less(String, f32),
+}
+
+/// An Any-State transition: all `conditions` must hold (AND).
 struct Transition {
     id: i64,
-    conditions: Vec<(String, i64)>,
+    conditions: Vec<Cond>,
     dst: i64,
 }
 
@@ -329,12 +395,20 @@ fn emit_any_state_transition(e: &mut Emitter, t: &Transition, duration: f32) {
         e.kv("m_Name", "");
         e.key("m_Conditions");
         e.indented(|e| {
-            for (parameter, value) in &t.conditions {
-                e.line(&format!("- m_ConditionMode: {CONDITION_EQUALS}"));
+            for cond in &t.conditions {
+                let (mode, parameter) = match cond {
+                    Cond::Eq(p, _) => (CONDITION_EQUALS, p),
+                    Cond::Greater(p, _) => (CONDITION_GREATER, p),
+                    Cond::Less(p, _) => (CONDITION_LESS, p),
+                };
+                e.line(&format!("- m_ConditionMode: {mode}"));
                 e.indented(|e| {
                     e.kv("m_ConditionEvent", parameter);
                     // Unity's field name really is misspelled ("Treshold").
-                    e.kv_i64("m_EventTreshold", *value);
+                    match cond {
+                        Cond::Eq(_, v) => e.kv_i64("m_EventTreshold", *v),
+                        Cond::Greater(_, w) | Cond::Less(_, w) => e.kv_f32("m_EventTreshold", *w),
+                    }
                 });
             }
         });
@@ -505,26 +579,23 @@ mod tests {
                 .iter()
                 .all(|c| c["m_EventTreshold"].as_i64() == Some(0))
         );
-        // GestureLeft transitions precede GestureRight ones for the same value (priority).
-        let sm = file.documents.iter().find(|d| d.class_id == 1107).unwrap();
-        let order: Vec<i64> = sm.body["m_AnyStateTransitions"]
-            .as_vec()
-            .unwrap()
-            .iter()
-            .map(|r| r["fileID"].as_i64().unwrap())
-            .collect();
-        let by_id = |id: i64| transitions.iter().find(|t| t.file_id == id).unwrap();
-        let fist: Vec<&str> = order
-            .iter()
-            .map(|id| by_id(*id))
-            .filter(|t| t.body["m_Conditions"][0]["m_EventTreshold"].as_i64() == Some(1))
-            .map(|t| {
-                t.body["m_Conditions"][0]["m_ConditionEvent"]
-                    .as_str()
-                    .unwrap()
-            })
-            .collect();
-        assert_eq!(fist, vec!["GestureLeft", "GestureRight"]);
+        // Mutual exclusivity, discrete mode: the earlier parameter's (left-hand) transitions
+        // additionally require the later (winning) parameter to be 0; the later parameter's are
+        // unconditional. So no two transitions to different states can be valid at once.
+        for t in &transitions {
+            let conds = t.body["m_Conditions"].as_vec().unwrap();
+            let first_event = conds[0]["m_ConditionEvent"].as_str().unwrap();
+            if conds[0]["m_EventTreshold"].as_i64() == Some(0) {
+                continue; // the all-zero Neutral transition
+            }
+            if first_event == "GestureLeft" {
+                assert_eq!(conds.len(), 2);
+                assert_eq!(conds[1]["m_ConditionEvent"].as_str(), Some("GestureRight"));
+                assert_eq!(conds[1]["m_EventTreshold"].as_i64(), Some(0));
+            } else {
+                assert_eq!(conds.len(), 1, "right-hand transitions are unconditional");
+            }
+        }
     }
 
     #[test]
@@ -618,25 +689,64 @@ mod tests {
             );
         }
 
-        // Each hand's Fist transition targets that hand's state.
+        // Transitions are mutually exclusive and weight-gated. Right (the winning hand):
+        // one transition, `GestureRight == 1 AND GestureRightWeight > WEIGHT_ON`. Left: two
+        // alternatives, `GestureLeft == 1 AND (GestureRight == 0 | GestureRightWeight <
+        // WEIGHT_OFF)` — so a right thumb resting on the pad (Fist at weight 0) cannot mask or
+        // oscillate against a left-hand expression.
         let transitions: Vec<_> = file
             .documents
             .iter()
             .filter(|d| d.class_id == 1101)
             .collect();
-        for (param, state_name) in [("GestureLeft", "Fist L"), ("GestureRight", "Fist R")] {
-            let t = transitions
-                .iter()
-                .find(|t| {
-                    let c = &t.body["m_Conditions"][0];
-                    t.body["m_Conditions"].as_vec().unwrap().len() == 1
-                        && c["m_ConditionEvent"].as_str() == Some(param)
-                        && c["m_EventTreshold"].as_i64() == Some(1)
-                })
-                .unwrap();
+        // 1 Neutral + per gesture value 1..=7: 1 right + 2 left = 22.
+        assert_eq!(transitions.len(), 22);
+        let dst_name = |t: &&avatar_unity_yaml::UnityDocument| {
             let dst = t.body["m_DstState"]["fileID"].as_i64().unwrap();
-            let dst_state = states.iter().find(|s| s.file_id == dst).unwrap();
-            assert_eq!(dst_state.name(), Some(state_name));
+            states
+                .iter()
+                .find(|s| s.file_id == dst)
+                .and_then(|s| s.name())
+                .unwrap()
+                .to_string()
+        };
+        let fist: Vec<_> = transitions
+            .iter()
+            .filter(|t| {
+                let c = &t.body["m_Conditions"][0];
+                c["m_EventTreshold"].as_i64() == Some(1)
+            })
+            .collect();
+        assert_eq!(fist.len(), 3);
+        for t in &fist {
+            let conds = t.body["m_Conditions"].as_vec().unwrap();
+            match conds[0]["m_ConditionEvent"].as_str().unwrap() {
+                "GestureRight" => {
+                    assert_eq!(dst_name(t), "Fist R");
+                    assert_eq!(conds.len(), 2);
+                    assert_eq!(
+                        conds[1]["m_ConditionEvent"].as_str(),
+                        Some("GestureRightWeight")
+                    );
+                    assert_eq!(
+                        conds[1]["m_ConditionMode"].as_i64(),
+                        Some(CONDITION_GREATER)
+                    );
+                }
+                "GestureLeft" => {
+                    assert_eq!(dst_name(t), "Fist L");
+                    assert_eq!(conds.len(), 2);
+                    // Alternative A: GestureRight == 0. Alternative B: GestureRightWeight < off.
+                    let ev = conds[1]["m_ConditionEvent"].as_str().unwrap();
+                    let mode = conds[1]["m_ConditionMode"].as_i64().unwrap();
+                    let is_eq0 = ev == "GestureRight"
+                        && mode == CONDITION_EQUALS
+                        && conds[1]["m_EventTreshold"].as_i64() == Some(0);
+                    let is_weight_off = ev == "GestureRightWeight" && mode == CONDITION_LESS;
+                    assert!(is_eq0 || is_weight_off, "{ev} mode {mode}");
+                }
+                other => panic!("unexpected condition event {other}"),
+            }
         }
 
         // Deterministic.

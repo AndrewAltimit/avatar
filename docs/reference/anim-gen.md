@@ -205,10 +205,20 @@ wraps layers in the class-91 controller, declaring each `Int` parameter once. Us
 (`GestureLeft` → `GestureLeftWeight`), blending `Neutral` (threshold 0) → the gesture clip
 (threshold 1) — trigger depth *is* expression depth, SDK2's Vive-wand "advanced controls"
 semantics. In a multi-parameter (either-hand) layer each gesture gets one state **per parameter**
-(`Fist L` / `Fist R`) so each hand blends on its own weight, still inside the single layer (the
-first-parameter-wins conflict rule is unchanged), and `fx_gestures` declares the weight `Float`s.
-Caveat: on controllers whose weight only tracks an analog axis for some gestures (Index: Fist),
-other gestures need the trigger held to show — the same trade SDK2 made on wands.
+(`Fist L` / `Fist R`) so each hand blends on its own weight, still inside the single layer, and
+`fx_gestures` declares the weight `Float`s.
+
+Transition conditions are built **mutually exclusive** — two simultaneously-valid Any-State
+transitions to different states ping-pong every crossfade (a visible oscillation whenever both
+hands gesture). At most one target is valid at a time: **later parameters win** (`GestureLeft,
+GestureRight` → the right hand takes the face when both act, VRChat's hands-layer convention),
+and in analog mode "act" is weight-gated (`WEIGHT_ON` 0.05 to claim, `WEIGHT_OFF` 0.02 to
+release; the gap is hysteresis) — necessary because a Vive-wand thumb resting on the touchpad
+centre reports **Fist at weight 0**, and an ungated phantom would mask or oscillate against the
+other hand's real expression. A lower-priority hand's transitions carry one alternative per way
+the winning hand can be inactive (`== 0` or `weight < off`). Caveat: on controllers whose weight
+only tracks an analog axis for some gestures (Index: Fist), other gestures need the trigger held
+to show — the same trade SDK2 made on wands.
 
 ### 5. The toggle bundle (`avatar toggle`) — the end-to-end composite
 

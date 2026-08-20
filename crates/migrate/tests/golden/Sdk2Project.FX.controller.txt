@@ -86,6 +86,13 @@ AnimatorStateMachine:
     - {fileID: 335705499531242}
     - {fileID: 335705499531243}
     - {fileID: 335705499531244}
+    - {fileID: 335705499531245}
+    - {fileID: 335705499531246}
+    - {fileID: 335705499531247}
+    - {fileID: 335705499531248}
+    - {fileID: 335705499531249}
+    - {fileID: 335705499531250}
+    - {fileID: 335705499531251}
   m_EntryTransitions: []
   m_StateMachineTransitions: {}
   m_StateMachineBehaviours: []
@@ -258,6 +265,9 @@ AnimatorStateTransition:
     - m_ConditionMode: 6
       m_ConditionEvent: GestureLeft
       m_EventTreshold: 1
+    - m_ConditionMode: 6
+      m_ConditionEvent: GestureRight
+      m_EventTreshold: 0
   m_DstStateMachine: {fileID: 0}
   m_DstState: {fileID: 335705499531222}
   m_Solo: 0
@@ -281,10 +291,13 @@ AnimatorStateTransition:
   m_Name: 
   m_Conditions:
     - m_ConditionMode: 6
-      m_ConditionEvent: GestureRight
+      m_ConditionEvent: GestureLeft
       m_EventTreshold: 1
+    - m_ConditionMode: 4
+      m_ConditionEvent: GestureRightWeight
+      m_EventTreshold: 0.02
   m_DstStateMachine: {fileID: 0}
-  m_DstState: {fileID: 335705499531224}
+  m_DstState: {fileID: 335705499531222}
   m_Solo: 0
   m_Mute: 0
   m_IsExit: 0
@@ -306,10 +319,13 @@ AnimatorStateTransition:
   m_Name: 
   m_Conditions:
     - m_ConditionMode: 6
-      m_ConditionEvent: GestureLeft
-      m_EventTreshold: 2
+      m_ConditionEvent: GestureRight
+      m_EventTreshold: 1
+    - m_ConditionMode: 3
+      m_ConditionEvent: GestureRightWeight
+      m_EventTreshold: 0.05
   m_DstStateMachine: {fileID: 0}
-  m_DstState: {fileID: 335705499531221}
+  m_DstState: {fileID: 335705499531224}
   m_Solo: 0
   m_Mute: 0
   m_IsExit: 0
@@ -331,8 +347,11 @@ AnimatorStateTransition:
   m_Name: 
   m_Conditions:
     - m_ConditionMode: 6
-      m_ConditionEvent: GestureRight
+      m_ConditionEvent: GestureLeft
       m_EventTreshold: 2
+    - m_ConditionMode: 6
+      m_ConditionEvent: GestureRight
+      m_EventTreshold: 0
   m_DstStateMachine: {fileID: 0}
   m_DstState: {fileID: 335705499531221}
   m_Solo: 0
@@ -357,7 +376,10 @@ AnimatorStateTransition:
   m_Conditions:
     - m_ConditionMode: 6
       m_ConditionEvent: GestureLeft
-      m_EventTreshold: 3
+      m_EventTreshold: 2
+    - m_ConditionMode: 4
+      m_ConditionEvent: GestureRightWeight
+      m_EventTreshold: 0.02
   m_DstStateMachine: {fileID: 0}
   m_DstState: {fileID: 335705499531221}
   m_Solo: 0
@@ -382,7 +404,10 @@ AnimatorStateTransition:
   m_Conditions:
     - m_ConditionMode: 6
       m_ConditionEvent: GestureRight
-      m_EventTreshold: 3
+      m_EventTreshold: 2
+    - m_ConditionMode: 3
+      m_ConditionEvent: GestureRightWeight
+      m_EventTreshold: 0.05
   m_DstStateMachine: {fileID: 0}
   m_DstState: {fileID: 335705499531221}
   m_Solo: 0
@@ -407,9 +432,12 @@ AnimatorStateTransition:
   m_Conditions:
     - m_ConditionMode: 6
       m_ConditionEvent: GestureLeft
-      m_EventTreshold: 4
+      m_EventTreshold: 3
+    - m_ConditionMode: 6
+      m_ConditionEvent: GestureRight
+      m_EventTreshold: 0
   m_DstStateMachine: {fileID: 0}
-  m_DstState: {fileID: 335705499531226}
+  m_DstState: {fileID: 335705499531221}
   m_Solo: 0
   m_Mute: 0
   m_IsExit: 0
@@ -431,10 +459,13 @@ AnimatorStateTransition:
   m_Name: 
   m_Conditions:
     - m_ConditionMode: 6
-      m_ConditionEvent: GestureRight
-      m_EventTreshold: 4
+      m_ConditionEvent: GestureLeft
+      m_EventTreshold: 3
+    - m_ConditionMode: 4
+      m_ConditionEvent: GestureRightWeight
+      m_EventTreshold: 0.02
   m_DstStateMachine: {fileID: 0}
-  m_DstState: {fileID: 335705499531228}
+  m_DstState: {fileID: 335705499531221}
   m_Solo: 0
   m_Mute: 0
   m_IsExit: 0
@@ -456,8 +487,11 @@ AnimatorStateTransition:
   m_Name: 
   m_Conditions:
     - m_ConditionMode: 6
-      m_ConditionEvent: GestureLeft
-      m_EventTreshold: 5
+      m_ConditionEvent: GestureRight
+      m_EventTreshold: 3
+    - m_ConditionMode: 3
+      m_ConditionEvent: GestureRightWeight
+      m_EventTreshold: 0.05
   m_DstStateMachine: {fileID: 0}
   m_DstState: {fileID: 335705499531221}
   m_Solo: 0
@@ -481,10 +515,13 @@ AnimatorStateTransition:
   m_Name: 
   m_Conditions:
     - m_ConditionMode: 6
+      m_ConditionEvent: GestureLeft
+      m_EventTreshold: 4
+    - m_ConditionMode: 6
       m_ConditionEvent: GestureRight
-      m_EventTreshold: 5
+      m_EventTreshold: 0
   m_DstStateMachine: {fileID: 0}
-  m_DstState: {fileID: 335705499531221}
+  m_DstState: {fileID: 335705499531226}
   m_Solo: 0
   m_Mute: 0
   m_IsExit: 0
@@ -507,9 +544,12 @@ AnimatorStateTransition:
   m_Conditions:
     - m_ConditionMode: 6
       m_ConditionEvent: GestureLeft
-      m_EventTreshold: 6
+      m_EventTreshold: 4
+    - m_ConditionMode: 4
+      m_ConditionEvent: GestureRightWeight
+      m_EventTreshold: 0.02
   m_DstStateMachine: {fileID: 0}
-  m_DstState: {fileID: 335705499531221}
+  m_DstState: {fileID: 335705499531226}
   m_Solo: 0
   m_Mute: 0
   m_IsExit: 0
@@ -532,9 +572,12 @@ AnimatorStateTransition:
   m_Conditions:
     - m_ConditionMode: 6
       m_ConditionEvent: GestureRight
-      m_EventTreshold: 6
+      m_EventTreshold: 4
+    - m_ConditionMode: 3
+      m_ConditionEvent: GestureRightWeight
+      m_EventTreshold: 0.05
   m_DstStateMachine: {fileID: 0}
-  m_DstState: {fileID: 335705499531221}
+  m_DstState: {fileID: 335705499531228}
   m_Solo: 0
   m_Mute: 0
   m_IsExit: 0
@@ -557,7 +600,10 @@ AnimatorStateTransition:
   m_Conditions:
     - m_ConditionMode: 6
       m_ConditionEvent: GestureLeft
-      m_EventTreshold: 7
+      m_EventTreshold: 5
+    - m_ConditionMode: 6
+      m_ConditionEvent: GestureRight
+      m_EventTreshold: 0
   m_DstStateMachine: {fileID: 0}
   m_DstState: {fileID: 335705499531221}
   m_Solo: 0
@@ -581,8 +627,207 @@ AnimatorStateTransition:
   m_Name: 
   m_Conditions:
     - m_ConditionMode: 6
+      m_ConditionEvent: GestureLeft
+      m_EventTreshold: 5
+    - m_ConditionMode: 4
+      m_ConditionEvent: GestureRightWeight
+      m_EventTreshold: 0.02
+  m_DstStateMachine: {fileID: 0}
+  m_DstState: {fileID: 335705499531221}
+  m_Solo: 0
+  m_Mute: 0
+  m_IsExit: 0
+  serializedVersion: 3
+  m_TransitionDuration: 0.1
+  m_TransitionOffset: 0
+  m_ExitTime: 0.75
+  m_HasExitTime: 0
+  m_HasFixedDuration: 1
+  m_InterruptionSource: 0
+  m_OrderedInterruption: 1
+  m_CanTransitionToSelf: 0
+--- !u!1101 &335705499531245
+AnimatorStateTransition:
+  m_ObjectHideFlags: 1
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: 
+  m_Conditions:
+    - m_ConditionMode: 6
+      m_ConditionEvent: GestureRight
+      m_EventTreshold: 5
+    - m_ConditionMode: 3
+      m_ConditionEvent: GestureRightWeight
+      m_EventTreshold: 0.05
+  m_DstStateMachine: {fileID: 0}
+  m_DstState: {fileID: 335705499531221}
+  m_Solo: 0
+  m_Mute: 0
+  m_IsExit: 0
+  serializedVersion: 3
+  m_TransitionDuration: 0.1
+  m_TransitionOffset: 0
+  m_ExitTime: 0.75
+  m_HasExitTime: 0
+  m_HasFixedDuration: 1
+  m_InterruptionSource: 0
+  m_OrderedInterruption: 1
+  m_CanTransitionToSelf: 0
+--- !u!1101 &335705499531246
+AnimatorStateTransition:
+  m_ObjectHideFlags: 1
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: 
+  m_Conditions:
+    - m_ConditionMode: 6
+      m_ConditionEvent: GestureLeft
+      m_EventTreshold: 6
+    - m_ConditionMode: 6
+      m_ConditionEvent: GestureRight
+      m_EventTreshold: 0
+  m_DstStateMachine: {fileID: 0}
+  m_DstState: {fileID: 335705499531221}
+  m_Solo: 0
+  m_Mute: 0
+  m_IsExit: 0
+  serializedVersion: 3
+  m_TransitionDuration: 0.1
+  m_TransitionOffset: 0
+  m_ExitTime: 0.75
+  m_HasExitTime: 0
+  m_HasFixedDuration: 1
+  m_InterruptionSource: 0
+  m_OrderedInterruption: 1
+  m_CanTransitionToSelf: 0
+--- !u!1101 &335705499531247
+AnimatorStateTransition:
+  m_ObjectHideFlags: 1
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: 
+  m_Conditions:
+    - m_ConditionMode: 6
+      m_ConditionEvent: GestureLeft
+      m_EventTreshold: 6
+    - m_ConditionMode: 4
+      m_ConditionEvent: GestureRightWeight
+      m_EventTreshold: 0.02
+  m_DstStateMachine: {fileID: 0}
+  m_DstState: {fileID: 335705499531221}
+  m_Solo: 0
+  m_Mute: 0
+  m_IsExit: 0
+  serializedVersion: 3
+  m_TransitionDuration: 0.1
+  m_TransitionOffset: 0
+  m_ExitTime: 0.75
+  m_HasExitTime: 0
+  m_HasFixedDuration: 1
+  m_InterruptionSource: 0
+  m_OrderedInterruption: 1
+  m_CanTransitionToSelf: 0
+--- !u!1101 &335705499531248
+AnimatorStateTransition:
+  m_ObjectHideFlags: 1
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: 
+  m_Conditions:
+    - m_ConditionMode: 6
+      m_ConditionEvent: GestureRight
+      m_EventTreshold: 6
+    - m_ConditionMode: 3
+      m_ConditionEvent: GestureRightWeight
+      m_EventTreshold: 0.05
+  m_DstStateMachine: {fileID: 0}
+  m_DstState: {fileID: 335705499531221}
+  m_Solo: 0
+  m_Mute: 0
+  m_IsExit: 0
+  serializedVersion: 3
+  m_TransitionDuration: 0.1
+  m_TransitionOffset: 0
+  m_ExitTime: 0.75
+  m_HasExitTime: 0
+  m_HasFixedDuration: 1
+  m_InterruptionSource: 0
+  m_OrderedInterruption: 1
+  m_CanTransitionToSelf: 0
+--- !u!1101 &335705499531249
+AnimatorStateTransition:
+  m_ObjectHideFlags: 1
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: 
+  m_Conditions:
+    - m_ConditionMode: 6
+      m_ConditionEvent: GestureLeft
+      m_EventTreshold: 7
+    - m_ConditionMode: 6
+      m_ConditionEvent: GestureRight
+      m_EventTreshold: 0
+  m_DstStateMachine: {fileID: 0}
+  m_DstState: {fileID: 335705499531221}
+  m_Solo: 0
+  m_Mute: 0
+  m_IsExit: 0
+  serializedVersion: 3
+  m_TransitionDuration: 0.1
+  m_TransitionOffset: 0
+  m_ExitTime: 0.75
+  m_HasExitTime: 0
+  m_HasFixedDuration: 1
+  m_InterruptionSource: 0
+  m_OrderedInterruption: 1
+  m_CanTransitionToSelf: 0
+--- !u!1101 &335705499531250
+AnimatorStateTransition:
+  m_ObjectHideFlags: 1
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: 
+  m_Conditions:
+    - m_ConditionMode: 6
+      m_ConditionEvent: GestureLeft
+      m_EventTreshold: 7
+    - m_ConditionMode: 4
+      m_ConditionEvent: GestureRightWeight
+      m_EventTreshold: 0.02
+  m_DstStateMachine: {fileID: 0}
+  m_DstState: {fileID: 335705499531221}
+  m_Solo: 0
+  m_Mute: 0
+  m_IsExit: 0
+  serializedVersion: 3
+  m_TransitionDuration: 0.1
+  m_TransitionOffset: 0
+  m_ExitTime: 0.75
+  m_HasExitTime: 0
+  m_HasFixedDuration: 1
+  m_InterruptionSource: 0
+  m_OrderedInterruption: 1
+  m_CanTransitionToSelf: 0
+--- !u!1101 &335705499531251
+AnimatorStateTransition:
+  m_ObjectHideFlags: 1
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: 
+  m_Conditions:
+    - m_ConditionMode: 6
       m_ConditionEvent: GestureRight
       m_EventTreshold: 7
+    - m_ConditionMode: 3
+      m_ConditionEvent: GestureRightWeight
+      m_EventTreshold: 0.05
   m_DstStateMachine: {fileID: 0}
   m_DstState: {fileID: 335705499531221}
   m_Solo: 0
