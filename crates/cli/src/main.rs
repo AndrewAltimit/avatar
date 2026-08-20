@@ -153,6 +153,9 @@ fn run() -> Result<ExitCode> {
         Command::AnimGen(AnimGenCommand::Params(args)) => {
             cmd::anim_gen::params(&args).map(|()| ExitCode::SUCCESS)
         }
+        Command::AnimGen(AnimGenCommand::Puppet(args)) => {
+            cmd::anim_gen::puppet(&args).map(|()| ExitCode::SUCCESS)
+        }
         Command::AnimGen(AnimGenCommand::Menu(args)) => {
             cmd::anim_gen::menu(&args).map(|()| ExitCode::SUCCESS)
         }

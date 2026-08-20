@@ -220,6 +220,24 @@ the winning hand can be inactive (`== 0` or `weight < off`). Caveat: on controll
 only tracks an analog axis for some gestures (Index: Fist), other gestures need the trigger held
 to show — the same trade SDK2 made on wands.
 
+### 4c. Radial-puppet grafting (`avatar anim-gen puppet`)
+
+`avatar anim-gen puppet --controller FX.controller --parameters Parameters.asset --menu
+Menu.asset --param Blink --clip <neutral-guid>@0 --clip <pose-guid>@1 [--menu-name N]
+[--layer-name L] [--on 0.01 --off 0.005] [--unsaved] [--default-value V]` grafts an analog dial
+into an **existing** avatar, splicing (via `EditableUnityFile`, fileIDs/formatting preserved):
+
+- the float parameter + a new layer into the FX controller, whose state machine is
+  `BlendTree::to_gated_layer_fragment`: a default `Off` state that plays **nothing** (WD off —
+  the layer is inert and lower layers keep the properties) and an `On` state playing the 1D tree,
+  entered above `--on` and left below `--off` (hysteresis);
+- the float into the `VRCExpressionParameters` asset (8 sync bits, saved by default);
+- a `RadialPuppet` control into the `VRCExpressionsMenu` asset.
+
+Built for the mikunpc calm-blink dial (the wand touchpad centre wouldn't deliver the Fist
+gesture, so the same Neutral→eyes-closed blend the Fist state plays became an Action-Menu radial
+— dial depth = blink depth). `avatar lint` cross-checks the three assets after the splice.
+
 ### 5. The toggle bundle (`avatar toggle`) — the end-to-end composite
 
 A working in-game toggle needs five cooperating assets; the `toggle` module assembles all of them

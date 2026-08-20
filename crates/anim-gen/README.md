@@ -37,6 +37,9 @@ output back** in tests.
 - `expressions`: `ExpressionParams`/`ExpressionParamSpec` + `ExpressionsMenu`/`MenuControlSpec` —
   emit `VRCExpressionParameters` / `VRCExpressionsMenu` MonoBehaviour assets (stable SDK script
   GUIDs as overridable defaults; validated by `avatar-vrc-descriptor`'s structural reader).
+- `blendtree` also emits `to_gated_layer_fragment` — an Off/On layer (Off plays nothing; the
+  tree engages above a threshold, disengages below a lower one) for grafting a radial-puppet
+  dial into an existing controller (`avatar anim-gen puppet`).
 - `gesture`: `GestureLayer::new(layer, "GestureLeft", neutral)` / `GestureLayer::either_hand(layer,
   neutral)` + `.motion(n, clip)` [+ `.analog()`] → `.to_state_fragment(&mut IdGen)`;
   `fx_gestures(name, &layers, &extra, &mut IdGen)` — gesture-driven FX layers (Neutral + one state

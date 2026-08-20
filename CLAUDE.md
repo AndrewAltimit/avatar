@@ -141,8 +141,10 @@ READMEs. What exists today, with its doc:
   (`--blender-script`, [`armature-repair.md`](docs/reference/armature-repair.md)).
 - **Generate (M4)** — `avatar anim-gen clip|blendtree|controller|params|menu`: Unity-YAML `.anim`,
   a full FX `AnimatorController`, and VRC expression parameters/menu assets, deterministic fileIDs;
-  plus the composite **`avatar toggle`** — the full ten-file toggle bundle (clips + two-state FX
-  controller + params + menu + guid-pinning `.meta`s) ([`anim-gen.md`](docs/reference/anim-gen.md)).
+  plus the composites **`avatar toggle`** — the full ten-file toggle bundle (clips + two-state FX
+  controller + params + menu + guid-pinning `.meta`s) — and **`avatar anim-gen puppet`** — graft a
+  radial-puppet dial (gated blend-tree layer + float param + menu control) into an existing
+  controller/params/menu by span-splice ([`anim-gen.md`](docs/reference/anim-gen.md)).
 - **Edit** — `avatar asset set` / `avatar_unity_yaml::EditableUnityFile`: surgical, round-trip-safe
   value edits to an *existing* Unity asset (scalars, reference re-targets, flow-map subfields) **and
   structural edits** (remove/replace/append documents, block-sequence items) by span-splicing raw

@@ -21,6 +21,7 @@
 //! [`BlendTree::to_state_fragment`] for callers who want a drop-in sub-state-machine.
 
 use crate::IdGen;
+use crate::gesture::{CONDITION_GREATER, CONDITION_LESS};
 use crate::yaml_emit::{Emitter, ObjectRef};
 
 /// `m_BlendType` on a BlendTree: 0 = Simple 1D. (2D and Direct exist; this generator emits 1D.)
@@ -216,6 +217,144 @@ impl BlendTree {
         (e.into_string(), sm_id)
     }
 
+    /// Emit a **gated layer** fragment for this tree: an `Off` default state that plays nothing
+    /// (Write Defaults off — the layer writes no properties, so lower layers keep owning them)
+    /// and an `On` state playing the tree, with `Off → On` when `gate_parameter` rises above
+    /// `on` and `On → Off` when it falls below `off` (the gap is hysteresis, so a value resting
+    /// at one threshold can't chatter). The natural shape for a radial-puppet layer: at dial 0
+    /// the layer is inert, any dial-up hands the properties to the tree.
+    ///
+    /// The fragment holds the `AnimatorStateMachine` (1107), both `AnimatorState`s (1102), both
+    /// `AnimatorStateTransition`s (1101) and the `BlendTree` (206); returns it with the
+    /// state-machine fileID for the layer's `m_StateMachine`.
+    pub fn to_gated_layer_fragment(
+        &self,
+        gate_parameter: &str,
+        on: f32,
+        off: f32,
+        ids: &mut IdGen,
+    ) -> (String, i64) {
+        let sm_id = ids.alloc();
+        let off_state = ids.alloc();
+        let on_state = ids.alloc();
+        let tree_id = ids.alloc();
+        let t_on = ids.alloc();
+        let t_off = ids.alloc();
+
+        let mut e = Emitter::new();
+
+        // --- AnimatorStateMachine (1107)
+        e.doc_header(1107, sm_id);
+        e.line("AnimatorStateMachine:");
+        e.indented(|e| {
+            e.kv("m_ObjectHideFlags", "1");
+            e.kv("m_CorrespondingSourceObject", "{fileID: 0}");
+            e.kv("m_PrefabInstance", "{fileID: 0}");
+            e.kv("m_PrefabAsset", "{fileID: 0}");
+            e.kv("m_Name", &self.name);
+            e.key("m_ChildStates");
+            e.indented(|e| {
+                for (id, row) in [(off_state, 0), (on_state, 1)] {
+                    e.line("- serializedVersion: 1");
+                    e.indented(|e| {
+                        e.kv_ref("m_State", &ObjectRef::local(id));
+                        e.kv("m_Position", &format!("{{x: 300, y: {}, z: 0}}", 60 * row));
+                    });
+                }
+            });
+            e.kv("m_ChildStateMachines", "[]");
+            e.kv("m_AnyStateTransitions", "[]");
+            e.kv("m_EntryTransitions", "[]");
+            e.kv("m_StateMachineTransitions", "{}");
+            e.kv("m_StateMachineBehaviours", "[]");
+            e.kv("m_AnyStatePosition", "{x: 50, y: 20, z: 0}");
+            e.kv("m_EntryPosition", "{x: 50, y: 120, z: 0}");
+            e.kv("m_ExitPosition", "{x: 800, y: 120, z: 0}");
+            e.kv("m_ParentStateMachinePosition", "{x: 800, y: 20, z: 0}");
+            e.kv_ref("m_DefaultState", &ObjectRef::local(off_state));
+        });
+
+        // --- AnimatorStates (1102): Off (no motion) and On (the tree).
+        for (id, name, motion, transition) in [
+            (off_state, "Off", ObjectRef::null(), t_on),
+            (on_state, "On", ObjectRef::local(tree_id), t_off),
+        ] {
+            e.doc_header(1102, id);
+            e.line("AnimatorState:");
+            e.indented(|e| {
+                e.kv("m_ObjectHideFlags", "1");
+                e.kv("m_CorrespondingSourceObject", "{fileID: 0}");
+                e.kv("m_PrefabInstance", "{fileID: 0}");
+                e.kv("m_PrefabAsset", "{fileID: 0}");
+                e.kv("m_Name", name);
+                e.kv("m_Speed", "1");
+                e.kv("m_CycleOffset", "0");
+                e.key("m_Transitions");
+                e.indented(|e| {
+                    e.line(&format!("- {}", ObjectRef::local(transition).render()));
+                });
+                e.kv("m_StateMachineBehaviours", "[]");
+                e.kv("m_Position", "{x: 50, y: 50, z: 0}");
+                e.kv("m_IKOnFeet", "0");
+                e.kv("m_WriteDefaultValues", "0");
+                e.kv("m_Mirror", "0");
+                e.kv("m_SpeedParameterActive", "0");
+                e.kv("m_MirrorParameterActive", "0");
+                e.kv("m_CycleOffsetParameterActive", "0");
+                e.kv("m_TimeParameterActive", "0");
+                e.kv_ref("m_Motion", &motion);
+                e.kv("m_Tag", "");
+                e.kv("m_SpeedParameter", "");
+                e.kv("m_MirrorParameter", "");
+                e.kv("m_CycleOffsetParameter", "");
+                e.kv("m_TimeParameter", "");
+            });
+        }
+
+        // --- AnimatorStateTransitions (1101): Off→On (Greater `on`), On→Off (Less `off`).
+        for (id, dst, mode, threshold) in [
+            (t_on, on_state, CONDITION_GREATER, on),
+            (t_off, off_state, CONDITION_LESS, off),
+        ] {
+            e.doc_header(1101, id);
+            e.line("AnimatorStateTransition:");
+            e.indented(|e| {
+                e.kv("m_ObjectHideFlags", "1");
+                e.kv("m_CorrespondingSourceObject", "{fileID: 0}");
+                e.kv("m_PrefabInstance", "{fileID: 0}");
+                e.kv("m_PrefabAsset", "{fileID: 0}");
+                e.kv("m_Name", "");
+                e.key("m_Conditions");
+                e.indented(|e| {
+                    e.line(&format!("- m_ConditionMode: {mode}"));
+                    e.indented(|e| {
+                        e.kv("m_ConditionEvent", gate_parameter);
+                        e.kv_f32("m_EventTreshold", threshold);
+                    });
+                });
+                e.kv("m_DstStateMachine", "{fileID: 0}");
+                e.kv_ref("m_DstState", &ObjectRef::local(dst));
+                e.kv("m_Solo", "0");
+                e.kv("m_Mute", "0");
+                e.kv("m_IsExit", "0");
+                e.kv("serializedVersion", "3");
+                e.kv_f32("m_TransitionDuration", 0.1);
+                e.kv_i64("m_TransitionOffset", 0);
+                e.kv_f32("m_ExitTime", 0.75);
+                e.kv("m_HasExitTime", "0");
+                e.kv("m_HasFixedDuration", "1");
+                e.kv_i64("m_InterruptionSource", 0);
+                e.kv("m_OrderedInterruption", "1");
+                e.kv("m_CanTransitionToSelf", "0");
+            });
+        }
+
+        // --- BlendTree (206)
+        self.emit_tree(&mut e, tree_id);
+
+        (e.into_string(), sm_id)
+    }
+
     /// A human-readable note on how to graft the emitted BlendTree into an existing FX controller.
     pub fn wiring_note(&self, tree_file_id: i64) -> String {
         format!(
@@ -241,4 +380,77 @@ fn emit_child(e: &mut Emitter, c: &ChildMotion) {
         e.kv("m_DirectBlendParameter", "Blend");
         e.kv_i64("m_Mirror", c.mirror as i64);
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::yaml_emit::UNITY_PREAMBLE;
+    use avatar_unity_yaml::UnityFile;
+
+    /// The gated layer fragment: default `Off` state with no motion and a `> on` transition into
+    /// `On` (the tree), `< off` back out — hysteresis thresholds, deterministic ids.
+    #[test]
+    fn gated_layer_fragment_gates_the_tree_on_the_parameter() {
+        let tree = BlendTree::analog_gesture("Blink", "Blink")
+            .clip("a000000000000000000000000000000a", 0.0)
+            .clip("a000000000000000000000000000000b", 1.0);
+        let mut ids = IdGen::new("Blink puppet");
+        let (frag, sm_id) = tree.to_gated_layer_fragment("Blink", 0.01, 0.005, &mut ids);
+        let file = UnityFile::parse(&format!("{UNITY_PREAMBLE}{frag}")).unwrap();
+
+        let sm = file.documents.iter().find(|d| d.class_id == 1107).unwrap();
+        assert_eq!(sm.file_id, sm_id);
+        let states: Vec<_> = file
+            .documents
+            .iter()
+            .filter(|d| d.class_id == 1102)
+            .collect();
+        assert_eq!(
+            states.iter().map(|s| s.name().unwrap()).collect::<Vec<_>>(),
+            vec!["Off", "On"]
+        );
+        let off = states[0];
+        let on = states[1];
+        // Off is the default state and plays nothing; On plays the tree.
+        assert_eq!(
+            sm.body["m_DefaultState"]["fileID"].as_i64(),
+            Some(off.file_id)
+        );
+        assert_eq!(off.body["m_Motion"]["fileID"].as_i64(), Some(0));
+        let tree_doc = file.documents.iter().find(|d| d.class_id == 206).unwrap();
+        assert_eq!(
+            on.body["m_Motion"]["fileID"].as_i64(),
+            Some(tree_doc.file_id)
+        );
+        // Transitions: Off's goes to On with Greater 0.01; On's back with Less 0.005.
+        let transitions: Vec<_> = file
+            .documents
+            .iter()
+            .filter(|d| d.class_id == 1101)
+            .collect();
+        assert_eq!(transitions.len(), 2);
+        let by_id = |id: i64| transitions.iter().find(|t| t.file_id == id).unwrap();
+        let t_on = by_id(off.body["m_Transitions"][0]["fileID"].as_i64().unwrap());
+        assert_eq!(t_on.body["m_DstState"]["fileID"].as_i64(), Some(on.file_id));
+        assert_eq!(
+            t_on.body["m_Conditions"][0]["m_ConditionMode"].as_i64(),
+            Some(3)
+        );
+        let t_off = by_id(on.body["m_Transitions"][0]["fileID"].as_i64().unwrap());
+        assert_eq!(
+            t_off.body["m_DstState"]["fileID"].as_i64(),
+            Some(off.file_id)
+        );
+        assert_eq!(
+            t_off.body["m_Conditions"][0]["m_ConditionMode"].as_i64(),
+            Some(4)
+        );
+        // Deterministic.
+        let (again, _) = BlendTree::analog_gesture("Blink", "Blink")
+            .clip("a000000000000000000000000000000a", 0.0)
+            .clip("a000000000000000000000000000000b", 1.0)
+            .to_gated_layer_fragment("Blink", 0.01, 0.005, &mut IdGen::new("Blink puppet"));
+        assert_eq!(frag, again);
+    }
 }
