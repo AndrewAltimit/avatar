@@ -28,6 +28,14 @@ pub struct BlendshapesArgs {
     /// Only channels whose name contains this (case-insensitive).
     #[arg(long)]
     filter: Option<String>,
+    /// Also write, per listed channel and slot, a PNG mask of the touched triangles' UV
+    /// footprint (`<DIR>/<channel>_slot<N>.png`, white where they sample) — shows exactly which
+    /// texels of that slot's texture the shape's geometry renders with.
+    #[arg(long, value_name = "DIR")]
+    uv_mask: Option<std::path::PathBuf>,
+    /// Mask resolution (square).
+    #[arg(long, default_value_t = 1024)]
+    uv_mask_size: u32,
     /// Emit a machine-readable JSON report instead of human-readable text.
     #[arg(long)]
     json: bool,
@@ -84,6 +92,49 @@ pub fn blendshapes(args: &BlendshapesArgs) -> Result<()> {
                     *slot_tris
                         .entry(m.triangle_material(tri) as u32)
                         .or_default() += 1;
+                }
+            }
+        }
+        // Optional per-slot UV footprint masks.
+        if let (Some(dir), Some(m)) = (&args.uv_mask, mesh) {
+            std::fs::create_dir_all(dir).with_context(|| format!("creating {}", dir.display()))?;
+            if let Some(uvs) = &m.uvs {
+                let (w, h) = (args.uv_mask_size, args.uv_mask_size);
+                for &slot in slot_tris.keys() {
+                    let mut mask = vec![0u8; (w * h) as usize];
+                    for tri in 0..m.indices.len() / 3 {
+                        if m.triangle_material(tri) as u32 != slot {
+                            continue;
+                        }
+                        let touched = (0..3).any(|c| {
+                            let v = m.indices[tri * 3 + c] as usize;
+                            targets.contains(&m.control_point_of_vertex[v])
+                        });
+                        if !touched {
+                            continue;
+                        }
+                        let p = std::array::from_fn(|c| {
+                            let v = m.indices[tri * 3 + c] as usize;
+                            (
+                                uvs[v][0].rem_euclid(1.0) * w as f32,
+                                (1.0 - uvs[v][1].rem_euclid(1.0)) * h as f32,
+                            )
+                        });
+                        for_each_tri_pixel(w, h, p, |x, y| {
+                            mask[(y * w + x) as usize] = 255;
+                        });
+                    }
+                    let safe: String = ch
+                        .name
+                        .chars()
+                        .map(|c| if c.is_alphanumeric() { c } else { '_' })
+                        .collect();
+                    let path = dir.join(format!("{safe}_slot{slot}.png"));
+                    image::GrayImage::from_raw(w, h, mask)
+                        .context("mask buffer")?
+                        .save(&path)
+                        .with_context(|| format!("writing {}", path.display()))?;
+                    eprintln!("wrote {}", path.display());
                 }
             }
         }
