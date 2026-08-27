@@ -101,15 +101,50 @@ pub struct OscCaptureArgs {
     /// Print the summary as JSON instead of the table.
     #[arg(long)]
     json: bool,
+    /// Don't advertise an OSCQuery service over mDNS. Without advertisement only legacy
+    /// fixed-port output (9001) is captured; modern VRChat routes output to discovered services.
+    #[arg(long)]
+    no_advertise: bool,
 }
 
 pub fn capture(args: &OscCaptureArgs) -> Result<()> {
     use std::io::Write as _;
-    let mut client = ParamClient::new(
-        (args.host.as_str(), args.port),
-        ("127.0.0.1", avatar_osc::VRCHAT_RECV_PORT),
-    )
-    .context("binding OSC capture socket")?;
+    // Bind the requested port; if it's taken (another OSC app), fall back to an ephemeral port —
+    // with OSCQuery advertisement the actual number no longer matters.
+    let target = ("127.0.0.1", avatar_osc::VRCHAT_RECV_PORT);
+    let mut client = match ParamClient::new((args.host.as_str(), args.port), target) {
+        Ok(c) => c,
+        Err(e) if !args.no_advertise => {
+            eprintln!(
+                "note: could not bind {}:{} ({e:#}); using an ephemeral port (OSCQuery will \
+                 advertise it)",
+                args.host, args.port
+            );
+            ParamClient::new((args.host.as_str(), 0), target)
+                .context("binding OSC capture socket")?
+        }
+        Err(e) => return Err(e).context("binding OSC capture socket"),
+    };
+    let listen_port = client.local_addr()?.port();
+    let advertiser = if args.no_advertise {
+        None
+    } else {
+        match avatar_osc::oscquery::OscQueryAdvertiser::start("avatar-capture", listen_port) {
+            Ok(a) => {
+                eprintln!(
+                    "advertising OSCQuery service '{}' (HTTP :{}) — VRChat discovers it and \
+                     sends parameters to :{listen_port}",
+                    a.name(),
+                    a.http_port()
+                );
+                Some(a)
+            }
+            Err(e) => {
+                eprintln!("note: OSCQuery advertisement failed ({e:#}); legacy port capture only");
+                None
+            }
+        }
+    };
     let mut sink = match &args.output {
         Some(path) => Some(std::io::BufWriter::new(
             std::fs::File::create(path).with_context(|| format!("creating {}", path.display()))?,
@@ -121,8 +156,27 @@ pub fn capture(args: &OscCaptureArgs) -> Result<()> {
         args.host, args.port, args.seconds
     );
     let mut cap = avatar_osc::capture::Capture::new();
-    let deadline = Instant::now() + Duration::from_secs(args.seconds);
+    let start = Instant::now();
+    let deadline = start + Duration::from_secs(args.seconds);
+    let mut nagged = false;
+    let mut vrchat_seen = false;
     while Instant::now() < deadline {
+        if let Some(a) = &advertiser {
+            for inst in a.vrchat_announcements() {
+                if !vrchat_seen {
+                    eprintln!("(VRChat's own OSCQuery service is announcing: {inst})");
+                    vrchat_seen = true;
+                }
+            }
+        }
+        if !nagged && cap.events().is_empty() && start.elapsed() > Duration::from_secs(10) {
+            nagged = true;
+            eprintln!(
+                "no parameters after 10s — check: OSC enabled in VRChat (Action Menu → Options \
+                 → OSC → Enabled), an avatar is loaded, and this runs on the same machine as \
+                 VRChat. Toggling OSC off/on forces VRChat to re-discover services."
+            );
+        }
         for update in client.poll()? {
             let e = cap.record(&update.name, update.value);
             if let Some(sink) = &mut sink {

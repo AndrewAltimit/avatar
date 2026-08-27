@@ -134,6 +134,18 @@ and the FX layer is at fault. `avatar osc capture [--seconds N] [-o events.jsonl
 echoes updates live, appends raw events as JSON lines as they arrive (a cut-short session keeps
 its data), and prints the summary when the clock runs out.
 
+Both capture front-ends **advertise themselves over OSCQuery** (`avatar_osc::oscquery`,
+`--no-advertise` to opt out): a hand-built mDNS responder answers `PTR _oscjson._tcp.local`
+(and announces periodically) while a tiny HTTP responder serves the `?HOST_INFO` handshake and a
+parameter tree exposing `/avatar` — which is what tells modern VRChat to route its
+avatar-parameter output to the advertised UDP port, *whatever* it is. That removes the
+fixed-9001 assumption entirely (legacy output still lands when the port is free; if it is
+taken, the capture falls back to an ephemeral port and lets discovery do the work). The mDNS
+subset is hand-parsed/built like every format in this repo (12-byte header + labelled names,
+compression-pointer-aware reader), the responder also reports VRChat's own `VRChat-Client-*`
+announcements as a liveness diagnostic, and both the DNS round-trip and the handshake JSON are
+unit-tested. Scope: same-host VRChat (the advertised address is `127.0.0.1`).
+
 The same logic ships as a **standalone, dependency-slim binary** `avatar-gesture-capture`
 (`crates/osc/src/bin/gesture_capture.rs`, `[[bin]]` in the crate) precisely so it cross-compiles
 to a double-clickable Windows `.exe` (`cargo build -p avatar-osc --bins --release --target

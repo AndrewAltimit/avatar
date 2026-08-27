@@ -177,8 +177,10 @@ READMEs. What exists today, with its doc:
 - **Runtime rig** — `mesh`/`pose`/`input` + `gltf`, the renderer-agnostic VR-spectator foundation
   ([`rig-runtime.md`](docs/reference/rig-runtime.md)).
 
-In flight: the OpenXR on-device input backend for the gesture daemon; live OSCQuery (HTTP/mDNS)
-discovery; running the generated Blender repair script under CI. See [`PLAN.md`](PLAN.md).
+In flight: the OpenXR on-device input backend for the gesture daemon; OSCQuery **advertisement**
+(mDNS responder + HOST_INFO/tree HTTP) landed in `avatar_osc::oscquery` for the capture tools —
+full *browse/resolve* discovery is still open; running the generated Blender repair script under
+CI. See [`PLAN.md`](PLAN.md).
 
 ## Gotchas
 

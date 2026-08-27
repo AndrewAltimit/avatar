@@ -48,6 +48,7 @@ use rosc::{OscMessage, OscPacket};
 
 pub mod capture;
 pub mod codec;
+pub mod oscquery;
 pub mod query;
 
 pub use codec::{
@@ -108,6 +109,12 @@ impl ParamClient {
     /// The address sends are aimed at (where VRChat listens).
     pub fn target(&self) -> std::net::SocketAddr {
         self.target
+    }
+
+    /// The local address the receive socket is bound to (useful when bound to port 0 and the
+    /// real port must be advertised, e.g. over OSCQuery).
+    pub fn local_addr(&self) -> Result<std::net::SocketAddr> {
+        self.socket.local_addr().context("OSC socket local addr")
     }
 
     /// Encode and send one OSC message to VRChat.
