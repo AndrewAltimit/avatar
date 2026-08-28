@@ -34,7 +34,10 @@ pub fn mat4_from_fbx(m: &[f64; 16]) -> Mat4 {
 /// Convert an FBX `Lcl` TRS (Euler degrees, XYZ order) to a local matrix. Used only for bones that
 /// carry no skin cluster (twist/accessory bones); it ignores `PreRotation`/pivots, which
 /// `avatar-fbx` does not read — acceptable because such bones drive no vertices.
-fn lcl_to_mat4(t: &LocalTransform) -> Mat4 {
+/// An FBX node's local matrix from its `Lcl Translation/Rotation/Scaling` (XYZ Euler, degrees).
+/// Note: `PreRotation`/pivots are not folded in — this is the plain Lcl TRS, which is what a
+/// Blender-style export carries on mesh and armature nodes.
+pub fn lcl_to_mat4(t: &LocalTransform) -> Mat4 {
     let [tx, ty, tz] = t.translation.unwrap_or([0.0; 3]);
     let [rx, ry, rz] = t.rotation.unwrap_or([0.0; 3]);
     let [sx, sy, sz] = t.scaling.unwrap_or([1.0; 3]);
@@ -49,6 +52,30 @@ fn lcl_to_mat4(t: &LocalTransform) -> Mat4 {
         rot,
         Vec3::new(tx as f32, ty as f32, tz as f32),
     )
+}
+
+/// The global matrix of FBX `Model` node `id`: its Lcl TRS composed with every `Model` ancestor's.
+/// For a skinned mesh node this is the space its raw control points live in (e.g. Blender's
+/// `-90° X` on the mesh object that turns Z-up geometry into the file's Y-up world).
+pub fn model_global_matrix(scene: &FbxScene, id: i64) -> Mat4 {
+    let mut chain = Vec::new();
+    let mut cur = Some(id);
+    let mut guard = 0;
+    while let Some(i) = cur {
+        let Some(o) = scene.object(i) else {
+            break;
+        };
+        if o.class != "Model" {
+            break;
+        }
+        chain.push(lcl_to_mat4(&o.transform));
+        cur = scene.parent_of(i);
+        guard += 1;
+        if guard > 1024 {
+            break;
+        }
+    }
+    chain.iter().rev().fold(Mat4::IDENTITY, |acc, m| acc * *m)
 }
 
 /// Up-to-4 bone influences for one vertex (GPU linear-blend skinning layout).
@@ -432,6 +459,7 @@ mod tests {
             }),
             materials: Vec::new(),
             material_of_triangle: Vec::new(),
+            polygon_of_triangle: Vec::new(),
         };
         // bone_ids parallel: [Bone0=30 root, Bone1=31 child of 0].
         let posed = PosedSkeleton::from_parts(

@@ -36,6 +36,7 @@ use serde::Serialize;
 ///     skin: None,
 ///     materials: Vec::new(),
 ///     material_of_triangle: Vec::new(),
+///     polygon_of_triangle: Vec::new(),
 /// };
 /// assert_eq!(mesh.vertex_count(), 4);
 /// assert!(!mesh.is_skinned());
@@ -68,6 +69,10 @@ pub struct RawMesh {
     ///
     /// [`materials`]: RawMesh::materials
     pub material_of_triangle: Vec<u32>,
+    /// For each triangle, the index of the source **polygon** it was triangulated from (FBX
+    /// `PolygonVertexIndex` order) — what a per-polygon layer edit (material reassignment) is
+    /// keyed by. Empty when the importer has no polygon notion (each triangle is its own polygon).
+    pub polygon_of_triangle: Vec<u32>,
 }
 
 impl RawMesh {
@@ -192,6 +197,7 @@ mod tests {
             skin: None,
             materials: vec![MeshMaterial::default(); materials],
             material_of_triangle: mat_of_tri,
+            polygon_of_triangle: vec![],
         }
     }
 

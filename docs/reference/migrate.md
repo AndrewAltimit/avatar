@@ -95,6 +95,20 @@ to be 0 — exactly SDK2's semantics (an override fired for whichever hand made 
 immune to the two-layer Write-Defaults-off clobber. Empty `Parameters.asset` / `Menu.asset` are
 generated alongside so toggles can be added later (`avatar toggle`).
 
+By default the layer is **analog** (`GestureLayer::analog()`, [anim-gen.md](anim-gen.md)): each
+gesture gets a per-hand state (`Fist L` / `Fist R`) whose motion is a 1D BlendTree on that hand's
+`GestureLeftWeight`/`GestureRightWeight`, blending `Gesture_Neutral` (0) → the gesture clip (1) —
+SDK2's Vive "advanced controls", where trigger depth is expression depth. Transitions are
+mutually exclusive and weight-gated (see anim-gen.md): the actively-squeezing hand owns the face,
+the right hand wins when both squeeze **different** gestures, and a wand thumb resting on the
+touchpad (Fist at weight 0) can never mask or oscillate against the other hand. Both hands on
+the **same** gesture route to its `LR` capped-sum state (2D tree over both weights,
+`min(left + right, 1)`); the migration emits a half-strength companion clip per gesture
+(`Gesture_<Name>_Half.anim`, every shape at 50 %) as the tree's midpoint samples. `--no-analog-gestures` emits discrete
+states instead (one static state per gesture, right-priority). Note the platform trade: on
+Index-style controllers only Fist's weight tracks an analog axis, so with analog gestures the
+other expressions need the trigger held — exactly how the SDK2 avatar behaved on wands.
+
 ## Eye look and blink
 
 SDK3 eye look stores the **local rotation of each eye bone** per look state. It is derived
@@ -152,7 +166,9 @@ without touching the filesystem. Generated GUIDs/fileIDs are deterministic (seed
 - `Packages/manifest.json` must carry `com.unity.test-framework`: the SDK's editor assembly ships
   NUnit tests and a project without it fails to compile (`NUnit could not be found`, then a Burst
   `VRC.ExampleCentral.Editor` resolution cascade).
-- Play-test PhysBones (tune in the inspector), confirm the eye-look preview, test each gesture.
+- Play-test PhysBones, confirm the eye-look preview, test each gesture. Retuning is a one-line
+  edit on the migrated prefab — `avatar physbone set|split|stretch` ([`physbone.md`](physbone.md)):
+  values + per-chain curves, chains split onto their own components, chains lengthened.
 
 ## Limits
 

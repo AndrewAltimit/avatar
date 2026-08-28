@@ -3,13 +3,228 @@
 
 use std::path::Path;
 
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 use avatar_armature::{HumanBone, Skeleton};
 use avatar_mesh::RawMesh;
 use avatar_render::{Camera, Light, RenderMesh, Scene, Texture};
 use glam::{Mat4, Quat, Vec3};
 
 use crate::texture::{SlotStyle, TextureSet, split_by_material};
+
+/// A chain-length preview: scale the offsets of every bone *below* the bones matching `hinge`
+/// (a name, `*` wildcards allowed — `Skirt_0_*`) by `factor`, and let the skinned mesh follow.
+/// This is exactly the edit `avatar physbone stretch` makes to a prefab, previewed on the FBX
+/// before any Unity round trip.
+#[derive(Debug, Clone, PartialEq)]
+pub struct BoneStretch {
+    pub hinge: String,
+    pub factor: f32,
+}
+
+impl BoneStretch {
+    /// Parse `HINGE:FACTOR` (e.g. `Skirt_0_*:1.5`).
+    pub fn parse(s: &str) -> Result<Self> {
+        let Some((h, f)) = s.rsplit_once(':') else {
+            bail!("--stretch '{s}' is not HINGE:FACTOR (e.g. 'Skirt_0_*:1.5')");
+        };
+        let factor: f32 = f
+            .trim()
+            .parse()
+            .map_err(|_| anyhow::anyhow!("--stretch factor '{f}' is not a number"))?;
+        if !(factor.is_finite() && factor > 0.0) {
+            bail!("--stretch factor must be > 0 (got {factor})");
+        }
+        let hinge = h.trim().to_string();
+        if hinge.is_empty() {
+            bail!("--stretch '{s}' names no bone");
+        }
+        Ok(BoneStretch { hinge, factor })
+    }
+
+    fn matches(&self, name: &str) -> bool {
+        glob_match(&self.hinge, name)
+    }
+}
+
+/// `*`-wildcard match (no other metacharacters).
+fn glob_match(pattern: &str, text: &str) -> bool {
+    let parts: Vec<&str> = pattern.split('*').collect();
+    if parts.len() == 1 {
+        return pattern == text;
+    }
+    let mut rest = text;
+    for (i, part) in parts.iter().enumerate() {
+        if i == 0 {
+            let Some(r) = rest.strip_prefix(part) else {
+                return false;
+            };
+            rest = r;
+        } else if i == parts.len() - 1 {
+            return rest.ends_with(part);
+        } else if part.is_empty() {
+            continue;
+        } else {
+            let Some(pos) = rest.find(part) else {
+                return false;
+            };
+            rest = &rest[pos + part.len()..];
+        }
+    }
+    true
+}
+
+/// How to pose an FBX avatar for a preview render, instead of its rest/bind pose. Both are the
+/// prefab-side edits (`avatar physbone stretch|flare|…`) seen from the FBX: `stretch` re-applies a
+/// chain stretch by hinge name; `pose_prefab` takes every bone's local TRS from a Unity prefab
+/// (matched by GameObject name), so *whatever* the prefab's transforms say — a stretched skirt,
+/// re-angled chains, hand-posed bones — is what gets drawn.
+#[derive(Debug, Clone, Default)]
+pub struct AvatarPose {
+    pub stretch: Vec<BoneStretch>,
+    pub pose_prefab: Option<std::path::PathBuf>,
+}
+
+impl AvatarPose {
+    fn is_rest(&self) -> bool {
+        self.stretch.is_empty() && self.pose_prefab.is_none()
+    }
+}
+
+/// Bone-name → local TRS (Unity space) read from a prefab, for [`apply_pose`].
+fn prefab_locals(
+    path: &Path,
+) -> Result<std::collections::HashMap<String, avatar_migrate::math::Trs>> {
+    let text = std::fs::read_to_string(path)
+        .with_context(|| format!("reading --pose prefab {}", path.display()))?;
+    let rw = avatar_migrate::rewrite::PrefabRewriter::new(&text)
+        .with_context(|| format!("parsing --pose prefab {}", path.display()))?;
+    let scene = rw.scene();
+    let mut by_name: std::collections::HashMap<String, Vec<avatar_migrate::math::Trs>> =
+        std::collections::HashMap::new();
+    for tr in scene.transforms.values() {
+        let name = scene.name_of_transform(tr.file_id).to_string();
+        by_name.entry(name).or_default().push(tr.local);
+    }
+    // Ambiguous names (several objects) are skipped rather than guessed.
+    Ok(by_name
+        .into_iter()
+        .filter_map(|(n, v)| (v.len() == 1).then(|| (n, v[0])))
+        .collect())
+}
+
+/// Pose skinned FBX meshes per [`AvatarPose`] and CPU-skin each mesh's raw control points through
+/// the resulting palette. Only the **delta** from rest is applied — per bone `G⁻¹ · world(pose) ·
+/// world(rest)⁻¹ · G`, `G` the mesh node's global transform (the space its raw control points live
+/// in) — so untouched geometry is byte-identical to the rest render and the untrusted per-cluster
+/// bind `Transform`s are never used. Returns how many bones were changed.
+///
+/// A prefab pose is Unity's mirrored copy of the FBX hierarchy: Unity negates X on import, which
+/// maps a local `(p, q)` to `((-p.x, p.y, p.z), (q.x, -q.y, -q.z, q.w))`; positions are divided by
+/// the file's import scale (`UnitScaleFactor / 100`). Bones are matched by GameObject name.
+fn apply_pose(
+    scene: &avatar_fbx::FbxScene,
+    meshes: &mut [RawMesh],
+    how: &AvatarPose,
+) -> Result<usize> {
+    use avatar_pose::{PosedSkeleton, cpu_skin, model_global_matrix};
+    let skeleton = Skeleton::from_scene(scene);
+    // Bone id → stretch factor for every bone strictly below a matching hinge.
+    let mut factor_of: std::collections::HashMap<i64, f32> = std::collections::HashMap::new();
+    for st in &how.stretch {
+        let hinges: Vec<i64> = skeleton
+            .bones
+            .iter()
+            .filter(|b| st.matches(&b.name))
+            .map(|b| b.id)
+            .collect();
+        for b in &skeleton.bones {
+            let mut cur = b.parent;
+            while let Some(p) = cur {
+                if hinges.contains(&p) {
+                    factor_of.insert(b.id, st.factor);
+                    break;
+                }
+                cur = skeleton.bone(p).and_then(|pb| pb.parent);
+            }
+        }
+    }
+    if !how.stretch.is_empty() && factor_of.is_empty() {
+        bail!(
+            "--stretch matched no bone below {}",
+            how.stretch
+                .iter()
+                .map(|s| format!("'{}'", s.hinge))
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+    }
+    // Bone id → local TRS from the prefab (FBX convention).
+    let mut prefab_local: std::collections::HashMap<i64, (Vec3, Quat, Vec3)> =
+        std::collections::HashMap::new();
+    if let Some(p) = &how.pose_prefab {
+        let locals = prefab_locals(p)?;
+        // Unity import scale: UnitScaleFactor/100 (FBX in cm → 0.01). FBX-space = Unity / that.
+        let import_scale = scene.global_settings.unit_scale_factor.unwrap_or(1.0) / 100.0;
+        for b in &skeleton.bones {
+            if let Some(t) = locals.get(&b.name) {
+                let pos = Vec3::new(
+                    (-t.position.x / import_scale) as f32,
+                    (t.position.y / import_scale) as f32,
+                    (t.position.z / import_scale) as f32,
+                );
+                let rot = Quat::from_xyzw(
+                    t.rotation.x as f32,
+                    -t.rotation.y as f32,
+                    -t.rotation.z as f32,
+                    t.rotation.w as f32,
+                )
+                .normalize();
+                let scl = Vec3::new(t.scale.x as f32, t.scale.y as f32, t.scale.z as f32);
+                prefab_local.insert(b.id, (pos, rot, scl));
+            }
+        }
+        if prefab_local.is_empty() {
+            bail!(
+                "--pose {}: no bone name matches an object in the prefab",
+                p.display()
+            );
+        }
+    }
+    let changed = factor_of.len().max(prefab_local.len());
+    for m in meshes.iter_mut().filter(|m| m.is_skinned()) {
+        let posed = PosedSkeleton::from_fbx(&skeleton, scene, m);
+        let mut pose = posed.rest_pose();
+        for (id, (t, r, s)) in &prefab_local {
+            if let Some(i) = posed.index_of(*id) {
+                pose.set_local_trs(i, *t, *r, *s);
+            }
+        }
+        for (id, f) in &factor_of {
+            if let Some(i) = posed.index_of(*id) {
+                let (s, r, t) = pose.local[i].to_scale_rotation_translation();
+                pose.set_local_trs(i, t * *f, r, s);
+            }
+        }
+        let skin = posed.build_vertex_skin(m);
+        // The mesh is drawn from its raw control points, which live in the mesh node's own space
+        // (`G`, e.g. Blender's -90° X on the mesh object). The pose is a world-space change per
+        // bone (`posed · rest⁻¹`), so conjugate it into mesh space: `G⁻¹ · posed · rest⁻¹ · G`.
+        // Identity everywhere the pose is untouched. (The FBX cluster `Transform`s — the bind
+        // palette proper — are deliberately not used: converted avatars ship them inconsistent,
+        // which is why the renderer draws raw control points in the first place.)
+        let g = model_global_matrix(scene, m.model_id);
+        let g_inv = g.inverse();
+        let rest = posed.world_matrices(&posed.rest_pose());
+        let palette: Vec<Mat4> = posed
+            .world_matrices(&pose)
+            .iter()
+            .zip(&rest)
+            .map(|(p, r)| g_inv * *p * r.inverse() * g)
+            .collect();
+        m.positions = cpu_skin(m, &skin, &palette);
+    }
+    Ok(changed)
+}
 
 /// Tint used for a textured slot when the material declares no diffuse colour — lets the texture's
 /// own colours show through unmodulated.
@@ -116,6 +331,7 @@ pub fn load_avatar_placed(
     path: &Path,
     extra: Mat4,
     tex: &mut TextureSet,
+    how: &AvatarPose,
 ) -> Result<Vec<RenderMesh>> {
     let ext = path
         .extension()
@@ -129,9 +345,13 @@ pub fn load_avatar_placed(
         "fbx" => {
             let doc = avatar_fbx::FbxDocument::load(path)?;
             let scene = doc.scene();
-            let meshes = doc.meshes()?;
+            let mut meshes = doc.meshes()?;
             if meshes.is_empty() {
                 bail!("no meshes found in {}", path.display());
+            }
+            if !how.is_rest() {
+                let changed = apply_pose(&scene, &mut meshes, how)?;
+                println!("pose: {changed} bone(s) posed from the prefab / stretch");
             }
             // Skinned meshes are placed at their bind transform then uprighted via the skeleton;
             // static meshes get the file's declared up-axis correction.
@@ -154,6 +374,9 @@ pub fn load_avatar_placed(
             let meshes = avatar_gltf::GltfDocument::import(path)?.meshes();
             if meshes.is_empty() {
                 bail!("no meshes found in {}", path.display());
+            }
+            if !how.is_rest() {
+                bail!("--stretch / --pose are supported for .fbx avatars only");
             }
             let places = vec![extra; meshes.len()];
             (meshes, places)
@@ -184,8 +407,8 @@ pub fn load_avatar_placed(
 }
 
 /// Load an avatar at the origin (convenience for the standalone-avatar case).
-pub fn load_avatar(path: &Path, tex: &mut TextureSet) -> Result<Vec<RenderMesh>> {
-    load_avatar_placed(path, Mat4::IDENTITY, tex)
+pub fn load_avatar(path: &Path, tex: &mut TextureSet, how: &AvatarPose) -> Result<Vec<RenderMesh>> {
+    load_avatar_placed(path, Mat4::IDENTITY, tex, how)
 }
 
 /// Standing height (metres) an avatar is normalised to when dropped into a world, so a model
@@ -215,9 +438,10 @@ pub fn load_avatar_in_world(
     path: &Path,
     spawn: Vec3,
     tex: &mut TextureSet,
+    how: &AvatarPose,
 ) -> Result<(Vec<RenderMesh>, (Vec3, Vec3))> {
     // Upright-local geometry at the origin; re-placed once we know its size.
-    let mut meshes = load_avatar_placed(path, Mat4::IDENTITY, tex)?;
+    let mut meshes = load_avatar_placed(path, Mat4::IDENTITY, tex, how)?;
     let (min, max) =
         mesh_bounds(&meshes).ok_or_else(|| anyhow::anyhow!("avatar has no geometry"))?;
     let scale = AVATAR_HEIGHT_M / (max.y - min.y).max(1e-4);
@@ -289,4 +513,32 @@ pub fn expand_bounds((min, max): (Vec3, Vec3), factor: f32) -> (Vec3, Vec3) {
     let center = (min + max) * 0.5;
     let half = (max - min) * 0.5 * factor;
     (center - half, center + half)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn stretch_spec_parses() {
+        let s = BoneStretch::parse("Skirt_0_*:1.5").unwrap();
+        assert_eq!(s.hinge, "Skirt_0_*");
+        assert_eq!(s.factor, 1.5);
+        assert!(BoneStretch::parse("Skirt").is_err());
+        assert!(BoneStretch::parse("Skirt:0").is_err());
+        assert!(BoneStretch::parse("Skirt:x").is_err());
+        assert!(BoneStretch::parse(":2").is_err());
+    }
+
+    #[test]
+    fn glob_matches_star_only() {
+        assert!(glob_match("Skirt_0_*", "Skirt_0_7"));
+        assert!(!glob_match("Skirt_0_*", "Skirt_1_7"));
+        assert!(glob_match("Hair_1", "Hair_1"));
+        assert!(!glob_match("Hair_1", "Hair_10"));
+        assert!(glob_match("*Tail*", "ButtTail1"));
+        assert!(glob_match("*", "anything"));
+        assert!(glob_match("A*B*C", "AxxBxC"));
+        assert!(!glob_match("A*B*C", "AxxBx"));
+    }
 }

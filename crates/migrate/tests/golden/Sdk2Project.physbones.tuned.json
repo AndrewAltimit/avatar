@@ -1,0 +1,160 @@
+[
+  {
+    "allow_collision": true,
+    "allow_grabbing": false,
+    "allow_posing": false,
+    "chains": [
+      {
+        "bones": 3,
+        "flare_deg": 0.0,
+        "leaf": "Armature/Hips/Skirt/Skirt_0/Skirt_1",
+        "length": 0.24375000000000002
+      }
+    ],
+    "colliders": [
+      "Armature/Hips/Left leg/L cap"
+    ],
+    "file_id": 8120638631262054030,
+    "gravity": 0.03,
+    "gravity_curve": [],
+    "gravity_falloff": 0.5,
+    "ignore": [],
+    "immobile": 0.3,
+    "immobile_curve": [],
+    "immobile_type": 1,
+    "integration_type": 0,
+    "is_animated": false,
+    "limit_type": 1,
+    "max_angle_x": 55.0,
+    "max_angle_x_curve": [],
+    "max_angle_z": 45.0,
+    "max_squish": 0.0,
+    "max_stretch": 0.0,
+    "multi_child_type": 0,
+    "object": "Armature/Hips/Skirt",
+    "parameter": "",
+    "pull": 0.25,
+    "pull_curve": [],
+    "radius": 0.03,
+    "radius_curve": [],
+    "root": "Armature/Hips/Skirt",
+    "spring": 0.5,
+    "spring_curve": [],
+    "stiffness": 0.15,
+    "stiffness_curve": [],
+    "transforms": 3,
+    "version": 1
+  },
+  {
+    "allow_collision": true,
+    "allow_grabbing": true,
+    "allow_posing": true,
+    "chains": [
+      {
+        "bones": 3,
+        "flare_deg": 7.4999999999999645,
+        "leaf": "Armature/Hips/Spine/Head/Hair/Hair_1/Hair_2",
+        "length": 0.30000000000000004
+      }
+    ],
+    "colliders": [
+      "Armature/Hips/Spine/Head"
+    ],
+    "file_id": 11407,
+    "gravity": 0.15,
+    "gravity_curve": [],
+    "gravity_falloff": 1.0,
+    "ignore": [
+      "Armature/Hips/Spine/Head/Hair/Bang"
+    ],
+    "immobile": 0.4,
+    "immobile_curve": [],
+    "immobile_type": 1,
+    "integration_type": 1,
+    "is_animated": true,
+    "limit_type": 1,
+    "max_angle_x": 60.0,
+    "max_angle_x_curve": [],
+    "max_angle_z": 45.0,
+    "max_squish": 0.0,
+    "max_stretch": 0.0,
+    "multi_child_type": 0,
+    "object": "Armature/Hips/Spine/Head/Hair",
+    "parameter": "",
+    "pull": 0.3,
+    "pull_curve": [
+      [
+        0.0,
+        0.6
+      ],
+      [
+        1.0,
+        1.0
+      ]
+    ],
+    "radius": 0.02,
+    "radius_curve": [],
+    "root": "Armature/Hips/Spine/Head/Hair",
+    "spring": 0.3,
+    "spring_curve": [
+      [
+        0.0,
+        1.0
+      ],
+      [
+        1.0,
+        0.5
+      ]
+    ],
+    "stiffness": 0.2,
+    "stiffness_curve": [],
+    "transforms": 3,
+    "version": 0
+  },
+  {
+    "allow_collision": true,
+    "allow_grabbing": true,
+    "allow_posing": true,
+    "chains": [
+      {
+        "bones": 2,
+        "flare_deg": 0.0,
+        "leaf": "Armature/Hips/Spine/Head/Hair/Bang/Bang_2",
+        "length": 0.15000000000000002
+      }
+    ],
+    "colliders": [
+      "Armature/Hips/Spine/Head"
+    ],
+    "file_id": 3138074254695247042,
+    "gravity": 0.0,
+    "gravity_curve": [],
+    "gravity_falloff": 1.0,
+    "ignore": [],
+    "immobile": 0.9,
+    "immobile_curve": [],
+    "immobile_type": 1,
+    "integration_type": 1,
+    "is_animated": true,
+    "limit_type": 1,
+    "max_angle_x": 30.0,
+    "max_angle_x_curve": [],
+    "max_angle_z": 45.0,
+    "max_squish": 0.0,
+    "max_stretch": 0.0,
+    "multi_child_type": 0,
+    "object": "Armature/Hips/Spine/Head/Hair/Bang",
+    "parameter": "",
+    "pull": 0.05,
+    "pull_curve": [],
+    "radius": 0.02,
+    "radius_curve": [],
+    "root": "Armature/Hips/Spine/Head/Hair/Bang",
+    "spring": 0.8,
+    "spring_curve": [],
+    "stiffness": 0.0,
+    "stiffness_curve": [],
+    "transforms": 2,
+    "version": 0
+  }
+]

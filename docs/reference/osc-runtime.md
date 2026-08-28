@@ -121,6 +121,52 @@ deliberately ignored — the point of reading the file offline is the schema, no
 Field renames (`FULL_PATH` → `full_path`, …) are `serde(rename)`; an embedded-JSON fixture asserts
 the parse (param count, types, access, the `/avatar/change` exclusion, and the malformed/empty cases).
 
+## Parameter capture (`avatar osc capture` / `avatar-gesture-capture.exe`)
+
+`avatar_osc::capture` records the parameter stream VRChat broadcasts (OSC out, port 9001) and
+reduces it to the report that answers *"what does my controller actually deliver?"*: per-parameter
+update counts and value ranges, plus the **gesture cross-tab** — for every `GestureLeft`/
+`GestureRight` value that was held, how many times it was entered and the range its
+`…Weight` float covered while held. A row that never appears (e.g. `1 = Fist` missing after a
+full Vive-touchpad sweep) or a weight range stuck at `0.000..0.000` localizes a gesture bug to
+the input/binding side in one session; healthy rows mean the animator is receiving everything
+and the FX layer is at fault. `avatar osc capture [--seconds N] [-o events.jsonl] [--json]`
+echoes updates live, appends raw events as JSON lines as they arrive (a cut-short session keeps
+its data), and prints the summary when the clock runs out.
+
+Both capture front-ends **advertise themselves over OSCQuery** (`avatar_osc::oscquery`,
+`--no-advertise` to opt out): a hand-built mDNS responder answers `PTR _oscjson._tcp.local`
+(and announces periodically) while a tiny HTTP responder serves the `?HOST_INFO` handshake and a
+parameter tree exposing `/avatar` — which is what tells modern VRChat to route its
+avatar-parameter output to the advertised UDP port, *whatever* it is. That removes the
+fixed-9001 assumption entirely (legacy output still lands when the port is free; if it is
+taken, the capture falls back to an ephemeral port and lets discovery do the work). The mDNS
+subset is hand-parsed/built like every format in this repo (12-byte header + labelled names,
+compression-pointer-aware reader), the responder also reports VRChat's own `VRChat-Client-*`
+announcements as a liveness diagnostic, and both the DNS round-trip and the handshake JSON are
+unit-tested. Scope: same-host VRChat (the advertised address is `127.0.0.1`).
+
+The same logic ships as a **standalone, dependency-slim binary** `avatar-gesture-capture`
+(`crates/osc/src/bin/gesture_capture.rs`, `[[bin]]` in the crate) precisely so it cross-compiles
+to a double-clickable Windows `.exe` (`cargo build -p avatar-osc --bins --release --target
+x86_64-pc-windows-gnu`) for capture sessions on the machine that actually runs VRChat: it takes
+`[seconds] [port]` positionally, writes `gesture-capture.jsonl` beside itself, and waits for
+Enter before closing so the table survives a double-click launch.
+
+## Offline controller replay (`avatar osc replay`)
+
+The missing half of capture: `avatar osc replay <events.jsonl> --controller FX.controller
+[--layer NAME] [--timeline] [--json]` runs the captured parameter log through the controller's
+state machines **offline** — no Unity — and prints the state timeline each layer actually went
+through: visits, dwell times, and the blend-parameter range covered inside each state (seeded
+with the parameter's value at entry, since a constant weight sends no update events). Capture
+proves what VRChat *delivered*; replay proves what the controller *did with it*. Simulated
+semantics are the subset our generated controllers use: ordered Any-State + state transitions,
+`m_CanTransitionToSelf`, condition modes If/IfNot/Greater/Less/Equals/NotEqual; crossfades are
+treated as instantaneous and exit-time transitions are not modelled. On the mikunpc captures
+this closed the centre-pad-blink investigation in one command: the wand delivers Fist with
+analog weight, and the controller enters `Fist L`/`Fist R` and blends 0→1 exactly as designed.
+
 ## Analog-gesture daemon (`avatar-osc-gestures`)
 
 The "Vive advanced controls on any hardware" feature (PLAN §4) lives in a separate crate built on

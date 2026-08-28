@@ -37,6 +37,7 @@ emits; the generation tools (`avatar_gen_*`) return the generated YAML (and `.me
 | `avatar_stats` | `path` (FBX **or** project) | `PerfReport` (FBX) or `PerfReport[]` (project avatars) |
 | `avatar_armature_check` | `path` (FBX) | `ArmatureReport` (humanoid-bone mapping + flags) |
 | `avatar_fbx_inspect` | `path` (FBX) | `InspectSummary` (structure counts + unit/orientation flags) |
+| `avatar_physbone_list` | `path` (`.prefab`) | `PhysBoneInfo[]` — every VRCPhysBone's root, chains, colliders, tuning + curves ([`physbone.md`](physbone.md)) |
 | `avatar_unitypackage_info` | `path` (`.unitypackage`) | Package summary (counts, SDK, avatar/world traits) |
 | `avatar_schema` | `name?` | JSON Schema for a report type (omit `name` to list; `all` for every) — only under the `schema` feature |
 | `avatar_gen_clip` | `name`, `blendshapes[]?`, `toggles[]?` | A `.anim` AnimationClip as YAML text (+ suggested file name, fileID) |

@@ -66,7 +66,12 @@ Crate dirs are unprefixed; package names `avatar-<slug>`; lib names `avatar_<slu
   DynamicBone → PhysBone with the SDK's own disassembled conversion rules, Cloth → PhysBone skirt,
   subtree stripping, gesture overrides → FX layer, rig-derived eye look) + a VCC-openable project
   tree. **[built — library + `avatar migrate sdk3` CLI; golden-tested on a synthetic SDK2 fixture,
-  validated on a real 2021 export; Unity import is the user's last mile]**
+  validated on a real 2021 export, imported + uploaded through Unity/VCC on the user's side]**.
+  Post-migration **PhysBone tuning** on any SDK3 prefab (`avatar physbone list|set|split|stretch`:
+  `PhysBoneSpec` read-back + re-render with per-chain curves, chains split onto their own
+  components, chain stretch for a longer skirt/tail, chain re-angling; `avatar render --pose
+  <prefab>` draws the FBX in a prefab's pose to preview it). **[built — golden-tested; applied to
+  the real avatar, second round after wearing it]**
 
 **Runtime**
 - `avatar-osc` — `rosc`-backed VRChat OSC parameter protocol: `/avatar/parameters/*`, `/input/*` axes

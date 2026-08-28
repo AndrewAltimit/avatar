@@ -58,6 +58,10 @@ pub struct MigrateSdk3Args {
     /// Don't build an FX layer from the SDK2 gesture overrides.
     #[arg(long)]
     no_fx: bool,
+    /// Discrete gesture states instead of the default analog blend (trigger depth blending
+    /// `Neutral` → the expression on `GestureLeftWeight`/`GestureRightWeight`, SDK2 Vive style).
+    #[arg(long)]
+    no_analog_gestures: bool,
     /// Assets-relative directory not to copy into the output. Repeatable. `VRCSDK` and
     /// `VRChat Examples` (SDK2) are always excluded.
     #[arg(long, value_name = "DIR")]
@@ -117,6 +121,7 @@ pub fn sdk3(args: &MigrateSdk3Args) -> Result<()> {
     }
     opts.blink_shape = args.blink.clone();
     opts.fx_from_overrides = !args.no_fx;
+    opts.analog_gestures = !args.no_analog_gestures;
     for e in &args.exclude {
         let e = e.trim_start_matches("Assets/").to_string();
         if !opts.exclude.contains(&e) {

@@ -8,6 +8,12 @@ VRChat OSC **avatar-parameter** runtime layer. Package `avatar-osc` · lib `avat
 Speaks VRChat's OSC *parameter* protocol — the address spaces a running VRChat client sends and
 accepts — as a renderer-agnostic, pure-Rust library (just `rosc` + UDP):
 
+- **`capture` module** — record the broadcast parameter stream, reduce to per-parameter
+  counts/ranges + the gesture/weight cross-tab (`avatar osc capture`; also the standalone
+  `avatar-gesture-capture` bin, cross-compilable to a Windows `.exe` for on-rig sessions).
+- **`oscquery` module** — minimal OSCQuery *advertisement* (hand-rolled mDNS responder +
+  `?HOST_INFO`/tree HTTP): modern VRChat discovers the service and routes its parameter output
+  to the advertised port, so capture works without fixed-port assumptions.
 - **`/avatar/parameters/<Name>`** — typed avatar parameters (`bool`/`int`/`float`), modeled by
   `ParamMessage` + `ParamValue`.
 - **`/avatar/change`** — the avatar-switch event (blueprint id + config path), `AvatarChange`.

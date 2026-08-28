@@ -159,6 +159,7 @@ pub fn build_fx_from_overrides(
     guid_index: &HashMap<String, PathBuf>,
     override_guid: &str,
     layout: &FxLayout,
+    analog: bool,
 ) -> Result<FxBundle> {
     let override_path = guid_index.get(override_guid).with_context(|| {
         format!("override controller guid {override_guid} not found in the project")
@@ -204,6 +205,7 @@ pub fn build_fx_from_overrides(
     let mut files = Vec::new();
     let mut neutral_shapes: BTreeSet<(String, String)> = BTreeSet::new();
     let mut motions: BTreeMap<usize, (i64, String)> = BTreeMap::new();
+    let mut motions_half: std::collections::BTreeMap<usize, (i64, String)> = Default::default();
 
     for c in &clips {
         let orig = &c["m_OriginalClip"];
@@ -291,6 +293,33 @@ pub fn build_fx_from_overrides(
             content: native_asset_meta(&guid, 7400000),
         });
         motions.insert(g, (7400000, guid));
+        if analog {
+            // Half-strength companion (every shape at 50 %): the midpoint sample of the
+            // both-hands capped-sum blend tree.
+            let half_stem = format!("{file_stem}_Half");
+            let mut half_out = GenClip::new(&half_stem);
+            for (path, shape, v) in &shapes {
+                half_out.add_float_curve(FloatCurve::blendshape(
+                    path.clone(),
+                    shape,
+                    vec![Keyframe::flat(0.0, *v * 0.5)],
+                ));
+            }
+            let half_guid = deterministic_guid(&format!(
+                "{}/{}/{half_stem}",
+                layout.dir, layout.controller_name
+            ));
+            let half_rel = format!("{}/{half_stem}.anim", layout.dir);
+            files.push(FxFile {
+                rel_path: half_rel.clone(),
+                content: half_out.to_unity_yaml(7400000),
+            });
+            files.push(FxFile {
+                rel_path: format!("{half_rel}.meta"),
+                content: native_asset_meta(&half_guid, 7400000),
+            });
+            motions_half.insert(g, (7400000, half_guid));
+        }
         gestures.push(MigratedGesture {
             gesture: g,
             gesture_name,
@@ -323,9 +352,16 @@ pub fn build_fx_from_overrides(
         content: native_asset_meta(&neutral_guid, 7400000),
     });
 
-    // The controller: one either-hand layer.
+    // The controller: one either-hand layer; in analog mode each gesture state is a per-hand
+    // BlendTree on GestureLeftWeight/GestureRightWeight (SDK2 Vive trigger-depth semantics).
     let mut layer =
         GestureLayer::either_hand("Gestures", ObjectRef::external(7400000, neutral_guid, 2));
+    if analog {
+        layer = layer.analog();
+        for (g, (fid, guid)) in &motions_half {
+            layer = layer.motion_half(*g, ObjectRef::external(*fid, guid.clone(), 2));
+        }
+    }
     for (g, (fid, guid)) in &motions {
         layer = layer.motion(*g, ObjectRef::external(*fid, guid.clone(), 2));
     }

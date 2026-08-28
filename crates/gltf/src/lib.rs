@@ -141,6 +141,7 @@ impl GltfDocument {
             // glTF material/texture import is not wired into the preview yet.
             materials: Vec::new(),
             material_of_triangle: Vec::new(),
+            polygon_of_triangle: Vec::new(),
         })
     }
 

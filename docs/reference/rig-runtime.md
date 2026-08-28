@@ -63,6 +63,14 @@ let skin = posed.build_vertex_skin(&mesh);                       // joints[4]+we
 version. GPU skinning does the weighted matrix-sum in a vertex shader; `cpu_skin` does the same on
 the CPU for tests/headless.
 
+**Posing raw control points (untrusted binds).** When the per-cluster bind `Transform`s can't be
+trusted (converted avatars — see [render.md](render.md)), a pose can still be applied to the raw
+control points as a *delta*: per bone `G⁻¹ · world(pose) · world(rest)⁻¹ · G`, where `G =
+model_global_matrix(&scene, mesh.model_id)` is the mesh node's own global transform (the space the
+control points live in). It is identity for every untouched bone and never involves the cluster
+`Transform`s; `avatar render --pose <prefab>` / `--stretch` are built on it. `lcl_to_mat4` (plain
+Lcl TRS) is public for the same reason.
+
 ## Two-bone IK (`avatar_pose::ik`)
 
 `TwoBoneIk { root, mid, end }.solve(&posed, &mut pose, target, pole)` is an analytic, **geometric**

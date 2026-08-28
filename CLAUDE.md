@@ -21,7 +21,7 @@ VRChat upload step is not. For what's built and the roadmap, see [Status](#statu
 | [`docs/README.md`](docs/README.md) | Index of the `docs/` directory. |
 | [`docs/overview.md`](docs/overview.md) | The layered architecture in brief, with external references. |
 | [`docs/reference/humanoid-bones.md`](docs/reference/humanoid-bones.md) | Unity humanoid bones + VRChat rig requirements. |
-| [`docs/reference/sdk3-lint-rules.md`](docs/reference/sdk3-lint-rules.md) | Every `avatar lint` rule (`VRC001`–`VRC061`) + encodings. |
+| [`docs/reference/sdk3-lint-rules.md`](docs/reference/sdk3-lint-rules.md) | Every `avatar lint` rule (`VRC001`–`VRC062`) + encodings. |
 | [`docs/reference/unity-asset.md`](docs/reference/unity-asset.md) | `avatar-unity-asset`: the typed AnimatorController (`.controller`) + AnimationClip (`.anim`) readers the controller/clip lint rules consume. |
 | [`docs/reference/armature-repair.md`](docs/reference/armature-repair.md) | What `avatar armature fix` repairs, and the FBX writer. |
 | [`docs/reference/rig-runtime.md`](docs/reference/rig-runtime.md) | Runtime rig layer: skin/bind extraction, posing + bone-matrix palette, two-bone IK, tracker input. |
@@ -29,6 +29,7 @@ VRChat upload step is not. For what's built and the roadmap, see [Status](#statu
 | [`docs/reference/anim-gen.md`](docs/reference/anim-gen.md) | `avatar-anim-gen`: `.anim` clip + analog-gesture blend-tree + FX `AnimatorController` generation (Unity-YAML emitter, deterministic fileIDs). |
 | [`docs/reference/unity-yaml-edit.md`](docs/reference/unity-yaml-edit.md) | `EditableUnityFile` / `avatar asset set`: surgical, round-trip-safe value **and structural** edits to an *existing* Unity asset by span-splicing raw text (fileIDs/refs/key-order/formatting preserved). |
 | [`docs/reference/migrate.md`](docs/reference/migrate.md) | `avatar-migrate` / `avatar migrate sdk3`: SDK2 → SDK3 migration — descriptor/PipelineManager retyped in place, DynamicBone → PhysBone by the SDK's own rules, Cloth → PhysBone skirt, subtree stripping, gesture overrides → FX layer, rig-derived eye look, output project layout, script references, limits. |
+| [`docs/reference/physbone.md`](docs/reference/physbone.md) | `avatar physbone list|set|split|stretch|flare|nudge`: inspect + retune a prefab's `VRCPhysBone`s in place (values, per-chain curves, split chains onto own components, stretch chain offsets for a longer skirt/tail, re-angle chains toward vertical) + the `avatar render --pose <prefab>` / `--stretch` previews. |
 | [`docs/reference/osc-runtime.md`](docs/reference/osc-runtime.md) | `avatar-osc`: VRChat OSC address space, codec, UDP client, OSCQuery avatar-config parsing; the analog-gesture daemon. |
 | [`docs/reference/unitypackage.md`](docs/reference/unitypackage.md) | `avatar-unitypackage`: reading the `.unitypackage` format, extracting to a Unity project tree, the avatar-in-world co-import testbed. |
 | [`docs/reference/render.md`](docs/reference/render.md) | `avatar-render` / `avatar render` + `avatar view`: offscreen wgpu preview pipeline, avatar rest-pose render (auto-upright), world-scene render, avatar-dropped-at-spawn-in-world, interactive winit viewer (orbit/zoom/walk) + limits. |
@@ -125,19 +126,25 @@ The roadmap of record (what each milestone covers, decisions, risks) is [`PLAN.m
 per-subsystem behaviour is in the [documentation map](#documentation-map) above and the per-crate
 READMEs. What exists today, with its doc:
 
-- **Diagnose / lint** — `avatar lint <project>` (SDK3 rules `VRC001`–`VRC061`, incl. animation-clip
+- **Diagnose / lint** — `avatar lint <project>` (SDK3 rules `VRC001`–`VRC062`, incl. animation-clip
   contents, the viseme↔source-FBX cross-check, and Android/hygiene checks;
   [`sdk3-lint-rules.md`](docs/reference/sdk3-lint-rules.md)); `avatar stats` offline VRChat
   performance ranking ([`performance-stats.md`](docs/reference/performance-stats.md)); `avatar
   describe` one-shot consolidated snapshot.
 - **FBX** — read (incl. blendshape channels) + native binary write-back (`avatar_fbx::FbxDocument`);
-  `avatar armature check|fix` — canonical humanoid renames applied natively;
+  `avatar armature check|fix` — canonical humanoid renames applied natively; `avatar fbx reslot` —
+  per-polygon material-slot reassignment by region/brightness (a glowing strand → the black slot),
+  or its `--uv-mask` footprint for a texture-side fix — **the writer's output is not yet proven to
+  import in Unity for a full skinned avatar** (see armature-repair.md); `avatar fbx blendshapes` —
+  per-channel material slots (which material an emote overlay shape renders with);
   topology/scale/orientation flagged **and** emitted as a headless-Blender repair script
   (`--blender-script`, [`armature-repair.md`](docs/reference/armature-repair.md)).
 - **Generate (M4)** — `avatar anim-gen clip|blendtree|controller|params|menu`: Unity-YAML `.anim`,
   a full FX `AnimatorController`, and VRC expression parameters/menu assets, deterministic fileIDs;
-  plus the composite **`avatar toggle`** — the full ten-file toggle bundle (clips + two-state FX
-  controller + params + menu + guid-pinning `.meta`s) ([`anim-gen.md`](docs/reference/anim-gen.md)).
+  plus the composites **`avatar toggle`** — the full ten-file toggle bundle (clips + two-state FX
+  controller + params + menu + guid-pinning `.meta`s) — and **`avatar anim-gen puppet`** — graft a
+  radial-puppet dial (gated blend-tree layer + float param + menu control) into an existing
+  controller/params/menu by span-splice ([`anim-gen.md`](docs/reference/anim-gen.md)).
 - **Edit** — `avatar asset set` / `avatar_unity_yaml::EditableUnityFile`: surgical, round-trip-safe
   value edits to an *existing* Unity asset (scalars, reference re-targets, flow-map subfields) **and
   structural edits** (remove/replace/append documents, block-sequence items) by span-splicing raw
@@ -146,24 +153,35 @@ READMEs. What exists today, with its doc:
 - **Migrate (SDK2 → SDK3)** — `avatar migrate sdk3 <extracted-project> -o <out> --name N …`: rewrites
   the SDK2 avatar prefab in place (descriptor + PipelineManager retyped at their fileIDs, root motion
   off, DynamicBone → PhysBone with the SDK's own conversion rules, optional Cloth → PhysBone skirt,
-  `--strip` subtrees, gesture overrides → an either-hand FX layer, rig-derived eye look + blink) and
+  `--strip` subtrees, gesture overrides → an either-hand FX layer with analog trigger-depth blend trees
+  (`GestureLeftWeight`/`GestureRightWeight`; `--no-analog-gestures` for discrete), rig-derived eye
+  look + blink) and
   assembles a VCC-openable project around it (`--vpm-package` bundles e.g. a shader package,
   `--relink-locked-shaders` re-points locked materials at their original shader); `--dry-run` / `--json`
-  ([`migrate.md`](docs/reference/migrate.md)).
-- **OSC runtime (M5)** — `avatar osc send|input|monitor|change|query` + the analog-gesture daemon
-  `avatar osc gestures` ([`osc-runtime.md`](docs/reference/osc-runtime.md)).
+  ([`migrate.md`](docs/reference/migrate.md)). Post-migration **PhysBone tuning** — `avatar physbone
+  list|set|split|stretch|flare|nudge` (typed `PhysBoneSpec` read-back + re-render, per-chain curves, split
+  chains onto own components, chain stretch for a longer skirt, chain re-angling so a skirt hugs the
+  legs; `avatar render --pose <prefab>` draws the FBX in a prefab's pose to preview it)
+  ([`physbone.md`](docs/reference/physbone.md)).
+- **OSC runtime (M5)** — `avatar osc send|input|monitor|capture|replay|change|query` + the
+  analog-gesture daemon `avatar osc gestures`; `capture` reduces VRChat's parameter stream to a
+  gesture/weight cross-tab (also a standalone Windows-cross-compilable `avatar-gesture-capture`
+  bin, OSCQuery-advertised); `replay` simulates a `.controller` against a captured log — the
+  state timeline the FX actually went through ([`osc-runtime.md`](docs/reference/osc-runtime.md)).
 - **Packaging / preview** — `avatar unitypackage info|list|extract|testbed`
   ([`unitypackage.md`](docs/reference/unitypackage.md)); `avatar render` / `avatar view` wgpu preview
   ([`render.md`](docs/reference/render.md)).
 - **Agent surface** — `--json` across the read/generate commands, `avatar schema`, and `avatar mcp
-  serve` (non-writing MCP server incl. text-returning `avatar_gen_*` generation tools,
+  serve` (non-writing MCP server incl. `avatar_physbone_list` and text-returning `avatar_gen_*` generation tools,
   [`mcp.md`](docs/reference/mcp.md)). Disk writes/repairs stay on the CLI behind a dry-run-safe
   `WriteGuard`.
 - **Runtime rig** — `mesh`/`pose`/`input` + `gltf`, the renderer-agnostic VR-spectator foundation
   ([`rig-runtime.md`](docs/reference/rig-runtime.md)).
 
-In flight: the OpenXR on-device input backend for the gesture daemon; live OSCQuery (HTTP/mDNS)
-discovery; running the generated Blender repair script under CI. See [`PLAN.md`](PLAN.md).
+In flight: the OpenXR on-device input backend for the gesture daemon; OSCQuery **advertisement**
+(mDNS responder + HOST_INFO/tree HTTP) landed in `avatar_osc::oscquery` for the capture tools —
+full *browse/resolve* discovery is still open; running the generated Blender repair script under
+CI. See [`PLAN.md`](PLAN.md).
 
 ## Gotchas
 
@@ -175,7 +193,9 @@ discovery; running the generated Blender repair script under CI. See [`PLAN.md`]
   control points, not the per-cluster bind matrices, which ripped/MMD→FBX avatars ship broken
   ([`render.md`](docs/reference/render.md)).
 - **`fbxcel`'s `write_tree` re-emits arrays uncompressed** — a written FBX is larger than the input
-  but semantically identical ([`armature-repair.md`](docs/reference/armature-repair.md)).
+  and re-loads identically here, but a rewritten full skinned avatar imported *invisible* in Unity
+  2022.3 (open problem; [`armature-repair.md`](docs/reference/armature-repair.md)) — don't ship a
+  written FBX to Unity without checking it there.
 - **SDK3 script references are DLL class hashes, not `11500000`.** Every SDK3 runtime class lives in
   a DLL, so `m_Script` is `{fileID: <MD4 class hash>, guid: <dll guid>, type: 3}` —
   `avatar_unity_yaml::script_file_id(namespace, class)` derives the hash (test-pinned against the

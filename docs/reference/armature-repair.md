@@ -105,9 +105,61 @@ applies a full plan to a real Mixamo FBX. All assert the renames persisted, the 
 and the flagged reparent is *not* applied.
 
 **Known characteristic:** the writer re-emits array data (vertices, weights, keyframes)
-*uncompressed*, so a written FBX is typically larger than an original that used deflate. This is
-semantically identical and accepted by Unity; it is a property of `fbxcel`'s `write_tree`, not a
-correctness issue.
+*uncompressed*, so a written FBX is typically larger than an original that used deflate — a
+property of `fbxcel`'s `write_tree`.
+
+**Open problem — Unity import of a rewritten *skinned* avatar (2026-08-18):** a full-avatar
+FBX (Blender export, 3 skinned meshes, 148 bones, blendshapes) rewritten by this writer with only
+`LayerElementMaterial` changed re-loads fine here (same objects, geometry, skin, blendshapes,
+`avatar lint`/`stats`/`armature check` identical) but imported **invisible** in Unity 2022.3 —
+Unity re-imported it without visible geometry. Not yet diagnosed (candidates: something Unity
+requires that `write_tree` emits differently for large uncompressed arrays or the footer, or
+sub-asset ids shifting so the prefab's mesh references dangle). Until it is, treat any written
+FBX destined for Unity as **unverified**: keep the original, and prefer the texture-side route
+(`--uv-mask`, below) or a Blender re-export for mesh edits.
+
+## Beyond the armature: `avatar fbx reslot` (per-polygon material slots)
+
+The same writer carries the one *mesh* edit that keeps coming up on converted avatars: a region
+of polygons on the wrong material — an MMD-conversion strand on the hair material whose emission
+map makes it glow where the rest of the scalp is black. `avatar fbx reslot <fbx> --mesh <Model>
+--to-slot N [--from-slot M] [--near-bone BONE --radius R] [--min-z Z] [--max-z Z] [--exclude-bone
+GLOB [--exclude-weight W]] [--brighter-than TEXTURE.png:LUM] [--any-corner] -o out.fbx` selects
+triangles (all given criteria must hold: currently on slot M; centroid — or, with `--any-corner`,
+nearest corner — within R of a bone's bind position; height band; not skinned to an excluded
+bone; brighter than LUM at any corner or the centroid of the given texture, i.e. "the ones lit
+by this emission map") and rewrites their polygons' entries in `LayerElementMaterial` to slot N
+(`FbxDocument::set_polygon_materials`; `RawMesh::polygon_of_triangle` maps triangles back to
+polygons; an `AllSame` layer is expanded to `ByPolygon`). Slots index the materials connected to
+the model in connection order — the same order Unity's renderer lists them, so `--to-slot 10` on
+a mesh whose 11th material is a plain black one is a pure "make this black" with no texture or
+mesh-topology change. Nothing else in the file is touched (materials, skin, blendshapes, the
+armature). Preview the selection before writing: `avatar render --avatar out.fbx
+--material-texture "HairMat=Hair_Emission.png" --material-texture "BlackMat=black.png"` draws
+each material with the given image, so the glow map itself becomes the diffuse and the moved
+polygons show black exactly where in-game will.
+
+**`--uv-mask MASK.png [--uv-mask-size N]`** writes, instead of (or as well as) the FBX, a mask
+of the selected triangles' UV footprint — white where they sample — and reports every
+*unselected* triangle **on the same material slot** that overlaps it (with centroid position),
+i.e. exactly what a texture edit under the mask would also hit. That is the texture-side route
+when the FBX can't be rewritten: rasterize the offending polygons, check the overlap list is
+geometry you're happy to change too, dilate a couple of pixels, paint the map (black in an
+emission map) under it. Different slots sample different textures, so only same-slot overlaps
+matter. This is how the mikunpc crown was fixed after the FBX route failed to import.
+
+**`avatar fbx blendshapes <fbx> [--filter NAME] [--uv-mask DIR [--uv-mask-size N]] [--json]`**
+is the read-only companion for emote shading bugs: it lists every blendshape channel with the
+**material slots its target vertices render with** (`FbxDocument::blendshape_target_indexes` —
+the union of the channel's `Shape` geometries' `Indexes` arrays — joined to
+`RawMesh::material_of_triangle`); `--uv-mask` also writes, per channel and slot, a PNG of the
+touched triangles' UV footprint — exactly which texels of that slot's texture the shape's
+geometry samples (how the mikunpc blush band was pinned to the overlay sheet's stroke strip, and
+its triangle count exposed as stacked MMD layer quads). A shape that slides
+hidden geometry into view (an MMD cheek-blush or tear overlay) renders with whatever material
+that geometry's slot carries; when the emote shows an opaque white patch, this command names the
+material to fix (on mikunpc: `Cheek Blush`/`Blue Fading`/`Cold Sweat` all sit on the one overlay
+slot, whose Unity material had lost its transparent preset in the unitypackage export).
 
 ## Acceptance: what's proven, and the last mile
 

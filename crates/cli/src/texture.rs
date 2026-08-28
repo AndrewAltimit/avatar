@@ -21,11 +21,20 @@ pub struct TextureSet {
     textures: Vec<Texture>,
     /// key → resolved pool index (`None` = we tried and failed/empty, cached so we don't retry).
     cache: HashMap<String, Option<usize>>,
+    /// Material name → image file to draw it with instead of its own diffuse texture
+    /// (`avatar render --material-texture NAME=PNG`): preview a texture edit, or draw a
+    /// material with its emission/mask map to see where that map lands on the mesh.
+    overrides: HashMap<String, std::path::PathBuf>,
 }
 
 impl TextureSet {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Register a material-name → image override (see [`TextureSet::overrides`]).
+    pub fn override_material(&mut self, material: &str, image: std::path::PathBuf) {
+        self.overrides.insert(material.to_string(), image);
     }
 
     /// Consume into the pool the [`avatar_render::Scene`] will own.
@@ -62,6 +71,9 @@ impl TextureSet {
     /// Resolve an FBX material's diffuse texture: embedded bytes first, then an absolute authoring
     /// path, then the relative path (and its basename) searched near `fbx_dir`.
     pub fn resolve_fbx_material(&mut self, fbx_dir: &Path, mat: &MeshMaterial) -> Option<usize> {
+        if let Some(p) = self.overrides.get(&mat.name).cloned() {
+            return self.resolve_file(&p);
+        }
         let tref = mat.texture.as_ref()?;
         let key = texture_ref_key(fbx_dir, tref);
         self.intern(key, || load_texture_ref(fbx_dir, tref))
@@ -254,6 +266,7 @@ mod tests {
             skin: None,
             materials: vec![MeshMaterial::default(), MeshMaterial::default()],
             material_of_triangle: vec![0, 1],
+            polygon_of_triangle: vec![],
         }
     }
 

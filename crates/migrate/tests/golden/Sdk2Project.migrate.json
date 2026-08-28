@@ -31,7 +31,7 @@
     {
       "file_id": 11407,
       "object_path": "Armature/Hips/Spine/Head/Hair",
-      "what": "DynamicBone -> VRCPhysBone (pull 0.05, spring 0.80, immobile 0.90, maxAngle 92, radius 0.020, gravity 0.050)"
+      "what": "DynamicBone -> VRCPhysBone (pull 0.05, spring 0.80, immobile 0.90, maxAngle 92, radius 0.020, gravity 0.052)"
     },
     {
       "file_id": 11400,
@@ -60,10 +60,22 @@
         "rel_path": "Fixture_SDK3/FX/Gesture_Fist.anim.meta"
       },
       {
+        "rel_path": "Fixture_SDK3/FX/Gesture_Fist_Half.anim"
+      },
+      {
+        "rel_path": "Fixture_SDK3/FX/Gesture_Fist_Half.anim.meta"
+      },
+      {
         "rel_path": "Fixture_SDK3/FX/Gesture_Victory.anim"
       },
       {
         "rel_path": "Fixture_SDK3/FX/Gesture_Victory.anim.meta"
+      },
+      {
+        "rel_path": "Fixture_SDK3/FX/Gesture_Victory_Half.anim"
+      },
+      {
+        "rel_path": "Fixture_SDK3/FX/Gesture_Victory_Half.anim.meta"
       },
       {
         "rel_path": "Fixture_SDK3/FX/Gesture_Neutral.anim"
@@ -165,11 +177,27 @@
     },
     {
       "kind": "clip",
+      "path": "Assets/Fixture_SDK3/FX/Gesture_Fist_Half.anim"
+    },
+    {
+      "kind": "meta",
+      "path": "Assets/Fixture_SDK3/FX/Gesture_Fist_Half.anim.meta"
+    },
+    {
+      "kind": "clip",
       "path": "Assets/Fixture_SDK3/FX/Gesture_Victory.anim"
     },
     {
       "kind": "meta",
       "path": "Assets/Fixture_SDK3/FX/Gesture_Victory.anim.meta"
+    },
+    {
+      "kind": "clip",
+      "path": "Assets/Fixture_SDK3/FX/Gesture_Victory_Half.anim"
+    },
+    {
+      "kind": "meta",
+      "path": "Assets/Fixture_SDK3/FX/Gesture_Victory_Half.anim.meta"
     },
     {
       "kind": "clip",
@@ -225,7 +253,7 @@
     "1 material(s) were re-pointed from locked shader copies to their original shader; open each once in the inspector so the shader's upgrade pass runs, and eyeball them.",
     "Open the output folder with the VRChat Creator Companion (Projects → Add Existing Project) so it resolves com.vrchat.avatars, then open it in Unity.",
     "Drag Assets/Fixture_SDK3/Fixture.prefab into a scene; check the Avatar Descriptor's View Position and the FX layer, then Build & Publish from the VRChat SDK panel.",
-    "Test each hand gesture: expressions come from the generated 'Gestures' FX layer (either hand triggers).",
+    "Test each hand gesture: expressions come from the generated 'Gestures' FX layer (either hand; trigger depth blends the expression, SDK2 Vive style).",
     "Play-test the PhysBones (hair/skirt) and tune Pull/Spring/Gravity in the inspector if needed.",
     "Eye look was derived from the rig; use the descriptor's eye-look preview to confirm the eyes glance the right way."
   ],

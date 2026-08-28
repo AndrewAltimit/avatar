@@ -26,6 +26,252 @@ pub enum AnimGenCommand {
     Params(ParamsArgs),
     /// Emit a `VRCExpressionsMenu` asset from toggle/button/radial/sub-menu controls.
     Menu(MenuArgs),
+    /// Graft a float-driven **radial puppet** into an existing avatar: splice a gated blend-tree
+    /// layer into an FX `.controller` (Off state writes nothing; the tree takes over while the
+    /// dial is up), declare the float parameter, and append it to existing
+    /// `VRCExpressionParameters` / `VRCExpressionsMenu` assets — e.g. an analog "Blink" dial
+    /// blending Neutral → an eyes-closed clip.
+    Puppet(PuppetArgs),
+}
+
+#[derive(Args, Debug)]
+pub struct PuppetArgs {
+    /// The FX `.controller` to splice the layer + parameter into (edited in place; pass
+    /// `--force`).
+    #[arg(long)]
+    controller: PathBuf,
+    /// A `VRCExpressionParameters` asset to append the float parameter to (edited in place).
+    #[arg(long)]
+    parameters: Option<PathBuf>,
+    /// A `VRCExpressionsMenu` asset to append the radial control to (edited in place).
+    #[arg(long)]
+    menu: Option<PathBuf>,
+    /// The float parameter the dial drives (animator + expression parameter, same name).
+    #[arg(long)]
+    param: String,
+    /// Menu control label (default: the parameter name).
+    #[arg(long)]
+    menu_name: Option<String>,
+    /// FX layer name (default: `<param> Puppet`).
+    #[arg(long)]
+    layer_name: Option<String>,
+    /// A child clip as `GUID@THRESHOLD` (e.g. the neutral clip `@0` and the target pose `@1`).
+    /// Repeatable; order is free.
+    #[arg(long = "clip", value_name = "GUID@THRESHOLD")]
+    clips: Vec<String>,
+    /// The layer engages when the parameter rises above this…
+    #[arg(long, default_value_t = 0.01)]
+    on: f32,
+    /// …and disengages below this (the gap is hysteresis).
+    #[arg(long, default_value_t = 0.005)]
+    off: f32,
+    /// Don't persist the parameter's value across worlds/restarts.
+    #[arg(long)]
+    unsaved: bool,
+    /// Default parameter value.
+    #[arg(long, default_value_t = 0.0)]
+    default_value: f32,
+    /// Emit a machine-readable JSON report.
+    #[arg(long)]
+    json: bool,
+    #[command(flatten)]
+    guard: WriteGuard,
+}
+
+pub fn puppet(args: &PuppetArgs) -> Result<()> {
+    use avatar_unity_yaml::{EditableUnityFile, parse_path};
+
+    if args.clips.len() < 2 {
+        bail!("a puppet blend needs at least two --clip GUID@THRESHOLD children (e.g. @0 and @1)");
+    }
+    let clips: Vec<(String, f32)> = args
+        .clips
+        .iter()
+        .map(|spec| parse_clip_spec(spec))
+        .collect::<Result<_>>()?;
+    let menu_name = args.menu_name.clone().unwrap_or_else(|| args.param.clone());
+    let layer_name = args
+        .layer_name
+        .clone()
+        .unwrap_or_else(|| format!("{} Puppet", args.param));
+
+    // ---- FX controller: parameter + layer entry + gated fragment documents.
+    let text = std::fs::read_to_string(&args.controller)
+        .with_context(|| format!("reading {}", args.controller.display()))?;
+    let mut fx = EditableUnityFile::parse(&text)?;
+    let root = fx
+        .documents()
+        .iter()
+        .position(|d| d.class_id == 91)
+        .context("no AnimatorController (class 91) document in --controller")?;
+    let params_path = parse_path("m_AnimatorParameters");
+    let existing = fx.sequence_items(root, &params_path).unwrap_or_default();
+    if existing
+        .iter()
+        .any(|it| it.contains(&format!("m_Name: {}", args.param)))
+    {
+        bail!(
+            "parameter '{}' is already declared in {}",
+            args.param,
+            args.controller.display()
+        );
+    }
+
+    let mut tree = BlendTree::analog_gesture(&menu_name, &args.param);
+    for (guid, threshold) in &clips {
+        tree = tree.clip(guid.clone(), *threshold);
+    }
+    let mut ids = IdGen::new(&format!("{} puppet", args.param));
+    let (fragment, sm_id) = tree.to_gated_layer_fragment(&args.param, args.on, args.off, &mut ids);
+
+    // Split the fragment into its documents and refuse (astronomically unlikely) id collisions.
+    let frag = EditableUnityFile::parse(&format!(
+        "{}{}",
+        avatar_anim_gen::yaml_emit::UNITY_PREAMBLE,
+        fragment
+    ))?;
+    let frag_docs: Vec<(u32, i64, String)> = frag
+        .documents()
+        .iter()
+        .map(|d| {
+            (
+                d.class_id,
+                d.file_id,
+                frag.text()[d.body_range()].to_string(),
+            )
+        })
+        .collect();
+    for (_, id, _) in &frag_docs {
+        if fx.doc_by_file_id(*id).is_some() {
+            bail!("generated fileID {id} collides with an existing document; rename --param");
+        }
+    }
+
+    fx.append_sequence_item(
+        root,
+        &params_path,
+        &format!(
+            "m_Name: {}
+m_Type: 1
+m_DefaultFloat: 0
+m_DefaultInt: 0
+m_DefaultBool: 0
+m_Controller: {{fileID: 0}}",
+            args.param
+        ),
+    )?;
+    fx.append_sequence_item(
+        root,
+        &parse_path("m_AnimatorLayers"),
+        &format!(
+            "serializedVersion: 5
+m_Name: {layer_name}
+m_StateMachine: {{fileID: {sm_id}}}
+m_Mask: {{fileID: 0}}
+m_Motions: []
+m_Behaviours: []
+m_BlendingMode: 0
+m_SyncedLayerIndex: -1
+m_DefaultWeight: 1
+m_IKPass: 0
+m_SyncedLayerAffectsTiming: 0
+m_Controller: {{fileID: 0}}"
+        ),
+    )?;
+    for (class_id, file_id, body) in &frag_docs {
+        fx.append_document(*class_id, *file_id, body)?;
+    }
+    let mut written = vec![];
+    if write_out_guarded(Some(&args.controller), &fx.into_string(), args.guard)? {
+        written.push(args.controller.display().to_string());
+    }
+
+    // ---- Expression parameters asset.
+    if let Some(path) = &args.parameters {
+        let text =
+            std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
+        let mut f = EditableUnityFile::parse(&text)?;
+        let doc = f
+            .documents()
+            .iter()
+            .position(|d| d.class_id == 114)
+            .context("no MonoBehaviour document in --parameters")?;
+        f.append_sequence_item(
+            doc,
+            &parse_path("parameters"),
+            &format!(
+                "name: {}
+valueType: 1
+saved: {}
+defaultValue: {}
+networkSynced: 1",
+                args.param,
+                (!args.unsaved) as i32,
+                args.default_value
+            ),
+        )?;
+        if write_out_guarded(Some(path), &f.into_string(), args.guard)? {
+            written.push(path.display().to_string());
+        }
+    }
+
+    // ---- Expression menu asset.
+    if let Some(path) = &args.menu {
+        let text =
+            std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
+        let mut f = EditableUnityFile::parse(&text)?;
+        let doc = f
+            .documents()
+            .iter()
+            .position(|d| d.class_id == 114)
+            .context("no MonoBehaviour document in --menu")?;
+        f.append_sequence_item(
+            doc,
+            &parse_path("controls"),
+            &format!(
+                "name: {menu_name}
+icon: {{fileID: 0}}
+type: 203
+parameter:
+  name: ''
+value: 1
+subMenu: {{fileID: 0}}
+subParameters:
+- name: {}
+labels: []",
+                args.param
+            ),
+        )?;
+        if write_out_guarded(Some(path), &f.into_string(), args.guard)? {
+            written.push(path.display().to_string());
+        }
+    }
+
+    if args.json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&json!({
+                "param": args.param,
+                "layer": layer_name,
+                "menu_control": menu_name,
+                "state_machine_file_id": sm_id,
+                "clips": clips.iter().map(|(g, t)| json!({"guid": g, "threshold": t})).collect::<Vec<_>>(),
+                "gate": {"on": args.on, "off": args.off},
+                "written": written,
+            }))?
+        );
+    } else {
+        eprintln!(
+            "puppet '{menu_name}': float '{}' -> gated layer '{layer_name}' (sm {sm_id}); wrote {}",
+            args.param,
+            if written.is_empty() {
+                "nothing (dry run?)".to_string()
+            } else {
+                written.join(", ")
+            }
+        );
+    }
+    Ok(())
 }
 
 #[derive(Args, Debug)]

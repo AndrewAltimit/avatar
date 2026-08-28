@@ -266,6 +266,16 @@ pub fn run(path: &Path) -> Result<LintReport> {
             &mut diagnostics,
         );
         check_descriptor_eyelook(file, desc, &mut diagnostics);
+        check_descriptor_eyelid_fx_conflict(
+            file,
+            desc,
+            prefab_by_rel.get(file.as_str()).copied(),
+            &guid_to_path,
+            &project.root,
+            &controllers_by_guid,
+            &clips_by_guid,
+            &mut diagnostics,
+        );
         check_descriptor_param_wiring(
             file,
             desc,
@@ -724,6 +734,132 @@ fn check_descriptor_viseme_mesh_shapes(
             file: Some(file.to_string()),
             hint: Some(
                 "The mesh's FBX has no morph channels by these names; re-select the visemes on the descriptor or re-export the mesh with the shapes.".into(),
+            ),
+        });
+    }
+}
+
+/// VRC062: an animation on one of the avatar's custom playable layers drives a blendshape the
+/// descriptor registers as an **eyelid** (`eyelidType: Blendshapes` + `eyelidsBlendshapes`).
+/// VRChat's eyelid driver writes the registered shapes *after* the animators every frame, so the
+/// animation is silently overridden in-game — the classic "my blink expression does nothing"
+/// failure. Fires regardless of `enableEyeLook` (registration alone hands the shape to the
+/// driver). Resolution mirrors the viseme cross-check: eyelid mesh renderer → `m_Mesh` guid →
+/// source FBX → morph channels in import order → names at the registered indices; unresolvable
+/// steps return quietly.
+#[allow(clippy::too_many_arguments)]
+fn check_descriptor_eyelid_fx_conflict(
+    file: &str,
+    desc: &AvatarDescriptor,
+    prefab: Option<&UnityFile>,
+    guid_to_path: &BTreeMap<String, String>,
+    project_root: &Path,
+    controllers_by_guid: &BTreeMap<&str, &AnimatorController>,
+    clips_by_guid: &BTreeMap<&str, &AnimationClip>,
+    out: &mut Vec<Diagnostic>,
+) {
+    let eye = &desc.eye_look;
+    if !eye.uses_eyelid_blendshapes() || eye.eyelids_blendshapes.iter().all(|&i| i < 0) {
+        return;
+    }
+    if eye.eyelids_mesh.file_id == 0 || eye.eyelids_mesh.guid.is_some() {
+        return;
+    }
+    let Some(prefab) = prefab else { return };
+    let Some(renderer) = prefab
+        .documents
+        .iter()
+        .find(|d| d.class_id == 137 && d.file_id == eye.eyelids_mesh.file_id)
+    else {
+        return;
+    };
+    let Some(mesh_guid) = renderer.body["m_Mesh"]["guid"].as_str() else {
+        return;
+    };
+    let Some(rel) = guid_to_path.get(mesh_guid) else {
+        return;
+    };
+    if !rel.to_ascii_lowercase().ends_with(".fbx") {
+        return;
+    }
+    let Ok(scene) = avatar_fbx::FbxScene::load(&project_root.join(rel)) else {
+        return;
+    };
+    // Unity imports blendshapes in FBX morph-channel order, so the registered indices resolve
+    // through the channel list directly.
+    let channels: Vec<String> = scene
+        .blendshape_channels()
+        .into_iter()
+        .map(|c| c.name)
+        .collect();
+    let eyelid_names: BTreeSet<&str> = eye
+        .eyelids_blendshapes
+        .iter()
+        .filter(|&&i| i >= 0)
+        .filter_map(|&i| channels.get(i as usize).map(String::as_str))
+        .collect();
+    if eyelid_names.is_empty() {
+        return;
+    }
+
+    // Which custom-layer animations write those shapes to a non-zero value?
+    let mut hits: BTreeMap<&str, BTreeSet<String>> = BTreeMap::new();
+    for layer in desc.animation_layers() {
+        if layer.is_default {
+            continue;
+        }
+        let Some(controller) = layer
+            .controller
+            .guid
+            .as_deref()
+            .and_then(|g| controllers_by_guid.get(g))
+        else {
+            continue;
+        };
+        let state_guids = controller
+            .states
+            .iter()
+            .filter_map(|s| s.motion.guid.as_deref());
+        let tree_guids = controller
+            .blend_tree_motion_guids
+            .iter()
+            .map(String::as_str);
+        for guid in state_guids.chain(tree_guids) {
+            let Some(clip) = clips_by_guid.get(guid) else {
+                continue;
+            };
+            for curve in &clip.float_curves {
+                let Some(shape) = curve.attribute.strip_prefix("blendShape.") else {
+                    continue;
+                };
+                if let Some(&name) = eyelid_names.get(shape)
+                    && curve.keys.iter().any(|&(_, v)| v != 0.0)
+                {
+                    hits.entry(name).or_default().insert(
+                        guid_to_path
+                            .get(guid)
+                            .cloned()
+                            .unwrap_or_else(|| guid.to_string()),
+                    );
+                }
+            }
+        }
+    }
+    for (shape, clips) in hits {
+        out.push(Diagnostic {
+            severity: Severity::Warn,
+            code: "VRC062",
+            message: format!(
+                "Blendshape '{shape}' is registered as an eyelid (eyelidType: Blendshapes) but is \
+                 also animated by {} — VRChat's eyelid driver writes it after the animators, so \
+                 the animation is overridden in-game",
+                clips.iter().cloned().collect::<Vec<_>>().join(", "),
+            ),
+            file: Some(file.to_string()),
+            hint: Some(
+                "Set Eyelid Type to None (or unregister the shape) to let animations drive it, \
+                 or animate a duplicate blendshape instead."
+                    .into(),
             ),
         });
     }

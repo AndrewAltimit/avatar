@@ -24,7 +24,8 @@
 //! direction → 90° about the local forward axis, `Z` → 90° about the local right axis,
 //! `bonesAsSpheres` on.
 
-use avatar_unity_yaml::script_file_id;
+use anyhow::{Result, bail};
+use avatar_unity_yaml::{Yaml, field_f64, field_i64, ref_fileid, script_file_id};
 
 use crate::math::{Quat, Vec3, fmt};
 
@@ -97,10 +98,140 @@ fn asset_ref(r: Option<&(i64, String)>) -> String {
     }
 }
 
-/// An empty `AnimationCurve` block, as Unity serializes an unset PhysBone curve.
-fn empty_curve(out: &mut String, key: &str) {
+/// A PhysBone per-chain curve: keys of `(position along the chain 0..1, multiplier 0..1)`. The
+/// SDK evaluates it at each bone's normalised position and multiplies the base value by it (so
+/// `pull 0.3` with a curve `0:0.5, 1:1` pulls 0.15 at the root and 0.3 at the tip). Empty = no
+/// curve (the base value everywhere). Rendered with **linear** segments: every key gets free
+/// tangents equal to the secants to its neighbours, which makes the Hermite curve Unity evaluates
+/// exactly piecewise-linear — what you'd expect from `0:0.5, 1:1`, with no editor smoothing.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Curve(pub Vec<(f64, f64)>);
+
+impl Curve {
+    /// No curve.
+    pub const NONE: Curve = Curve(Vec::new());
+
+    /// Parse the CLI form `t:v,t:v,…` (e.g. `0:0.5,1:1`); keys are sorted by time.
+    pub fn parse(s: &str) -> Result<Curve> {
+        let mut keys = Vec::new();
+        for part in s.split(',') {
+            let part = part.trim();
+            if part.is_empty() {
+                continue;
+            }
+            let Some((t, v)) = part.split_once(':') else {
+                bail!("curve key '{part}' is not `time:value`");
+            };
+            let t: f64 = t
+                .trim()
+                .parse()
+                .map_err(|_| anyhow::anyhow!("curve time '{t}'"))?;
+            let v: f64 = v
+                .trim()
+                .parse()
+                .map_err(|_| anyhow::anyhow!("curve value '{v}'"))?;
+            if !(0.0..=1.0).contains(&t) {
+                bail!("curve time {t} is outside 0..1 (position along the chain)");
+            }
+            keys.push((t, v));
+        }
+        keys.sort_by(|a, b| a.0.total_cmp(&b.0));
+        Ok(Curve(keys))
+    }
+
+    /// True if unset.
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// Read a serialized `AnimationCurve` block back (only `time`/`value` are kept).
+    pub fn from_yaml(node: &Yaml) -> Curve {
+        let mut keys = Vec::new();
+        if let Some(items) = node["m_Curve"].as_vec() {
+            for k in items {
+                if let (Some(t), Some(v)) = (field_f64(k, "time"), field_f64(k, "value")) {
+                    keys.push((t, v));
+                }
+            }
+        }
+        Curve(keys)
+    }
+
+    /// Human form: `0:0.5 → 1:1`.
+    pub fn describe(&self) -> String {
+        self.0
+            .iter()
+            .map(|(t, v)| format!("{}:{}", fmt(*t), fmt(*v)))
+            .collect::<Vec<_>>()
+            .join(" → ")
+    }
+
+    /// The curve's multiplier at chain position `t` (linear between keys, clamped outside).
+    pub fn eval(&self, t: f64) -> f64 {
+        let k = &self.0;
+        match k.len() {
+            0 => 1.0,
+            1 => k[0].1,
+            _ => {
+                if t <= k[0].0 {
+                    return k[0].1;
+                }
+                for w in k.windows(2) {
+                    let ((t0, v0), (t1, v1)) = (w[0], w[1]);
+                    if t <= t1 {
+                        let span = t1 - t0;
+                        return if span <= 0.0 {
+                            v1
+                        } else {
+                            v0 + (v1 - v0) * (t - t0) / span
+                        };
+                    }
+                }
+                k[k.len() - 1].1
+            }
+        }
+    }
+
+    /// Render as the `AnimationCurve` block Unity serializes under `key`.
+    fn render(&self, out: &mut String, key: &str) {
+        out.push_str(&format!("  {key}:\n    serializedVersion: 2\n"));
+        if self.0.is_empty() {
+            out.push_str("    m_Curve: []\n");
+        } else {
+            out.push_str("    m_Curve:\n");
+            let n = self.0.len();
+            let secant = |a: usize, b: usize| -> f64 {
+                let (ta, va) = self.0[a];
+                let (tb, vb) = self.0[b];
+                if (tb - ta).abs() < 1e-9 {
+                    0.0
+                } else {
+                    (vb - va) / (tb - ta)
+                }
+            };
+            for i in 0..n {
+                let (t, v) = self.0[i];
+                let out_slope = if i + 1 < n { secant(i, i + 1) } else { 0.0 };
+                let in_slope = if i > 0 { secant(i - 1, i) } else { out_slope };
+                let out_slope = if i + 1 < n { out_slope } else { in_slope };
+                out.push_str(&format!(
+                    "    - serializedVersion: 3\n      time: {}\n      value: {}\n      inSlope: {}\n      outSlope: {}\n      tangentMode: 0\n      weightedMode: 0\n      inWeight: 0.33333334\n      outWeight: 0.33333334\n",
+                    fmt(t),
+                    fmt(v),
+                    fmt(in_slope),
+                    fmt(out_slope)
+                ));
+            }
+        }
+        out.push_str("    m_PreInfinity: 2\n    m_PostInfinity: 2\n    m_RotationOrder: 4\n");
+    }
+}
+
+/// A PhysBone `*Filter` block (`allowSelf` / `allowOthers`).
+fn filter_block(out: &mut String, key: &str, (allow_self, allow_others): (bool, bool)) {
     out.push_str(&format!(
-        "  {key}:\n    serializedVersion: 2\n    m_Curve: []\n    m_PreInfinity: 2\n    m_PostInfinity: 2\n    m_RotationOrder: 4\n"
+        "  {key}:\n    allowSelf: {}\n    allowOthers: {}\n",
+        allow_self as u8, allow_others as u8
     ));
 }
 
@@ -528,28 +659,50 @@ pub struct PhysBoneSpec {
     /// 0 = Ignore, 1 = First, 2 = Average.
     pub multi_child_type: i64,
     pub pull: f64,
+    pub pull_curve: Curve,
     pub spring: f64,
+    pub spring_curve: Curve,
     pub stiffness: f64,
+    pub stiffness_curve: Curve,
     pub gravity: f64,
+    pub gravity_curve: Curve,
     pub gravity_falloff: f64,
+    pub gravity_falloff_curve: Curve,
     /// 0 = All Motion, 1 = World (Parent) Motion.
     pub immobile_type: i64,
     pub immobile: f64,
+    pub immobile_curve: Curve,
     pub allow_collision: bool,
+    /// `collisionFilter` (allowSelf, allowOthers).
+    pub collision_filter: (bool, bool),
     pub radius: f64,
+    pub radius_curve: Curve,
     /// PhysBoneCollider component fileIDs.
     pub colliders: Vec<i64>,
     pub limit_type: LimitType,
     pub max_angle_x: f64,
+    pub max_angle_x_curve: Curve,
     pub max_angle_z: f64,
+    pub max_angle_z_curve: Curve,
     pub limit_rotation: Vec3,
+    pub limit_rotation_curves: [Curve; 3],
     pub static_freeze_axis: Vec3,
     pub allow_grabbing: bool,
+    /// `grabFilter` (allowSelf, allowOthers).
+    pub grab_filter: (bool, bool),
     pub allow_posing: bool,
+    /// `poseFilter` (allowSelf, allowOthers).
+    pub pose_filter: (bool, bool),
+    pub snap_to_hand: bool,
     pub grab_movement: f64,
     pub max_stretch: f64,
+    pub max_stretch_curve: Curve,
     pub max_squish: f64,
+    pub max_squish_curve: Curve,
+    pub stretch_motion: f64,
+    pub stretch_motion_curve: Curve,
     pub is_animated: bool,
+    pub reset_when_disabled: bool,
     pub parameter: String,
 }
 
@@ -565,28 +718,137 @@ impl PhysBoneSpec {
             endpoint_position: Vec3::ZERO,
             multi_child_type: 0,
             pull: 0.2,
+            pull_curve: Curve::NONE,
             spring: 0.2,
+            spring_curve: Curve::NONE,
             stiffness: 0.2,
+            stiffness_curve: Curve::NONE,
             gravity: 0.0,
+            gravity_curve: Curve::NONE,
             gravity_falloff: 0.0,
+            gravity_falloff_curve: Curve::NONE,
             immobile_type: 0,
             immobile: 0.0,
+            immobile_curve: Curve::NONE,
             allow_collision: true,
+            collision_filter: (true, true),
             radius: 0.0,
+            radius_curve: Curve::NONE,
             colliders: Vec::new(),
             limit_type: LimitType::None,
             max_angle_x: 45.0,
+            max_angle_x_curve: Curve::NONE,
             max_angle_z: 45.0,
+            max_angle_z_curve: Curve::NONE,
             limit_rotation: Vec3::ZERO,
+            limit_rotation_curves: [Curve::NONE, Curve::NONE, Curve::NONE],
             static_freeze_axis: Vec3::ZERO,
             allow_grabbing: true,
+            grab_filter: (true, true),
             allow_posing: true,
+            pose_filter: (true, true),
+            snap_to_hand: false,
             grab_movement: 0.5,
             max_stretch: 0.0,
+            max_stretch_curve: Curve::NONE,
             max_squish: 0.0,
+            max_squish_curve: Curve::NONE,
+            stretch_motion: 0.0,
+            stretch_motion_curve: Curve::NONE,
             is_animated: false,
+            reset_when_disabled: false,
             parameter: String::new(),
         }
+    }
+
+    /// Read an existing `VRCPhysBone` MonoBehaviour body back into a spec (the inverse of
+    /// [`to_body`](Self::to_body)); missing fields take the inspector defaults. `body` is the
+    /// document's mapping (`UnityDocument::body`).
+    pub fn from_yaml(body: &Yaml) -> Self {
+        let mut pb = PhysBoneSpec::new(ref_fileid(body, "m_GameObject").unwrap_or(0));
+        let f = |k: &str, d: f64| field_f64(body, k).unwrap_or(d);
+        let i = |k: &str, d: i64| field_i64(body, k).unwrap_or(d);
+        let b = |k: &str, d: bool| field_i64(body, k).map(|v| v != 0).unwrap_or(d);
+        let refs = |k: &str| -> Vec<i64> {
+            body[k]
+                .as_vec()
+                .map(|v| v.iter().filter_map(|r| field_i64(r, "fileID")).collect())
+                .unwrap_or_default()
+        };
+        let filter = |k: &str| -> (bool, bool) {
+            let n = &body[k];
+            (
+                field_i64(n, "allowSelf").map(|v| v != 0).unwrap_or(true),
+                field_i64(n, "allowOthers").map(|v| v != 0).unwrap_or(true),
+            )
+        };
+        let curve = |k: &str| Curve::from_yaml(&body[k]);
+        pb.version = i("version", pb.version);
+        pb.integration_type = i("integrationType", pb.integration_type);
+        pb.root_transform = ref_fileid(body, "rootTransform").unwrap_or(0);
+        pb.ignore_transforms = refs("ignoreTransforms");
+        if !body["endpointPosition"].is_badvalue() {
+            pb.endpoint_position = crate::scene::vec3(&body["endpointPosition"]);
+        }
+        pb.multi_child_type = i("multiChildType", pb.multi_child_type);
+        pb.pull = f("pull", pb.pull);
+        pb.pull_curve = curve("pullCurve");
+        pb.spring = f("spring", pb.spring);
+        pb.spring_curve = curve("springCurve");
+        pb.stiffness = f("stiffness", pb.stiffness);
+        pb.stiffness_curve = curve("stiffnessCurve");
+        pb.gravity = f("gravity", pb.gravity);
+        pb.gravity_curve = curve("gravityCurve");
+        pb.gravity_falloff = f("gravityFalloff", pb.gravity_falloff);
+        pb.gravity_falloff_curve = curve("gravityFalloffCurve");
+        pb.immobile_type = i("immobileType", pb.immobile_type);
+        pb.immobile = f("immobile", pb.immobile);
+        pb.immobile_curve = curve("immobileCurve");
+        pb.allow_collision = b("allowCollision", pb.allow_collision);
+        pb.collision_filter = filter("collisionFilter");
+        pb.radius = f("radius", pb.radius);
+        pb.radius_curve = curve("radiusCurve");
+        pb.colliders = refs("colliders");
+        pb.limit_type = match i("limitType", 0) {
+            1 => LimitType::Angle,
+            2 => LimitType::Hinge,
+            3 => LimitType::Polar,
+            _ => LimitType::None,
+        };
+        pb.max_angle_x = f("maxAngleX", pb.max_angle_x);
+        pb.max_angle_x_curve = curve("maxAngleXCurve");
+        pb.max_angle_z = f("maxAngleZ", pb.max_angle_z);
+        pb.max_angle_z_curve = curve("maxAngleZCurve");
+        if !body["limitRotation"].is_badvalue() {
+            pb.limit_rotation = crate::scene::vec3(&body["limitRotation"]);
+        }
+        pb.limit_rotation_curves = [
+            curve("limitRotationXCurve"),
+            curve("limitRotationYCurve"),
+            curve("limitRotationZCurve"),
+        ];
+        if !body["staticFreezeAxis"].is_badvalue() {
+            pb.static_freeze_axis = crate::scene::vec3(&body["staticFreezeAxis"]);
+        }
+        pb.allow_grabbing = b("allowGrabbing", pb.allow_grabbing);
+        pb.grab_filter = filter("grabFilter");
+        pb.allow_posing = b("allowPosing", pb.allow_posing);
+        pb.pose_filter = filter("poseFilter");
+        pb.snap_to_hand = b("snapToHand", false);
+        pb.grab_movement = f("grabMovement", pb.grab_movement);
+        pb.max_stretch = f("maxStretch", pb.max_stretch);
+        pb.max_stretch_curve = curve("maxStretchCurve");
+        pb.max_squish = f("maxSquish", pb.max_squish);
+        pb.max_squish_curve = curve("maxSquishCurve");
+        pb.stretch_motion = f("stretchMotion", pb.stretch_motion);
+        pb.stretch_motion_curve = curve("stretchMotionCurve");
+        pb.is_animated = b("isAnimated", pb.is_animated);
+        pb.reset_when_disabled = b("resetWhenDisabled", false);
+        pb.parameter = body["parameter"]
+            .as_str()
+            .map(str::to_string)
+            .unwrap_or_default();
+        pb
     }
 
     /// The SDK's DynamicBone→PhysBone parameter conversion (see the module docs). `scale_ratio`
@@ -688,28 +950,29 @@ impl PhysBoneSpec {
         ));
         o.push_str(&format!("  multiChildType: {}\n", self.multi_child_type));
         o.push_str(&format!("  pull: {}\n", fmt(self.pull)));
-        empty_curve(&mut o, "pullCurve");
+        self.pull_curve.render(&mut o, "pullCurve");
         o.push_str(&format!("  spring: {}\n", fmt(self.spring)));
-        empty_curve(&mut o, "springCurve");
+        self.spring_curve.render(&mut o, "springCurve");
         o.push_str(&format!("  stiffness: {}\n", fmt(self.stiffness)));
-        empty_curve(&mut o, "stiffnessCurve");
+        self.stiffness_curve.render(&mut o, "stiffnessCurve");
         o.push_str(&format!("  gravity: {}\n", fmt(self.gravity)));
-        empty_curve(&mut o, "gravityCurve");
+        self.gravity_curve.render(&mut o, "gravityCurve");
         o.push_str(&format!(
             "  gravityFalloff: {}\n",
             fmt(self.gravity_falloff)
         ));
-        empty_curve(&mut o, "gravityFalloffCurve");
+        self.gravity_falloff_curve
+            .render(&mut o, "gravityFalloffCurve");
         o.push_str(&format!("  immobileType: {}\n", self.immobile_type));
         o.push_str(&format!("  immobile: {}\n", fmt(self.immobile)));
-        empty_curve(&mut o, "immobileCurve");
+        self.immobile_curve.render(&mut o, "immobileCurve");
         o.push_str(&format!(
             "  allowCollision: {}\n",
             self.allow_collision as u8
         ));
-        o.push_str("  collisionFilter:\n    allowSelf: 1\n    allowOthers: 1\n");
+        filter_block(&mut o, "collisionFilter", self.collision_filter);
         o.push_str(&format!("  radius: {}\n", fmt(self.radius)));
-        empty_curve(&mut o, "radiusCurve");
+        self.radius_curve.render(&mut o, "radiusCurve");
         if self.colliders.is_empty() {
             o.push_str("  colliders: []\n");
         } else {
@@ -720,34 +983,38 @@ impl PhysBoneSpec {
         }
         o.push_str(&format!("  limitType: {}\n", self.limit_type as u8));
         o.push_str(&format!("  maxAngleX: {}\n", fmt(self.max_angle_x)));
-        empty_curve(&mut o, "maxAngleXCurve");
+        self.max_angle_x_curve.render(&mut o, "maxAngleXCurve");
         o.push_str(&format!("  maxAngleZ: {}\n", fmt(self.max_angle_z)));
-        empty_curve(&mut o, "maxAngleZCurve");
+        self.max_angle_z_curve.render(&mut o, "maxAngleZCurve");
         o.push_str(&format!(
             "  limitRotation: {}\n",
             self.limit_rotation.to_yaml()
         ));
-        empty_curve(&mut o, "limitRotationXCurve");
-        empty_curve(&mut o, "limitRotationYCurve");
-        empty_curve(&mut o, "limitRotationZCurve");
+        self.limit_rotation_curves[0].render(&mut o, "limitRotationXCurve");
+        self.limit_rotation_curves[1].render(&mut o, "limitRotationYCurve");
+        self.limit_rotation_curves[2].render(&mut o, "limitRotationZCurve");
         o.push_str(&format!(
             "  staticFreezeAxis: {}\n",
             self.static_freeze_axis.to_yaml()
         ));
         o.push_str(&format!("  allowGrabbing: {}\n", self.allow_grabbing as u8));
-        o.push_str("  grabFilter:\n    allowSelf: 1\n    allowOthers: 1\n");
+        filter_block(&mut o, "grabFilter", self.grab_filter);
         o.push_str(&format!("  allowPosing: {}\n", self.allow_posing as u8));
-        o.push_str("  poseFilter:\n    allowSelf: 1\n    allowOthers: 1\n");
-        o.push_str("  snapToHand: 0\n");
+        filter_block(&mut o, "poseFilter", self.pose_filter);
+        o.push_str(&format!("  snapToHand: {}\n", self.snap_to_hand as u8));
         o.push_str(&format!("  grabMovement: {}\n", fmt(self.grab_movement)));
         o.push_str(&format!("  maxStretch: {}\n", fmt(self.max_stretch)));
-        empty_curve(&mut o, "maxStretchCurve");
+        self.max_stretch_curve.render(&mut o, "maxStretchCurve");
         o.push_str(&format!("  maxSquish: {}\n", fmt(self.max_squish)));
-        empty_curve(&mut o, "maxSquishCurve");
-        o.push_str("  stretchMotion: 0\n");
-        empty_curve(&mut o, "stretchMotionCurve");
+        self.max_squish_curve.render(&mut o, "maxSquishCurve");
+        o.push_str(&format!("  stretchMotion: {}\n", fmt(self.stretch_motion)));
+        self.stretch_motion_curve
+            .render(&mut o, "stretchMotionCurve");
         o.push_str(&format!("  isAnimated: {}\n", self.is_animated as u8));
-        o.push_str("  resetWhenDisabled: 0\n");
+        o.push_str(&format!(
+            "  resetWhenDisabled: {}\n",
+            self.reset_when_disabled as u8
+        ));
         o.push_str(&format!("  parameter: {}\n", self.parameter));
         o.push_str("  showGizmos: 1\n");
         o.push_str("  boneOpacity: 0.5\n");
@@ -801,6 +1068,70 @@ mod tests {
             VRC_AVATAR_DESCRIPTOR.render(),
             "{fileID: 542108242, guid: 67cc4cb7839cd3741b63733d5adf0442, type: 3}"
         );
+    }
+
+    #[test]
+    fn physbone_spec_round_trips_through_yaml() {
+        let mut pb = PhysBoneSpec::new(77);
+        pb.root_transform = 5;
+        pb.ignore_transforms = vec![8, 9];
+        pb.pull = 0.35;
+        pb.pull_curve = Curve::parse("0:0.5,1:1").unwrap();
+        pb.spring_curve = Curve::parse("0:1,0.5:0.8,1:0.4").unwrap();
+        pb.gravity = 0.15;
+        pb.immobile_type = 1;
+        pb.immobile = 0.4;
+        pb.collision_filter = (true, false);
+        pb.colliders = vec![11];
+        pb.limit_type = LimitType::Angle;
+        pb.max_angle_x = 60.0;
+        pb.allow_grabbing = false;
+        pb.grab_filter = (false, true);
+        pb.snap_to_hand = true;
+        pb.stretch_motion = 0.25;
+        pb.is_animated = true;
+        pb.reset_when_disabled = true;
+        pb.parameter = "Hair".into();
+        let body = pb.to_body();
+        let file = parse_body(&body);
+        let back = PhysBoneSpec::from_yaml(&file.documents[0].body);
+        assert_eq!(back.game_object, 77);
+        assert_eq!(back.root_transform, 5);
+        assert_eq!(back.ignore_transforms, vec![8, 9]);
+        assert_eq!(back.pull, 0.35);
+        assert_eq!(back.pull_curve, pb.pull_curve);
+        assert_eq!(back.spring_curve, pb.spring_curve);
+        assert_eq!(back.gravity, 0.15);
+        assert_eq!(back.immobile_type, 1);
+        assert_eq!(back.collision_filter, (true, false));
+        assert_eq!(back.colliders, vec![11]);
+        assert_eq!(back.limit_type, LimitType::Angle);
+        assert_eq!(back.max_angle_x, 60.0);
+        assert!(!back.allow_grabbing);
+        assert_eq!(back.grab_filter, (false, true));
+        assert!(back.snap_to_hand);
+        assert_eq!(back.stretch_motion, 0.25);
+        assert!(back.is_animated && back.reset_when_disabled);
+        assert_eq!(back.parameter, "Hair");
+        // Idempotent: rendering the read-back spec gives the same text.
+        assert_eq!(back.to_body(), body);
+        // Linear segments: the middle spring key carries the two secants as its tangents.
+        assert!(body.contains(
+            "      time: 0.5\n      value: 0.8\n      inSlope: -0.4\n      outSlope: -0.8\n"
+        ));
+    }
+
+    #[test]
+    fn curve_parse_and_eval() {
+        let c = Curve::parse("1:1, 0:0.5").unwrap();
+        assert_eq!(c.0, vec![(0.0, 0.5), (1.0, 1.0)]);
+        assert!((c.eval(0.5) - 0.75).abs() < 1e-12);
+        assert_eq!(c.eval(-1.0), 0.5);
+        assert_eq!(c.eval(2.0), 1.0);
+        assert_eq!(Curve::NONE.eval(0.3), 1.0);
+        assert_eq!(c.describe(), "0:0.5 → 1:1");
+        assert!(Curve::parse("0:0.5,2:1").is_err());
+        assert!(Curve::parse("nope").is_err());
     }
 
     #[test]

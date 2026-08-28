@@ -22,8 +22,11 @@ project around it that the VRChat Creator Companion can open:
   retyped as PhysBone colliders, and new PhysBone chains added on named roots (Cloth skirt →
   PhysBone skirt).
 - Named subtrees stripped (haptics vests, stray cameras).
-- SDK2 gesture overrides → clean blendshape clips + an either-hand gesture FX layer
-  ([`avatar-anim-gen`](../anim-gen/README.md)); empty expression menu/params generated.
+- SDK2 gesture overrides → clean blendshape clips + an either-hand gesture FX layer with
+  per-hand analog blend trees on `GestureLeftWeight`/`GestureRightWeight` (trigger depth =
+  expression depth, SDK2 Vive style; `analog_gestures: false` / `--no-analog-gestures` for
+  discrete states) ([`avatar-anim-gen`](../anim-gen/README.md)); empty expression menu/params
+  generated.
 - `Assets/` copied minus exclusions (SDK2 `VRCSDK`, examples, DynamicBone scripts), plus
   `Packages/vpm-manifest.json` (`com.vrchat.avatars`), a VCC-template `manifest.json` (incl.
   `com.unity.test-framework`, without which the SDK doesn't compile) and `ProjectVersion.txt`.
@@ -41,8 +44,13 @@ project around it that the VRChat Creator Companion can open:
   `migrate(&opts) -> Result<MigrationReport>`.
 - `sdk3`: the SDK3 script references (`VRC_AVATAR_DESCRIPTOR`, `VRC_PHYS_BONE`, …, all
   `{fileID: <MD4 class hash>, guid: <dll guid>}` from SDK 3.10.4) and body emitters
-  (`DescriptorSpec`, `PhysBoneSpec::from_dynamic_bone`, `PhysBoneColliderSpec`,
-  `pipeline_manager_body`).
+  (`DescriptorSpec`, `PhysBoneSpec::{new, from_dynamic_bone, from_yaml, to_body}` — a full
+  read/modify/write spec incl. per-chain `Curve`s, `PhysBoneColliderSpec`, `pipeline_manager_body`).
+- `physbone`: post-migration tuning on any SDK3 prefab — `list`/`info`/`find` (`PhysBoneInfo`:
+  root, chains, colliders, tuning), `set(&mut rw, id, &Tuning, ignore±, colliders±)`,
+  `split(&mut rw, id, chains, &Tuning)`, `stretch(&mut rw, id, factor, from_depth)`,
+  `flare(&mut rw, id, FlareTarget, hinge_depth)` — wired to
+  `avatar physbone list|set|split|stretch|flare|nudge` ([`docs/reference/physbone.md`](../../docs/reference/physbone.md)).
 - `sdk2::Sdk2Avatar::read(&Scene)` — structural recognition of the SDK2 descriptor, PipelineManager,
   DynamicBone(+Collider), Cloth, CapsuleCollider, root Animator.
 - `scene::Scene` — the prefab graph (transform tree, components, world-space composition);
@@ -55,5 +63,6 @@ project around it that the VRChat Creator Companion can open:
 Built and green: unit tests per module + an end-to-end golden test over the synthetic
 `fixtures/projects/Sdk2Project` (report, migrated prefab, FX controller pinned). Validated on a
 real 2021 SDK2 avatar export (`avatar lint` on the output: 0 errors/warnings, `avatar stats`
-computes the PhysBone metrics). Not yet proven: the *Unity import* of the migrated prefab — that
-last mile is the user's Unity/VCC step this repo deliberately does not own.
+computes the PhysBone metrics), and that output opened in Unity 2022.3 via VCC, built and uploaded
+to VRChat unchanged. The PhysBone tuning pass (`physbone`) is golden-tested on the same fixture
+(list → split → set → stretch pinned) and was applied to that avatar.

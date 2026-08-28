@@ -424,6 +424,143 @@ impl FbxDocument {
         Ok(())
     }
 
+    /// The control-point indexes a named blendshape channel deforms: the union of the `Indexes`
+    /// arrays of the channel's target `Shape` geometries, sorted and deduplicated. Errors if no
+    /// channel has that name; a channel whose shapes carry no `Indexes` array (some exporters
+    /// write full-mesh shapes without one) yields an empty list.
+    ///
+    /// Together with [`Self::meshes`] (`control_point_of_vertex` / `material_of_triangle`) this
+    /// answers "which material slots does this blendshape touch" — e.g. which material an emote
+    /// overlay (a blush patch a shape slides into view) actually renders with.
+    pub fn blendshape_target_indexes(&self, channel_name: &str) -> Result<Vec<u32>> {
+        let scene = self.scene();
+        let channel = scene
+            .objects
+            .iter()
+            .find(|o| o.subclass == "BlendShapeChannel" && o.name == channel_name)
+            .with_context(|| format!("no blendshape channel named '{channel_name}'"))?;
+        // `Shape` geometries connect *into* the channel (Shape → Channel), so they are its
+        // connection children.
+        let shape_ids: Vec<i64> = scene
+            .children_of(channel.id)
+            .into_iter()
+            .filter(|id| scene.object(*id).is_some_and(|o| o.subclass == "Shape"))
+            .collect();
+        let mut out: Vec<u32> = Vec::new();
+        let root = self.tree.root();
+        let objects = child_named(&root, "Objects").context("FBX has no Objects node")?;
+        for n in objects.children() {
+            let Some(id) = n.attributes().first().and_then(as_i64) else {
+                continue;
+            };
+            if shape_ids.contains(&id)
+                && let Some(idx) = mesh::node_i32_array(&n, "Indexes")
+            {
+                out.extend(idx.into_iter().map(|i| i as u32));
+            }
+        }
+        out.sort_unstable();
+        out.dedup();
+        Ok(out)
+    }
+
+    /// The `Geometry` object connected under mesh `Model` `model_id`, if any.
+    pub fn geometry_of_model(&self, model_id: i64) -> Option<i64> {
+        let scene = self.scene();
+        scene
+            .children_of(model_id)
+            .into_iter()
+            .find(|c| scene.object(*c).is_some_and(|o| o.node_name == "Geometry"))
+    }
+
+    /// Reassign material **slots** per polygon on the mesh under `Model` `model_id`:
+    /// `changes` is `(polygon index, slot)` (polygon indices as in `PolygonVertexIndex` order —
+    /// [`avatar_mesh::RawMesh::polygon_of_triangle`] maps a triangle back to it; slots index the
+    /// materials connected to the model, in connection order). Edits `LayerElementMaterial`
+    /// in place; an `AllSame` layer is expanded to `ByPolygon` first. Returns how many polygon
+    /// entries changed value.
+    pub fn set_polygon_materials(
+        &mut self,
+        model_id: i64,
+        changes: &[(u32, u32)],
+    ) -> Result<usize> {
+        let geom_id = self
+            .geometry_of_model(model_id)
+            .with_context(|| format!("model {model_id} has no Geometry"))?;
+        let geom = self
+            .object_node_id(geom_id)
+            .with_context(|| format!("geometry {geom_id} node not found"))?;
+        // Polygon count from PolygonVertexIndex (one negative entry per polygon).
+        let (n_poly, elem, mapping_node, ref_node, materials_node) = {
+            let g = geom.to_handle(&self.tree);
+            let n_poly = child_named(&g, "PolygonVertexIndex")
+                .and_then(|n| match n.attributes().first() {
+                    Some(AttributeValue::ArrI32(v)) => Some(v.iter().filter(|x| **x < 0).count()),
+                    _ => None,
+                })
+                .context("geometry has no PolygonVertexIndex")?;
+            let elem = child_named(&g, "LayerElementMaterial")
+                .context("geometry has no LayerElementMaterial (single-material mesh?)")?;
+            let mapping = child_named(&elem, "MappingInformationType").map(|n| n.node_id());
+            let refi = child_named(&elem, "ReferenceInformationType").map(|n| n.node_id());
+            let mats = child_named(&elem, "Materials")
+                .map(|n| n.node_id())
+                .context("LayerElementMaterial has no Materials array")?;
+            (n_poly, elem.node_id(), mapping, refi, mats)
+        };
+        let _ = elem;
+        let mapping = mapping_node
+            .and_then(|n| match self.tree.get_attribute_mut(n, 0) {
+                Some(AttributeValue::String(s)) => Some(s.clone()),
+                _ => None,
+            })
+            .unwrap_or_default();
+        // Current per-polygon table (expand AllSame).
+        let mut table: Vec<i32> = match self.tree.get_attribute_mut(materials_node, 0) {
+            Some(AttributeValue::ArrI32(v)) => v.clone(),
+            _ => bail!("Materials array is not an int array"),
+        };
+        match mapping.as_str() {
+            "ByPolygon" => {
+                if table.len() != n_poly {
+                    bail!(
+                        "LayerElementMaterial has {} entries for {n_poly} polygons",
+                        table.len()
+                    );
+                }
+            }
+            "AllSame" | "AllSameForAll" => {
+                let slot = table.first().copied().unwrap_or(0);
+                table = vec![slot; n_poly];
+                if let Some(n) = mapping_node
+                    && let Some(AttributeValue::String(s)) = self.tree.get_attribute_mut(n, 0)
+                {
+                    *s = "ByPolygon".to_string();
+                }
+                if let Some(n) = ref_node
+                    && let Some(AttributeValue::String(s)) = self.tree.get_attribute_mut(n, 0)
+                {
+                    *s = "IndexToDirect".to_string();
+                }
+            }
+            other => bail!("unsupported material MappingInformationType '{other}'"),
+        }
+        let mut changed = 0;
+        for &(poly, slot) in changes {
+            let Some(e) = table.get_mut(poly as usize) else {
+                bail!("polygon {poly} out of range ({n_poly} polygons)");
+            };
+            if *e != slot as i32 {
+                *e = slot as i32;
+                changed += 1;
+            }
+        }
+        if let Some(AttributeValue::ArrI32(v)) = self.tree.get_attribute_mut(materials_node, 0) {
+            *v = table;
+        }
+        Ok(changed)
+    }
+
     /// Serialize the current tree to a binary FBX byte buffer.
     pub fn to_bytes(&self) -> Result<Vec<u8>> {
         let mut writer = Writer::new(Cursor::new(Vec::new()), self.version)
@@ -815,6 +952,50 @@ mod tests {
         assert!(doc().scene().blendshape_channels().is_empty());
     }
 
+    /// `blendshape_target_indexes` unions the target shapes' `Indexes` (two shapes on one
+    /// channel dedup + sort), returns empty for an index-less shape, and errors on an unknown
+    /// channel name.
+    #[test]
+    fn blendshape_target_indexes_reads_shape_indexes() {
+        let tree = tree_v7400! {
+            Objects: {
+                Model: [10i64, "Body\u{0}\u{1}Model", "Mesh"] {},
+                Geometry: [20i64, "Body\u{0}\u{1}Geometry", "Mesh"] {
+                    Vertices: [vec![0.0f64, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0]] {},
+                    PolygonVertexIndex: [vec![0i32, 1, -3]] {},
+                },
+                Deformer: [40i64, "\u{0}\u{1}Deformer", "BlendShape"] {},
+                Deformer: [50i64, "Blush\u{0}\u{1}SubDeformer", "BlendShapeChannel"] {},
+                Deformer: [51i64, "Flat\u{0}\u{1}SubDeformer", "BlendShapeChannel"] {},
+                // Two target shapes on `Blush` with overlapping index sets; `Flat`'s shape has
+                // no `Indexes` array at all.
+                Geometry: [60i64, "Blush\u{0}\u{1}Geometry", "Shape"] {
+                    Indexes: [vec![2i32, 0]] {},
+                },
+                Geometry: [61i64, "Blush2\u{0}\u{1}Geometry", "Shape"] {
+                    Indexes: [vec![0i32, 1]] {},
+                },
+                Geometry: [62i64, "Flat\u{0}\u{1}Geometry", "Shape"] {},
+            },
+            Connections: {
+                C: ["OO", 20i64, 10i64] {},
+                C: ["OO", 40i64, 20i64] {},
+                C: ["OO", 50i64, 40i64] {},
+                C: ["OO", 51i64, 40i64] {},
+                C: ["OO", 60i64, 50i64] {},
+                C: ["OO", 61i64, 50i64] {},
+                C: ["OO", 62i64, 51i64] {},
+            },
+        };
+        let d = FbxDocument::from_bytes(&to_fbx_bytes(&tree)).unwrap();
+        assert_eq!(d.blendshape_target_indexes("Blush").unwrap(), vec![0, 1, 2]);
+        assert_eq!(
+            d.blendshape_target_indexes("Flat").unwrap(),
+            Vec::<u32>::new()
+        );
+        assert!(d.blendshape_target_indexes("Nope").is_err());
+    }
+
     /// A minimal skinned mesh: one quad (4 control points) skinned to two bones, each cluster
     /// driving two control points. Bone0's `TransformLink` carries a known translation so the
     /// matrix round-trip can be asserted.
@@ -964,5 +1145,29 @@ mod tests {
         assert_eq!(m.material_of_triangle, vec![0, 1]);
         assert_eq!(m.triangle_material(0), 0);
         assert_eq!(m.triangle_material(1), 1);
+        assert_eq!(m.polygon_of_triangle, vec![0, 1]);
+    }
+
+    /// Reassigning polygon material slots edits `LayerElementMaterial` in place and survives a
+    /// write + reparse; out-of-range polygons are refused.
+    #[test]
+    fn set_polygon_materials_round_trips() {
+        let mut d = FbxDocument::from_bytes(&to_fbx_bytes(&two_material_mesh_tree())).unwrap();
+        assert_eq!(d.geometry_of_model(10), Some(20));
+        // Polygon 1 (already slot 1) is a no-op; polygon 0 moves to slot 1.
+        let changed = d.set_polygon_materials(10, &[(0, 1), (1, 1)]).unwrap();
+        assert_eq!(changed, 1);
+        let again = FbxDocument::from_bytes(&d.to_bytes().unwrap()).unwrap();
+        let m = &again.meshes().unwrap()[0];
+        assert_eq!(m.material_of_triangle, vec![1, 1]);
+        assert_eq!(m.materials.len(), 2, "materials untouched");
+        assert!(
+            d.set_polygon_materials(10, &[(7, 0)]).is_err(),
+            "polygon out of range"
+        );
+        assert!(
+            d.set_polygon_materials(999, &[(0, 0)]).is_err(),
+            "no such model"
+        );
     }
 }

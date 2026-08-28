@@ -258,6 +258,27 @@ impl PrefabRewriter {
         Ok(())
     }
 
+    /// Replace the body of component `file_id` (same class, same fileID) with a freshly rendered
+    /// one — how a typed spec (e.g. a re-tuned `PhysBoneSpec`) is written back. The scene's parsed
+    /// copy of the document is refreshed so later reads see the new values.
+    pub fn replace_component_body(&mut self, file_id: i64, body: &str) -> Result<()> {
+        let idx = self.doc(file_id)?;
+        self.file.replace_document_body(idx, body)?;
+        let text = self.file.text();
+        let span = &self.file.documents()[idx];
+        let doc_text = &text[span.header_range().start..span.body_range().end];
+        if let Some(parsed) = avatar_unity_yaml::UnityFile::parse(&format!(
+            "%YAML 1.1\n%TAG !u! tag:unity3d.com,2011:\n{doc_text}"
+        ))?
+        .documents
+        .into_iter()
+        .next()
+        {
+            self.scene.docs.insert(file_id, parsed);
+        }
+        Ok(())
+    }
+
     /// Set a scalar field on document `file_id` (e.g. `m_ApplyRootMotion` = 0).
     pub fn set_scalar(&mut self, file_id: i64, path: &str, value: Scalar) -> Result<()> {
         let idx = self.doc(file_id)?;
@@ -313,7 +334,8 @@ impl PrefabRewriter {
 /// 19-digit range and kept clear of the small ids Unity reserves for main objects).
 pub fn derive_file_id(seed: &str) -> i64 {
     let h = avatar_unity_yaml::fnv1a(seed.as_bytes()) & 0x7fff_ffff_ffff_ffff;
-    (h % 9_000_000_000_000_000_000u64 + 1_000_000_000_000_000_000u64) as i64
+    // 1e18 ..= 9e18-1: 19 digits, always positive, below i64::MAX (≈9.22e18).
+    (h % 8_000_000_000_000_000_000u64 + 1_000_000_000_000_000_000u64) as i64
 }
 
 #[cfg(test)]
@@ -474,6 +496,18 @@ Transform:
         assert!(rw.text().contains(&format!("  m_Component:\n  - component: {{fileID: 402}}\n  - component: {{fileID: {id}}}\n  m_Name: Hips\n")));
         // Deterministic id.
         assert_eq!(id, derive_file_id("test/new"));
+        // Always a positive 19-digit id, whatever the hash (this seed used to wrap negative).
+        for seed in [
+            "test/new",
+            "physbone:Armature/Hips/Spine/Chest/Neck/Head/Hair/Hair_1",
+            "x",
+        ] {
+            let d = derive_file_id(seed);
+            assert!(
+                (1_000_000_000_000_000_000..9_000_000_000_000_000_000).contains(&d),
+                "{seed}: {d}"
+            );
+        }
         UnityFile::parse(rw.text()).unwrap();
         assert!(
             rw.add_component(

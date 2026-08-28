@@ -17,6 +17,10 @@ pub enum OscCommand {
     Input(OscInputArgs),
     /// Listen for the avatar parameters VRChat broadcasts and print each update.
     Monitor(OscMonitorArgs),
+    /// Record the parameter stream and reduce it to a report: per-parameter counts/values, plus
+    /// the gesture cross-tab (which `GestureLeft`/`GestureRight` values arrived, and the weight
+    /// range each covered while held) — the ground truth for "what does my controller deliver?".
+    Capture(OscCaptureArgs),
     /// Request VRChat switch avatars: `/avatar/change <blueprint-id>`.
     Change(OscChangeArgs),
     /// Parse an avatar's OSCQuery config JSON and list its parameters (offline; no socket).
@@ -24,6 +28,10 @@ pub enum OscCommand {
     /// Run the analog-gesture daemon: map a controller trigger → `Gesture*`/`Gesture*Weight` over
     /// OSC. With no on-device input backend headless, this drives a synthetic demo trigger sweep.
     Gestures(OscGesturesArgs),
+    /// Replay a captured parameter log (`osc capture -o …`) through a `.controller`'s state
+    /// machines offline: the state timeline + dwell/blend summary the avatar's FX actually went
+    /// through — capture proves what VRChat delivered, replay proves what the controller did.
+    Replay(crate::cmd::replay::OscReplayArgs),
 }
 
 /// Where a running VRChat listens for our messages (its default OSC-in port is 9000).
@@ -74,6 +82,130 @@ pub struct OscChangeArgs {
     id: String,
     #[command(flatten)]
     target: OscTarget,
+}
+
+#[derive(Args, Debug)]
+pub struct OscCaptureArgs {
+    /// Address to listen on (VRChat's default OSC-out port is 9001).
+    #[arg(long, default_value = "127.0.0.1")]
+    host: String,
+    /// Port to listen on for VRChat's outgoing parameters.
+    #[arg(long, default_value_t = avatar_osc::VRCHAT_SEND_PORT)]
+    port: u16,
+    /// Capture length. The summary prints when it elapses.
+    #[arg(long, default_value_t = 60)]
+    seconds: u64,
+    /// Also append every raw event as JSON lines here (written as it arrives, so a cut-short
+    /// session still keeps its data).
+    #[arg(short, long)]
+    output: Option<std::path::PathBuf>,
+    /// Don't echo each update live (the summary still prints).
+    #[arg(long)]
+    quiet: bool,
+    /// Print the summary as JSON instead of the table.
+    #[arg(long)]
+    json: bool,
+    /// Don't advertise an OSCQuery service over mDNS. Without advertisement only legacy
+    /// fixed-port output (9001) is captured; modern VRChat routes output to discovered services.
+    #[arg(long)]
+    no_advertise: bool,
+}
+
+pub fn capture(args: &OscCaptureArgs) -> Result<()> {
+    use std::io::Write as _;
+    // Bind the requested port; if it's taken (another OSC app), fall back to an ephemeral port —
+    // with OSCQuery advertisement the actual number no longer matters.
+    let target = ("127.0.0.1", avatar_osc::VRCHAT_RECV_PORT);
+    let mut client = match ParamClient::new((args.host.as_str(), args.port), target) {
+        Ok(c) => c,
+        Err(e) if !args.no_advertise => {
+            eprintln!(
+                "note: could not bind {}:{} ({e:#}); using an ephemeral port (OSCQuery will \
+                 advertise it)",
+                args.host, args.port
+            );
+            ParamClient::new((args.host.as_str(), 0), target)
+                .context("binding OSC capture socket")?
+        }
+        Err(e) => return Err(e).context("binding OSC capture socket"),
+    };
+    let listen_port = client.local_addr()?.port();
+    let advertiser = if args.no_advertise {
+        None
+    } else {
+        match avatar_osc::oscquery::OscQueryAdvertiser::start("avatar-capture", listen_port) {
+            Ok(a) => {
+                eprintln!(
+                    "advertising OSCQuery service '{}' (HTTP :{}) — VRChat discovers it and \
+                     sends parameters to :{listen_port}",
+                    a.name(),
+                    a.http_port()
+                );
+                Some(a)
+            }
+            Err(e) => {
+                eprintln!("note: OSCQuery advertisement failed ({e:#}); legacy port capture only");
+                None
+            }
+        }
+    };
+    let mut sink = match &args.output {
+        Some(path) => Some(std::io::BufWriter::new(
+            std::fs::File::create(path).with_context(|| format!("creating {}", path.display()))?,
+        )),
+        None => None,
+    };
+    eprintln!(
+        "capturing VRChat parameters on {}:{} for {}s — sweep the touchpad and trigger now          (make sure OSC is enabled: Action Menu → Options → OSC)…",
+        args.host, args.port, args.seconds
+    );
+    let mut cap = avatar_osc::capture::Capture::new();
+    let start = Instant::now();
+    let deadline = start + Duration::from_secs(args.seconds);
+    let mut nagged = false;
+    let mut vrchat_seen = false;
+    while Instant::now() < deadline {
+        if let Some(a) = &advertiser {
+            for inst in a.vrchat_announcements() {
+                if !vrchat_seen {
+                    eprintln!("(VRChat's own OSCQuery service is announcing: {inst})");
+                    vrchat_seen = true;
+                }
+            }
+        }
+        if !nagged && cap.events().is_empty() && start.elapsed() > Duration::from_secs(10) {
+            nagged = true;
+            eprintln!(
+                "no parameters after 10s — check: OSC enabled in VRChat (Action Menu → Options \
+                 → OSC → Enabled), an avatar is loaded, and this runs on the same machine as \
+                 VRChat. Toggling OSC off/on forces VRChat to re-discover services."
+            );
+        }
+        for update in client.poll()? {
+            let e = cap.record(&update.name, update.value);
+            if let Some(sink) = &mut sink {
+                serde_json::to_writer(&mut *sink, e)?;
+                sink.write_all(b"\n")?;
+            }
+            if !args.quiet {
+                println!("{:8.3}s {} = {:?}", e.t, e.name, update.value);
+            }
+        }
+        if let Some(sink) = &mut sink {
+            sink.flush()?;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    let summary = cap.summary();
+    if args.json {
+        println!("{}", serde_json::to_string_pretty(&summary)?);
+    } else {
+        print!("{}", avatar_osc::capture::render_summary(&summary));
+    }
+    if let Some(path) = &args.output {
+        eprintln!("raw events: {}", path.display());
+    }
+    Ok(())
 }
 
 #[derive(Args, Debug)]

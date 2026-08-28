@@ -259,8 +259,10 @@ impl AnimationLayer {
 pub const LIPSYNC_VISEME_BLENDSHAPE: i64 = 3;
 /// The number of visemes VRChat expects when using blend-shape lip-sync.
 pub const VISEME_COUNT: usize = 15;
-/// The `eyelidType` value for blend-shape eyelids (VRChat `EyelidType::Blendshapes`).
-pub const EYELID_TYPE_BLENDSHAPES: i64 = 1;
+/// The `eyelidType` value for blend-shape eyelids. VRChat's `EyelidType` enum is
+/// `{ None = 0, Bones = 1, Blendshapes = 2 }` (the SDK's own serialized avatars carry
+/// `eyelidType: 2` alongside `eyelidsBlendshapes`).
+pub const EYELID_TYPE_BLENDSHAPES: i64 = 2;
 
 /// The avatar's eye-look configuration (`customEyeLookSettings`).
 #[derive(Debug, Clone, Default, Serialize)]
@@ -269,10 +271,14 @@ pub struct EyeLookSettings {
     pub left_eye: AssetRef,
     /// The right eye bone.
     pub right_eye: AssetRef,
-    /// `eyelidType`: 0 None, 1 Blendshapes, 2 Bones.
+    /// `eyelidType`: 0 None, 1 Bones, 2 Blendshapes.
     pub eyelid_type: i64,
     /// The skinned mesh holding eyelid blend shapes (`eyelidsSkinnedMesh`).
     pub eyelids_mesh: AssetRef,
+    /// `eyelidsBlendshapes`: blendshape **import-order indices** on [`Self::eyelids_mesh`] —
+    /// `[blink, looking up, looking down]`, `-1` = unset. Unity serializes the array either as
+    /// a YAML sequence or as a packed little-endian hex string; both are read.
+    pub eyelids_blendshapes: Vec<i64>,
 }
 
 impl EyeLookSettings {
@@ -282,6 +288,7 @@ impl EyeLookSettings {
             right_eye: AssetRef::parse(&node["rightEye"]),
             eyelid_type: field_i64(node, "eyelidType").unwrap_or(0),
             eyelids_mesh: AssetRef::parse(&node["eyelidsSkinnedMesh"]),
+            eyelids_blendshapes: parse_int_array(&node["eyelidsBlendshapes"]),
         }
     }
 
@@ -294,6 +301,31 @@ impl EyeLookSettings {
     pub fn uses_eyelid_blendshapes(&self) -> bool {
         self.eyelid_type == EYELID_TYPE_BLENDSHAPES
     }
+}
+
+/// Read an int array Unity serialized either as a YAML sequence (`[26, -1, -1]`) or as a packed
+/// little-endian hex string (`1a000000ffffffffffffffff`, one `i32` per 8 hex chars).
+fn parse_int_array(node: &Yaml) -> Vec<i64> {
+    if let Some(seq) = node.as_vec() {
+        return seq.iter().filter_map(|v| v.as_i64()).collect();
+    }
+    let Some(hex) = node.as_str() else {
+        return Vec::new();
+    };
+    if hex.len() % 8 != 0 || !hex.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Vec::new();
+    }
+    (0..hex.len() / 8)
+        .filter_map(|i| {
+            let chunk = &hex[i * 8..i * 8 + 8];
+            let bytes: Vec<u8> = (0..4)
+                .filter_map(|b| u8::from_str_radix(&chunk[b * 2..b * 2 + 2], 16).ok())
+                .collect();
+            <[u8; 4]>::try_from(bytes)
+                .ok()
+                .map(|b| i32::from_le_bytes(b) as i64)
+        })
+        .collect()
 }
 
 /// A parsed VRChat **Avatar Descriptor** (`VRCAvatarDescriptor`) — the component that turns a
@@ -430,6 +462,23 @@ pub fn extract(file: &UnityFile) -> Vec<VrcAsset> {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn eyelid_blendshape_indices_parse_both_forms() {
+        let body = |v: &str| {
+            let text = format!("--- !u!114 &1\nMonoBehaviour:\n  eyelidsBlendshapes: {v}\n");
+            UnityFile::parse(&text).unwrap().documents[0].body.clone()
+        };
+        assert_eq!(
+            super::parse_int_array(&body("[26, -1, -1]")["eyelidsBlendshapes"]),
+            vec![26, -1, -1]
+        );
+        assert_eq!(
+            super::parse_int_array(&body("1a000000ffffffffffffffff")["eyelidsBlendshapes"]),
+            vec![26, -1, -1]
+        );
+        assert!(super::parse_int_array(&body("nope")["eyelidsBlendshapes"]).is_empty());
+    }
     use super::*;
 
     const PARAMS: &str = "\

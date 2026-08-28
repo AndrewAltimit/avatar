@@ -200,6 +200,51 @@ Neutral, resetting shared shapes under WD off, wipes the lower hand's expression
 wraps layers in the class-91 controller, declaring each `Int` parameter once. Used by
 [`avatar-migrate`](migrate.md) to rebuild SDK2 gesture overrides.
 
+**Analog mode** (`GestureLayer::analog()`): each gesture state's motion becomes a 1D
+[BlendTree](#2-analog-gesture-1d-blendtree-class-id-206) on the gesture parameter's weight float
+(`GestureLeft` → `GestureLeftWeight`), blending `Neutral` (threshold 0) → the gesture clip
+(threshold 1) — trigger depth *is* expression depth, SDK2's Vive-wand "advanced controls"
+semantics. In a multi-parameter (either-hand) layer each gesture gets one state **per parameter**
+(`Fist L` / `Fist R`) so each hand blends on its own weight, still inside the single layer, and
+`fx_gestures` declares the weight `Float`s.
+
+Transition conditions are built **mutually exclusive** — two simultaneously-valid Any-State
+transitions to different states ping-pong every crossfade (a visible oscillation whenever both
+hands gesture). At most one target is valid at a time: **later parameters win** (`GestureLeft,
+GestureRight` → the right hand takes the face when both act, VRChat's hands-layer convention),
+and in analog mode "act" is weight-gated (`WEIGHT_ON` 0.05 to claim, `WEIGHT_OFF` 0.02 to
+release; the gap is hysteresis) — necessary because a Vive-wand thumb resting on the touchpad
+centre reports **Fist at weight 0**, and an ungated phantom would mask or oscillate against the
+other hand's real expression. A lower-priority hand's transitions carry one alternative per way
+the winning hand can be inactive (`== 0` or `weight < off`). When **both hands hold the same
+gesture** (two-parameter analog layers), a dedicated `<Gesture> LR` state plays a **2D
+freeform-cartesian tree** ([`BlendTree::freeform_2d`] + [`ChildMotion::at`]) over both weights
+whose samples encode the **capped sum** `min(left + right, 1)`: Neutral at the origin, the full
+clip on and past the `x + y = 1` diagonal, and optional half-strength clips
+(`GestureLayer::motion_half`) as `(0.5, 0)`/`(0, 0.5)` midpoints — so 50 % + 10 % lands near
+60 % instead of the second hand restarting the expression; per-hand transitions gain `NotEqual`
+guards so the exclusivity invariant holds. Caveat: on controllers whose weight only tracks an
+analog axis for some gestures (Index: Fist), other gestures need the trigger held to show — the
+same trade SDK2 made on wands.
+
+### 4c. Radial-puppet grafting (`avatar anim-gen puppet`)
+
+`avatar anim-gen puppet --controller FX.controller --parameters Parameters.asset --menu
+Menu.asset --param Blink --clip <neutral-guid>@0 --clip <pose-guid>@1 [--menu-name N]
+[--layer-name L] [--on 0.01 --off 0.005] [--unsaved] [--default-value V]` grafts an analog dial
+into an **existing** avatar, splicing (via `EditableUnityFile`, fileIDs/formatting preserved):
+
+- the float parameter + a new layer into the FX controller, whose state machine is
+  `BlendTree::to_gated_layer_fragment`: a default `Off` state that plays **nothing** (WD off —
+  the layer is inert and lower layers keep the properties) and an `On` state playing the 1D tree,
+  entered above `--on` and left below `--off` (hysteresis);
+- the float into the `VRCExpressionParameters` asset (8 sync bits, saved by default);
+- a `RadialPuppet` control into the `VRCExpressionsMenu` asset.
+
+Built for the mikunpc calm-blink dial (the wand touchpad centre wouldn't deliver the Fist
+gesture, so the same Neutral→eyes-closed blend the Fist state plays became an Action-Menu radial
+— dial depth = blink depth). `avatar lint` cross-checks the three assets after the splice.
+
 ### 5. The toggle bundle (`avatar toggle`) — the end-to-end composite
 
 A working in-game toggle needs five cooperating assets; the `toggle` module assembles all of them
