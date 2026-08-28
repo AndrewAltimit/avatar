@@ -21,7 +21,7 @@ VRChat upload step is not. For what's built and the roadmap, see [Status](#statu
 | [`docs/README.md`](docs/README.md) | Index of the `docs/` directory. |
 | [`docs/overview.md`](docs/overview.md) | The layered architecture in brief, with external references. |
 | [`docs/reference/humanoid-bones.md`](docs/reference/humanoid-bones.md) | Unity humanoid bones + VRChat rig requirements. |
-| [`docs/reference/sdk3-lint-rules.md`](docs/reference/sdk3-lint-rules.md) | Every `avatar lint` rule (`VRC001`–`VRC061`) + encodings. |
+| [`docs/reference/sdk3-lint-rules.md`](docs/reference/sdk3-lint-rules.md) | Every `avatar lint` rule (`VRC001`–`VRC062`) + encodings. |
 | [`docs/reference/unity-asset.md`](docs/reference/unity-asset.md) | `avatar-unity-asset`: the typed AnimatorController (`.controller`) + AnimationClip (`.anim`) readers the controller/clip lint rules consume. |
 | [`docs/reference/armature-repair.md`](docs/reference/armature-repair.md) | What `avatar armature fix` repairs, and the FBX writer. |
 | [`docs/reference/rig-runtime.md`](docs/reference/rig-runtime.md) | Runtime rig layer: skin/bind extraction, posing + bone-matrix palette, two-bone IK, tracker input. |
@@ -126,7 +126,7 @@ The roadmap of record (what each milestone covers, decisions, risks) is [`PLAN.m
 per-subsystem behaviour is in the [documentation map](#documentation-map) above and the per-crate
 READMEs. What exists today, with its doc:
 
-- **Diagnose / lint** — `avatar lint <project>` (SDK3 rules `VRC001`–`VRC061`, incl. animation-clip
+- **Diagnose / lint** — `avatar lint <project>` (SDK3 rules `VRC001`–`VRC062`, incl. animation-clip
   contents, the viseme↔source-FBX cross-check, and Android/hygiene checks;
   [`sdk3-lint-rules.md`](docs/reference/sdk3-lint-rules.md)); `avatar stats` offline VRChat
   performance ranking ([`performance-stats.md`](docs/reference/performance-stats.md)); `avatar

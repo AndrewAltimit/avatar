@@ -27,7 +27,7 @@ MonoBehaviour:
   - vrc.v_ff
   enableEyeLook: 1
   customEyeLookSettings:
-    eyelidType: 1
+    eyelidType: 2
     leftEye: {fileID: 0}
     rightEye: {fileID: 0}
     eyelidsSkinnedMesh: {fileID: 0}
