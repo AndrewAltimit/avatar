@@ -153,6 +153,20 @@ x86_64-pc-windows-gnu`) for capture sessions on the machine that actually runs V
 `[seconds] [port]` positionally, writes `gesture-capture.jsonl` beside itself, and waits for
 Enter before closing so the table survives a double-click launch.
 
+## Offline controller replay (`avatar osc replay`)
+
+The missing half of capture: `avatar osc replay <events.jsonl> --controller FX.controller
+[--layer NAME] [--timeline] [--json]` runs the captured parameter log through the controller's
+state machines **offline** — no Unity — and prints the state timeline each layer actually went
+through: visits, dwell times, and the blend-parameter range covered inside each state (seeded
+with the parameter's value at entry, since a constant weight sends no update events). Capture
+proves what VRChat *delivered*; replay proves what the controller *did with it*. Simulated
+semantics are the subset our generated controllers use: ordered Any-State + state transitions,
+`m_CanTransitionToSelf`, condition modes If/IfNot/Greater/Less/Equals/NotEqual; crossfades are
+treated as instantaneous and exit-time transitions are not modelled. On the mikunpc captures
+this closed the centre-pad-blink investigation in one command: the wand delivers Fist with
+analog weight, and the controller enters `Fist L`/`Fist R` and blends 0→1 exactly as designed.
+
 ## Analog-gesture daemon (`avatar-osc-gestures`)
 
 The "Vive advanced controls on any hardware" feature (PLAN §4) lives in a separate crate built on
