@@ -496,11 +496,11 @@ fn node_mat16(node: &NodeHandle, name: &str) -> [f64; 16] {
 }
 
 fn chunk3(flat: &[f32]) -> Vec<[f32; 3]> {
-    flat.chunks_exact(3).map(|c| [c[0], c[1], c[2]]).collect()
+    flat.as_chunks::<3>().0.to_vec()
 }
 
 fn chunk2(flat: &[f32]) -> Vec<[f32; 2]> {
-    flat.chunks_exact(2).map(|c| [c[0], c[1]]).collect()
+    flat.as_chunks::<2>().0.to_vec()
 }
 
 #[cfg(test)]

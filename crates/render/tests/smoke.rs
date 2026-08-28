@@ -64,7 +64,9 @@ fn renders_a_cube_to_pixels() {
     ];
     // Some pixels must differ from the background — i.e. the cube actually drew.
     let non_bg = rgba
-        .chunks_exact(4)
+        .as_chunks::<4>()
+        .0
+        .iter()
         .filter(|px| {
             (px[0] as i32 - bg8[0] as i32).abs() > 12
                 || (px[1] as i32 - bg8[1] as i32).abs() > 12
@@ -81,7 +83,7 @@ fn renders_a_cube_to_pixels() {
     // the top face catches more of the directional light than the sides.
     let mut lo = 255u8;
     let mut hi = 0u8;
-    for px in rgba.chunks_exact(4) {
+    for px in rgba.as_chunks::<4>().0 {
         let lum = px[0].max(px[1]).max(px[2]);
         if lum != bg8[0].max(bg8[1]).max(bg8[2]) {
             lo = lo.min(lum);

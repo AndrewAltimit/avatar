@@ -283,10 +283,7 @@ fn jpeg_info(b: &[u8]) -> Option<ImageInfo> {
         if len < 2 {
             return None;
         }
-        match i.checked_add(2).and_then(|n| n.checked_add(len)) {
-            Some(next) => i = next,
-            None => return None,
-        }
+        i = i.checked_add(2).and_then(|n| n.checked_add(len))?;
     }
     None
 }

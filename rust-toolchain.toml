@@ -1,3 +1,7 @@
+# Pinned (not "stable"): a floating channel let hosted CI drift to a newer
+# clippy than the dev machine / self-hosted runner, so new lints broke main
+# post-merge (e.g. 1.98's chunks_exact_to_as_chunks). Bump deliberately, with
+# a clippy sweep in the same commit.
 [toolchain]
-channel = "stable"
+channel = "1.98.0"
 components = ["rustfmt", "clippy"]
