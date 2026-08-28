@@ -1,0 +1,24 @@
+[package]
+name = "avatar-web-analyzer"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+# Not a library for other crates — the wasm bundle behind the docs site's Analyzer page.
+publish = false
+
+[lib]
+name = "avatar_web_analyzer"
+path = "src/lib.rs"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+anyhow.workspace = true
+serde = { workspace = true }
+serde_json.workspace = true
+wasm-bindgen = "0.2"
+avatar-fbx = { path = "../fbx" }
+avatar-armature = { path = "../armature" }
+avatar-stats = { path = "../stats" }
+
+[dev-dependencies]
+avatar-testkit = { path = "../testkit", features = ["fbx"] }

@@ -45,4 +45,6 @@ let posed = avatar_pose::PosedSkeleton::from_skinned_mesh(&skeleton, &meshes[0])
 
 ## Status
 
-Implements §9 #5 of the VR PRD. Behaviour: [`docs/reference/rig-runtime.md`](../../docs/reference/rig-runtime.md).
+Implements the glTF-import piece of the VR-spectator runtime-rig band
+([`PLAN.md`](../../PLAN.md) §9, "Runtime rig layer"). Behaviour:
+[`docs/reference/rig-runtime.md`](../../docs/reference/rig-runtime.md).

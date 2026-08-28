@@ -73,4 +73,5 @@ assert_eq!(field_i64(&params[0], "valueType"), Some(0));
 
 ## Status
 
-Built: **M2** (reader) + surgical editor (`EditableUnityFile` / `avatar asset set`).
+Built: **M2** (reader) + surgical editor (`EditableUnityFile` / `avatar asset set`), including the
+structural edits (remove/replace/append documents, block-sequence items) listed above.

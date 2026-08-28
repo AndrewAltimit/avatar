@@ -2,9 +2,11 @@
   <div class="breadcrumb"><a href="../index.html">home</a> &middot; <a href="index.html">reference</a> &middot; asset generation</div>
   <h1>Asset generation (M4)</h1>
   <p class="lede">
-    <code>avatar-anim-gen</code> emits Unity-YAML assets Unity will accept: <code>.anim</code> clips and
-    FX-layer analog-gesture blend trees. The hard part is correct fileIDs and field names &mdash; solved with a
-    faithful hand-written emitter and deterministic, diffable IDs. Full text:
+    <code>avatar-anim-gen</code> emits Unity-YAML assets Unity will accept: <code>.anim</code> clips,
+    analog-gesture blend trees, complete FX <code>AnimatorController</code>s, and VRC expression
+    parameters/menu assets &mdash; plus two composites, the <code>avatar toggle</code> bundle and
+    <code>avatar anim-gen puppet</code> grafting. The hard part is correct fileIDs and field names &mdash;
+    solved with a faithful hand-written emitter and deterministic, diffable IDs. Full text:
     <code>docs/reference/anim-gen.md</code>.
   </p>
 </header>
@@ -12,19 +14,92 @@
 <section class="doc-section" id="what">
   <h2>What it generates</h2>
   <ul>
-    <li><strong>Animation clips</strong> (<code>AnimationClip</code>, class 74) &mdash; blendshape-weight and GameObject-active curves.</li>
-    <li><strong>Analog-gesture blend trees</strong> (<code>BlendTree</code>, class 206) &mdash; blending <code>GestureLeft/RightWeight</code>.</li>
+    <li><strong>Animation clips</strong> (<code>AnimationClip</code>, class 74) &mdash; blendshape-weight and GameObject-active curves; a curve binds to <code>(path, attribute, classID)</code>, and a toggle is just an <code>m_IsActive</code> float curve.</li>
+    <li><strong>Analog-gesture blend trees</strong> (<code>BlendTree</code>, class 206) &mdash; a 1D tree blending on <code>GestureLeft/RightWeight</code>, emitted either as a bare 206 document with a wiring note or as a self-contained state-machine/state/tree fragment (<code>to_state_fragment</code>, Write Defaults off).</li>
+    <li><strong>Full FX controllers</strong> (<code>AnimatorController</code>, class 91) &mdash; <code>fx_blend_tree</code> assembles the class-91 document, auto-declares the blend parameter as a <code>Float</code>, and wires one layer to the fragment's state machine; field set/order matched against a real Unity-authored controller.</li>
+    <li><strong>Gesture-driven FX layers</strong> (<code>GestureLayer</code>) &mdash; the idiomatic SDK3 face-expression layer: Neutral + one state per gesture, Any-State transitions on <code>GestureLeft/Right Equals n</code>. Either-hand layers get mutually-exclusive conditions (later parameter wins, weight-gated with hysteresis in analog mode); a both-hands-same-gesture state plays a 2D freeform tree encoding the capped sum of the two weights. Used by <a href="migrate.html">migrate</a> to rebuild SDK2 gesture overrides.</li>
+    <li><strong>Expression Parameters &amp; Expressions Menu</strong> (<code>.asset</code>, class 114) &mdash; single-document MonoBehaviour ScriptableObjects at Unity's <code>&amp;11400000</code> convention, with the SDK's real DLL class-hash <code>m_Script</code> references (<code>-1506855854</code> / <code>-340790334</code> into <code>VRCSDK3A.dll</code>). <code>synced_bits()</code> reports the 256-bit-budget cost up front.</li>
   </ul>
-  <div class="cli"><code>avatar anim-gen clip --name Smile --blendshape Body:Smile:100 -o Smile.anim
-avatar anim-gen blendtree ...</code></div>
+</section>
+
+<section class="doc-section" id="toggle">
+  <h2>The toggle bundle (<code>avatar toggle</code>)</h2>
+  <p>
+    A working in-game toggle needs five cooperating assets; <code>avatar toggle</code> generates all of them
+    as one internally-consistent ten-file bundle: <code>&lt;N&gt;_On/Off.anim</code> (targets held on /
+    written back to 0 &mdash; authoritative both ways under Write Defaults off), a two-state
+    <code>&lt;N&gt;_FX.controller</code> (<code>Off</code> &#8646; <code>On</code>, instant transitions on a
+    <code>Bool</code>), the params + menu assets, and <code>.meta</code> sidecars with
+    <strong>deterministic GUIDs</strong> so the controller's clip references resolve on first import.
+    Targets are GameObject-active paths and/or blendshape weights; the bundle's wiring note walks through
+    descriptor hookup. The overwrite check runs across the whole bundle first, so a partial bundle is never
+    left behind.
+  </p>
+</section>
+
+<section class="doc-section" id="puppet">
+  <h2>Radial-puppet grafting (<code>avatar anim-gen puppet</code>)</h2>
+  <p>
+    Where everything above generates <em>fresh</em> assets, <code>puppet</code> grafts an analog dial into an
+    <strong>existing</strong> avatar by span-splice (via <code>EditableUnityFile</code> &mdash; fileIDs and
+    formatting preserved, see <a href="unity-yaml-edit.html">unity-yaml edit</a>): the float parameter plus a
+    gated blend-tree layer into the FX controller (a default <code>Off</code> state that plays nothing, an
+    <code>On</code> state entered/left with hysteresis), the float into the
+    <code>VRCExpressionParameters</code> asset, and a RadialPuppet control into the menu &mdash; dial depth =
+    expression depth. <code>avatar lint</code> cross-checks the three assets after the splice.
+  </p>
+</section>
+
+<section class="doc-section" id="cli">
+  <h2>CLI surface</h2>
+  <table>
+    <thead><tr><th>Command</th><th>Emits</th></tr></thead>
+    <tbody>
+      <tr><td><code>avatar anim-gen clip --name N [--blendshape PATH:SHAPE:VALUE]&hellip; [--toggle PATH]&hellip;</code></td><td>a <code>.anim</code> AnimationClip</td></tr>
+      <tr><td><code>avatar anim-gen blendtree --name N [--parameter P] [--clip GUID@THRESHOLD]&hellip; [--tree-only]</code></td><td>the blend-tree fragment (or the bare 206 doc)</td></tr>
+      <tr><td><code>avatar anim-gen controller --name N [--layer L] [--clip GUID@THRESHOLD]&hellip;</code></td><td>a complete FX <code>.controller</code></td></tr>
+      <tr><td><code>avatar anim-gen params --param NAME:TYPE[:DEFAULT][:unsaved][:local]&hellip;</code></td><td>a <code>VRCExpressionParameters</code> asset</td></tr>
+      <tr><td><code>avatar anim-gen menu [--toggle L:P[:V]]&hellip; [--button&hellip;] [--radial&hellip;] [--submenu&hellip;]</code></td><td>a <code>VRCExpressionsMenu</code> asset (&le; 8 controls enforced)</td></tr>
+      <tr><td><code>avatar anim-gen puppet --controller &hellip; --parameters &hellip; --menu &hellip; --param P --clip G@T&hellip;</code></td><td>the radial-dial graft above, spliced in place</td></tr>
+      <tr><td><code>avatar toggle --name N [--toggle PATH]&hellip; [--blendshape&hellip;] -o DIR</code></td><td>the ten-file toggle bundle</td></tr>
+    </tbody>
+  </table>
+  <p>
+    Shared flags: <code>-o</code> writes to a file (stdout otherwise), <code>--dry-run</code> previews,
+    <code>--force</code> is required to overwrite, and <code>--json</code> switches stdout to a
+    machine-readable report (allocated fileIDs, wiring note, the YAML embedded under <code>yaml</code>) so
+    an agent can wire the asset without parsing YAML.
+  </p>
 </section>
 
 <section class="doc-section" id="how">
-  <h2>The emitter</h2>
+  <h2>The emitter &amp; the fileID strategy</h2>
   <p>
     A faithful hand-written YAML emitter (<code>yaml_emit</code>) handles Unity's exact field names, block
-    indentation, and flow maps. <code>IdGen</code> hands out <strong>deterministic</strong> FNV-1a-seeded
-    fileIDs, so generated assets are diffable and reproducible across runs. Every generated clip round-trips
-    through the <code>avatar-unity-yaml</code> reader in tests.
+    indentation, flow maps, and Unity-style float printing. <code>IdGen</code> hands out
+    <strong>deterministic</strong> FNV-1a-seeded fileIDs &mdash; same input, byte-identical output &mdash; so
+    generated assets are diffable and reproducible; the name-derived base keeps independently-generated
+    assets collision-free if later combined. Canonical fixed ids are reproduced where load-bearing: a
+    <code>.anim</code>'s clip is fileID <code>7400000</code>, a loose <code>.cs</code> script
+    <code>11500000</code> (DLL classes use Unity's per-class hash instead).
+  </p>
+  <div class="hint">
+    Field-name gotcha verified against Unity serialization: <code>m_BlendParameter</code>,
+    <code>m_BlendParameterY</code>, and a child's <code>m_DirectBlendParameter</code> are
+    <strong>string</strong> fields (parameter names), not numeric.
+  </div>
+</section>
+
+<section class="doc-section" id="acceptance">
+  <h2>What's proven</h2>
+  <p>
+    Every generated asset round-trips through the repo's own readers: clips and fragments through
+    <code>avatar-unity-yaml</code>, controllers through <code>avatar-unity-asset</code>'s typed
+    <code>AnimatorController</code> reader (cross-references resolve, Write Defaults off, layer &rarr; state
+    machine ids match), expression assets through <code>avatar-vrc-descriptor</code>'s structural classifier
+    &mdash; the same one <code>avatar lint</code> trusts. Determinism is pinned by same-seed-byte-identical
+    tests. A headless <strong>Unity-acceptance gate</strong> (opt-in CI, self-skips without a
+    <code>UNITY_LICENSE</code>) imports CLI-generated <code>.anim</code>/<code>.controller</code> assets in a
+    real editor and asserts they parse with no import errors; only the in-game behaviour check remains manual.
   </p>
 </section>

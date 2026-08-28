@@ -1,0 +1,156 @@
+<header class="page-header">
+  <div class="breadcrumb"><a href="../index.html">home</a> &middot; <a href="index.html">reference</a> &middot; physbone tuning</div>
+  <h1>PhysBone tuning</h1>
+  <p class="lede">
+    The first thing anyone does after wearing a migrated (or freshly authored) avatar is retune its
+    PhysBones: the hair is too floppy, the skirt flaps, the tips of a long chain go wild.
+    <code>avatar physbone</code> does that read-modify-write on the prefab file itself &mdash; a change is
+    a one-line command that lands on the exact component and leaves every other byte (fileIDs, references,
+    formatting) alone. It lives in <code>avatar-migrate</code> as the post-migration step but works on any
+    SDK3 prefab. Full text: <code>docs/reference/physbone.md</code>.
+  </p>
+</header>
+
+<section class="doc-section" id="verbs">
+  <h2>The verbs</h2>
+  <div class="cli"><code>avatar physbone list    Avatar.prefab [--json]
+avatar physbone set     Avatar.prefab &lt;TARGET&gt; [tuning&hellip;] [--ignore N]&hellip; [--collider N]&hellip; -o Avatar.prefab --force
+avatar physbone split   Avatar.prefab &lt;TARGET&gt; --chain Hair_1 --chain Hair_2 [tuning&hellip;] -o &hellip; --force
+avatar physbone stretch Avatar.prefab &lt;TARGET&gt; --factor 1.5 | --by 0.077 [--from-depth 2] -o &hellip; --force
+avatar physbone flare   Avatar.prefab &lt;TARGET&gt; --angle 10 | --scale 0.5 [--hinge-depth 1] -o &hellip; --force
+avatar physbone nudge   Avatar.prefab &lt;TARGET&gt; --out 0.008 [--up M] [--chain N]&hellip; -o &hellip; --force</code></div>
+  <p>
+    <code>TARGET</code> is the PhysBone's root transform (a unique bone name or an <code>A/B/C</code> path),
+    the GameObject carrying it, or its <code>&amp;fileID</code> &mdash; <code>list</code> prints all three,
+    and an ambiguous name errors with the candidates. Edits follow the shared write policy:
+    <code>-o FILE</code> writes (the input path with <code>--force</code> edits in place), no <code>-o</code>
+    prints to stdout, <code>--dry-run</code> reports without writing, <code>--json</code> prints a
+    before/after report (<code>avatar schema physbone</code>).
+  </p>
+</section>
+
+<section class="doc-section" id="list">
+  <h2><code>list</code> &mdash; what a PhysBone is doing</h2>
+  <p>
+    For each <code>VRCPhysBone</code> (recognised by its DLL class reference): the object it sits on, the
+    root it simulates from, the <strong>chains</strong> it drives &mdash; bones per chain and their length
+    in avatar space &mdash; the total transforms simulated (the number VRChat's perf rank counts),
+    colliders, and the full tuning (pull/spring/stiffness, gravity + falloff, immobile, radius, limits,
+    grab/pose/collision flags), each with its <strong>curve</strong> if one is set. Each chain also reports
+    its <strong>flare</strong>: the angle between its first-bone&rarr;leaf direction and straight down.
+  </p>
+  <div class="hint">
+    Which bone is the first bone? With several live children and <code>multiChildType</code> Ignore (the
+    default) the root stays put and each child starts a chain; with a single child the root <em>is</em> the
+    first bone. That is why splitting all-but-one chain off a root turns the root into a simulated bone.
+  </div>
+</section>
+
+<section class="doc-section" id="set">
+  <h2><code>set</code> &mdash; retune one component, with per-chain curves</h2>
+  <p>
+    Every tuning value is optional; unset = keep. Values cover pull, spring, stiffness, gravity (+
+    falloff), immobile (+ type), radius, limit type + max angles, integration, version, multi-child,
+    collision/grab/pose flags, stretch/squish, <code>isAnimated</code>; lists take
+    <code>--ignore</code>/<code>--unignore</code> and <code>--collider</code>/<code>--uncollider</code>.
+  </p>
+  <p>
+    <strong>Curves</strong> (<code>--pull-curve</code>, <code>--spring-curve</code>,
+    <code>--stiffness-curve</code>, <code>--gravity-curve</code>, <code>--immobile-curve</code>,
+    <code>--radius-curve</code>, <code>--max-angle-curve</code>) take <code>T:V,T:V,&hellip;</code> keys
+    &mdash; <code>T</code> the position along the chain (0 = first bone, 1 = tip), <code>V</code> a 0..1
+    <strong>multiplier of the base value</strong>, which is how the SDK applies them. Keys are written with
+    tangents equal to the secants to their neighbours, so the Hermite curve Unity evaluates is exactly
+    piecewise-<strong>linear</strong> between your keys &mdash; no editor smoothing surprises. "More weight
+    at the ends" is a pull curve rising toward the tip plus a spring curve falling toward it.
+  </p>
+  <p>
+    The component body is re-rendered from a typed <code>PhysBoneSpec</code> read back from the prefab
+    (the same emitter the <a href="migrate.html">migration</a> uses; the round trip is byte-stable and
+    test-pinned), so a <code>set</code> rewrites exactly one document and touches nothing else.
+  </p>
+</section>
+
+<section class="doc-section" id="split">
+  <h2><code>split</code> &mdash; tune chains apart</h2>
+  <p>
+    Long pigtails and short bangs usually share one component rooted on <code>Head</code>/<code>Hair</code>,
+    and one set of numbers can't suit both. <code>split</code> moves each named chain onto its
+    <strong>own</strong> <code>VRCPhysBone</code> on that chain's first bone, tuned like the parent plus
+    whatever tuning flags you pass, inheriting the parent's colliders &mdash; and adds the chain to the
+    parent's <code>ignoreTransforms</code>. New fileIDs are derived from the bone path (stable across
+    runs). Component count goes up by one per chain (a perf metric: PC 4/8/16/32); simulated transforms
+    don't change.
+  </p>
+</section>
+
+<section class="doc-section" id="stretch">
+  <h2><code>stretch</code> &mdash; a longer skirt or tail without a mesh edit</h2>
+  <p>
+    <code>--factor F</code> multiplies the local position of every chain transform at depth &ge;
+    <code>--from-depth</code> below the root (default 2, which keeps a many-chain skirt's hinge ring in
+    place). <code>--by METERS</code> instead adds the same length to every chain &mdash; each chain gets
+    its own factor &mdash; which is what you want when chains have unequal bone counts: a uniform factor
+    grows a 5-bone chain more than its 4-bone neighbours and the hem grows peaks there; equal added length
+    keeps an even hem. <code>--chain NAME=METERS</code> overrides one chain &mdash; the knob for levelling
+    a hem whose sectors respond unequally. The skinned mesh follows its bones, so what hangs off the chain
+    gets longer. Only translations change &mdash; no rotation, no non-uniform scale, so no shear, and
+    PhysBone sees ordinary (longer) bones with the same radius.
+  </p>
+  <div class="notice warn"><div class="notice-title">Stretch caveats</div>
+    A texture stretches with it (up to ~1.5&ndash;1.7 reads fine on a plain skirt; beyond that a hem's
+    frill ring visibly distorts); the mesh's bounds are not enlarged (turn on <em>Update When Offscreen</em>
+    if the hem gets culled at frame edges); and colliders placed for the old length may now sit above the hem.
+  </div>
+</section>
+
+<section class="doc-section" id="flare-nudge">
+  <h2><code>flare</code> and <code>nudge</code> &mdash; re-aim and re-seat the chains</h2>
+  <p>
+    A skirt whose chains tilt outward gets a funnel silhouette, and stretching along that tilt makes the
+    funnel wider. <code>flare</code> re-angles each chain in avatar space: the hinge transform
+    (<code>--hinge-depth</code> below the root) is rotated so the hinge&rarr;leaf direction makes the
+    target angle with straight down &mdash; <code>--angle 10</code> for every chain, or
+    <code>--scale 0.5</code> to halve each chain's current angle. One local rotation changes per chain, so
+    it swings rigidly like a panel and the skinned mesh follows. It is a <strong>rest-pose</strong> edit:
+    PhysBone takes the new pose as rest, and colliders still push the chain out where the new rest sits
+    inside them (thighs) &mdash; exactly the "drape over the legs" you want.
+  </p>
+  <p>
+    <code>nudge</code> shifts the hinge ring itself: <code>--out METERS</code> moves each chain's hinge
+    radially away from the root's vertical axis (negative = inward), <code>--up METERS</code> along +Y,
+    <code>--chain NAME</code> to restrict it. The panel shifts rigidly &mdash; drape, angle and hem shape
+    untouched &mdash; the fix when <code>flare</code> has swung a skirt's top ring inside a waistband.
+  </p>
+</section>
+
+<section class="doc-section" id="preview">
+  <h2>Preview before Unity</h2>
+  <p>
+    <code>avatar render --avatar model.fbx --pose Avatar.prefab -o out.png</code> draws the FBX with every
+    bone's local transform taken from the prefab (matched by name, Unity's mirrored import undone), so what
+    you see is what Unity will show for that prefab &mdash; a stretched, re-angled skirt, anything.
+    <code>--stretch 'Skirt_0_*:1.5'</code> is the lighter one-knob form for previewing a stretch alone
+    (<a href="render.html">render</a>).
+  </p>
+</section>
+
+<section class="doc-section" id="workflow">
+  <h2>Typical workflow &mdash; retuning a migrated skirt</h2>
+  <p>
+    The shape of the real (mikunpc) pass: <code>split</code> the pigtails onto their own components with
+    weight and damped tips; <code>set</code> calm values on what stays on <code>Hair</code>; firm up and
+    <code>stretch</code> the skirt; wear it, then iterate &mdash; switch a uniform <code>--factor</code>
+    to equal-added-length <code>--by</code> when the hem grows peaks, <code>flare</code> the funnel in to
+    hug the legs, <code>nudge</code> the top ring out of a waistband, and finally fix the <em>runtime</em>
+    silhouette (thin fabric radius, smaller leg-capsule colliders, real gravity/immobile) when the editor
+    pose and the in-game pose disagree.
+  </p>
+  <div class="hint">
+    The rest pose you see in the editor is not what PhysBone shows in-game &mdash; collision radius (bone
+    <em>and</em> collider) sets how far a chain can hang from a limb, and gravity/immobile set how it moves.
+    <code>list</code> prints both radii; check them against the limb before blaming the pose. After a pass,
+    <a href="sdk3-lint-rules.html"><code>avatar lint</code></a> should stay clean and
+    <a href="performance-stats.html"><code>avatar stats</code></a> reports the component-count change.
+  </div>
+</section>

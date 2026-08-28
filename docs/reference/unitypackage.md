@@ -33,6 +33,13 @@ extension, and heuristic `PackageTraits`:
 - **`looks_like_avatar`** — a VRChat avatar prefab (`prefab-id-v1_avtr_*.prefab`) is present.
 - **`looks_like_world`** — scenes present and no avatar prefab.
 
+## Listing — `avatar unitypackage list`
+
+`list` prints every asset's path, GUID, and size without extracting anything — the quick way to
+find the prefab or FBX inside a package before committing to a full `extract`. `--filter STR`
+keeps only paths containing the substring (case-insensitive), `--folders` includes folder entries
+(default: files only), `--json` emits the rows as a machine-readable report.
+
 ## Extracting — `avatar unitypackage extract -o <dir>`
 
 `extract` reconstructs a normal Unity project tree under the destination: each asset at
@@ -78,5 +85,7 @@ content-conflicting GUIDs (platform-recompressed textures/materials and serializ
 - SDK2 avatars surface their age through the rest of the toolchain naturally: `avatar lint` reports
   `VRC001` (no `com.vrchat.avatars` package) and finds no SDK3 descriptor, and `avatar stats` on the
   project finds no avatar because the prefab carries the SDK2 `VRC_AvatarDescriptor`, not the SDK3
-  `VRCAvatarDescriptor`. Run `avatar stats <fbx>` directly for the geometry rank regardless.
+  `VRCAvatarDescriptor`. That is no longer a dead end: `avatar migrate sdk3` consumes exactly this
+  extractor's output and rewrites the prefab to SDK3 ([`migrate.md`](migrate.md)). Run
+  `avatar stats <fbx>` directly for the geometry rank regardless.
 - The reader holds asset bytes in memory; it is built for one-shot CLI runs, not streaming.

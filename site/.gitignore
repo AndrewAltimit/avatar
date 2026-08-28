@@ -3,6 +3,7 @@
 # for a local file:// preview; CI regenerates them on the Pages deploy.
 # This manifest file is itself tracked.
 
+/analyzer.html
 /architecture.html
 /cli/index.html
 /crates/index.html
@@ -12,8 +13,16 @@
 /reference/armature-repair.html
 /reference/humanoid-bones.html
 /reference/index.html
+/reference/mcp.html
+/reference/migrate.html
 /reference/osc-runtime.html
 /reference/performance-stats.html
+/reference/physbone.html
+/reference/render.html
 /reference/rig-runtime.html
 /reference/sdk3-lint-rules.html
+/reference/testing.html
+/reference/unity-asset.html
+/reference/unity-yaml-edit.html
+/reference/unitypackage.html
 /search-index.json

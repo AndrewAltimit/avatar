@@ -455,6 +455,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "avatar-web-analyzer"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "avatar-armature",
+ "avatar-fbx",
+ "avatar-stats",
+ "avatar-testkit",
+ "serde",
+ "serde_json",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "base64"
 version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

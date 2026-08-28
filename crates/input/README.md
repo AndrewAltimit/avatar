@@ -56,4 +56,6 @@ assert_eq!(targets.head, Vec3::new(0.0, 1.6, 0.0));
 
 ## Status
 
-Implements §9 #3 of the VR PRD. Behaviour: [`docs/reference/rig-runtime.md`](../../docs/reference/rig-runtime.md).
+Implements the tracker-input piece of the VR-spectator runtime-rig band
+([`PLAN.md`](../../PLAN.md) §9, "Runtime rig layer"). Behaviour:
+[`docs/reference/rig-runtime.md`](../../docs/reference/rig-runtime.md).

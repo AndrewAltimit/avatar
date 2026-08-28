@@ -1,0 +1,152 @@
+<header class="page-header">
+  <div class="breadcrumb"><a href="../index.html">home</a> &middot; <a href="index.html">reference</a> &middot; sdk2 &rarr; sdk3 migration</div>
+  <h1>SDK2 &rarr; SDK3 migration</h1>
+  <p class="lede">
+    <code>avatar migrate sdk3</code> takes an extracted SDK2 avatar project (as
+    <a href="unitypackage.html"><code>avatar unitypackage extract</code></a> produces) and turns it into an
+    SDK3 / Avatars 3.0 project the VRChat Creator Companion can open, the avatar prefab rewritten in place.
+    It exists because last-generation avatars &mdash; Cloth skirts, DynamicBones, gesture override
+    controllers, root motion &mdash; cannot be uploaded with today's SDK, and the manual conversion is a
+    long, error-prone Unity session. Everything except the final Unity/VCC open + SDK upload is done here.
+    Full text: <code>docs/reference/migrate.md</code>.
+  </p>
+</header>
+
+<section class="doc-section" id="command">
+  <h2>The command</h2>
+  <div class="cli"><code>avatar migrate sdk3 &lt;extracted-project&gt; -o &lt;out-dir&gt; --name MyAvatar \
+  --strip BhapticsVRC_Vest --drop-cloth --capsules-to-physbone-colliders \
+  --physbone "Hips|Spine,Left leg,Right leg|L cap,R cap|SkirtRoot" \
+  --eyes "Eye_L,Eye_R" --exclude Assets/Bhaptics \
+  --vpm-package com.poiyomi.toon-9.3.64.zip --relink-locked-shaders [--dry-run] [--json]</code></div>
+</section>
+
+<section class="doc-section" id="what-is-migrated">
+  <h2>What is migrated</h2>
+  <table>
+    <thead><tr><th>SDK2</th><th>SDK3</th><th>How</th></tr></thead>
+    <tbody>
+      <tr><td><code>VRC_AvatarDescriptor</code></td><td><code>VRCAvatarDescriptor</code></td><td>Retyped <strong>at the same fileID</strong> so its slot in the root's <code>m_Component</code> list is untouched. View position, viseme setup, portrait offsets carried; playable layers on SDK defaults except FX (generated); expressions menu/parameters (generated); eye look derived (below).</td></tr>
+      <tr><td><code>PipelineManager</code></td><td><code>PipelineManager</code> (Standalone DLL)</td><td>Retyped in place; <code>blueprintId</code> cleared (an SDK3 upload is a new avatar). Added if missing.</td></tr>
+      <tr><td>root <code>Animator</code></td><td>same</td><td><code>m_ApplyRootMotion: 0</code>, controller cleared &mdash; SDK3's playable layers drive it; root motion left on is the classic "avatar drifts / spins" bug.</td></tr>
+      <tr><td><code>DynamicBone</code> / <code>DynamicBoneCollider</code></td><td><code>VRCPhysBone</code> / <code>VRCPhysBoneCollider</code></td><td>Retyped in place with the SDK's own conversion rules (next section). Because fileIDs are kept, converted PhysBones' <code>colliders</code> lists resolve without rewriting.</td></tr>
+      <tr><td>Unity <code>Cloth</code> (<code>--drop-cloth</code>)</td><td>&mdash;</td><td>Removed; the mesh falls back to its skinning. Pair with <code>--physbone</code> to simulate the skirt's bones instead.</td></tr>
+      <tr><td>Unity <code>CapsuleCollider</code> (<code>--capsules-to-physbone-colliders</code>)</td><td><code>VRCPhysBoneCollider</code></td><td>Retyped in place (class 136 &rarr; 114).</td></tr>
+      <tr><td>&mdash; (<code>--physbone ROOT|IGNORE&hellip;|COLLIDERS&hellip;|GROUP</code>)</td><td>new <code>VRCPhysBone</code></td><td>A new PhysBone over <code>ROOT</code>'s bone-only children with skirt-ish defaults; with <code>GROUP</code> the chain roots are re-parented under a new empty child (identity local pose &mdash; nothing moves, skinning references bones by fileID) so colliders under <code>ROOT</code> don't trip VRChat's cyclic-dependency check.</td></tr>
+      <tr><td><code>--strip NAME</code> subtrees</td><td>&mdash;</td><td>The whole subtree (GameObjects, Transforms, components) removed and the parent's <code>m_Children</code> entry dropped &mdash; a haptics vest with cameras and its own Animator, say.</td></tr>
+      <tr><td><code>CustomStandingAnims</code> gesture slots</td><td>FX layer</td><td>See <em>FX from gesture overrides</em>, below.</td></tr>
+      <tr><td>Locomotion / emote / sitting overrides</td><td>&mdash;</td><td><strong>Reported, not migrated</strong> &mdash; SDK3's Base/Action/Sitting layers are a different design, and an SDK2 idle/walk clip dropped into them is the source of the drift bugs the migration exists to remove.</td></tr>
+    </tbody>
+  </table>
+  <p>
+    Anything else in the prefab (renderers, meshes, materials, non-VRChat scripts, transforms) is untouched
+    &mdash; byte for byte &mdash; because the rewrite is span-splicing over the raw text
+    (<a href="unity-yaml-edit.html">editing Unity YAML</a>). The FBX and its <code>.meta</code> (humanoid
+    map, T-pose) are copied unchanged.
+  </p>
+</section>
+
+<section class="doc-section" id="dynamicbone-conversion">
+  <h2>DynamicBone &rarr; PhysBone: the SDK's own rules</h2>
+  <p>
+    <code>PhysBoneSpec::from_dynamic_bone</code> reproduces
+    <code>VRC.SDK3.Dynamics.PhysBone.PhysBoneMigration.Convert</code> (SDK 3.10.4, disassembled) &mdash;
+    the conversion the SDK's own "Auto Fix" runs on import: <code>pull</code> from elasticity,
+    <code>spring</code> = 1 &minus; damping, <code>immobile</code> from inert, radius and gravity scaled by
+    the transforms' world scale, and stiffness mapped through the SDK's <code>StiffToMaxAngle</code> table
+    to an Angle limit (a frozen axis becomes a Hinge). Colliders convert capsule-or-sphere by their
+    dimensions with the direction axis re-expressed as a rotation. Distribution curves are not carried
+    (rare on avatars); <code>m_EndLength</code> is reported.
+  </p>
+  <div class="hint">
+    SDK3 script references are DLL class hashes, not <code>11500000</code>:
+    <code>m_Script</code> is <code>{fileID: &lt;MD4 class hash&gt;, guid: &lt;dll guid&gt;, type: 3}</code>,
+    derived by <code>avatar_unity_yaml::script_file_id</code> and test-pinned against the SDK's own
+    serialized assets. Field layouts come from the same packages, so a body is what Unity would write itself.
+  </div>
+</section>
+
+<section class="doc-section" id="fx-gestures">
+  <h2>FX from gesture overrides</h2>
+  <p>
+    SDK2's <code>CustomStandingAnims</code> override controller becomes a generated
+    <code>FX.controller</code> with <strong>one either-hand layer</strong>. For each gesture, only the
+    override clip's <strong>blendshape curves</strong> are lifted into a clean
+    <code>Gesture_&lt;Name&gt;.anim</code> (SDK2 clips also carried finger-muscle curves; in SDK3 hand
+    poses are the Gesture layer's job, and muscle curves in FX would fight it), plus a
+    <code>Gesture_Neutral.anim</code> zeroing every touched shape.
+  </p>
+  <p>
+    By default the layer is <strong>analog</strong>: each gesture gets a per-hand state whose motion is a
+    1D blend tree on that hand's <code>GestureLeftWeight</code>/<code>GestureRightWeight</code>, blending
+    Neutral &rarr; the gesture clip &mdash; SDK2's Vive "advanced controls", where trigger depth is
+    expression depth. Transitions are mutually exclusive and weight-gated (the squeezing hand owns the
+    face; a thumb resting at weight 0 can never mask the other hand), and both hands on the same gesture
+    route to a capped-sum 2D state with generated half-strength midpoint clips.
+    <code>--no-analog-gestures</code> emits discrete states instead. Empty
+    <code>Parameters.asset</code>/<code>Menu.asset</code> are generated alongside so toggles can be added
+    later (<code>avatar toggle</code>, <a href="anim-gen.html">anim-gen</a>).
+  </p>
+</section>
+
+<section class="doc-section" id="eye-look">
+  <h2>Eye look and blink</h2>
+  <p>
+    SDK3 eye look stores the local rotation of each eye bone per look state. It is derived geometrically
+    &mdash; <code>local_state = (R_parent&#8315;&sup1; &middot; R_delta &middot; R_parent) &middot; local_rest</code>,
+    with the turn taken about the <em>avatar-space</em> axes &mdash; so it is right even when the eye
+    bones' own axes are wildly rolled (ripped/MMD rigs). Default angles 10&deg; up/down, 12&deg;
+    left/right (<code>--eye-angles</code>). The blink blendshape is found on the viseme mesh's FBX by name
+    (<code>Blink</code>, <code>vrc.blink</code>, <code>&#12414;&#12400;&#12383;&#12365;</code>, &hellip; or
+    <code>--blink NAME</code>) and its import-order index written into <code>eyelidsBlendshapes</code>.
+  </p>
+</section>
+
+<section class="doc-section" id="packages-shaders">
+  <h2>Bundled packages and locked-shader relink</h2>
+  <p>
+    <code>--vpm-package PATH</code> (repeatable) bundles a VPM package &mdash; a directory with
+    <code>package.json</code>, or a <code>.zip</code> of one, e.g. a shader package's GitHub release &mdash;
+    into <code>&lt;out&gt;/Packages/&lt;name&gt;/</code> and records it in <code>vpm-manifest.json</code>;
+    its <code>legacyFolders</code> and any source asset whose GUID the package already provides are
+    excluded from the copy, so the project opens without duplicate-GUID reassignments.
+  </p>
+  <p>
+    <code>--relink-locked-shaders</code> handles what shader lockers (Poiyomi/Thry's optimizer) leave
+    behind at export: each material points at a generated <code>Hidden/&hellip;</code> shader copy whose
+    <code>#include</code>s were never exported, remembering the real one in
+    <code>stringTagMap.OriginalShader</code>. The relink finds a matching shader among the source assets
+    and bundled packages, re-points <code>m_Shader</code>, disables the locker flag, and excludes the
+    generated copy. Materials whose original shader can't be found are reported and left alone.
+  </p>
+</section>
+
+<section class="doc-section" id="output">
+  <h2>Output layout</h2>
+  <pre><code>&lt;out&gt;/Assets/&lt;copied source assets, minus --exclude and the SDK2 VRCSDK/, VRChat Examples/&gt;
+&lt;out&gt;/Assets/&lt;Name&gt;_SDK3/&lt;Name&gt;.prefab (+ .meta)         # the migrated prefab
+&lt;out&gt;/Assets/&lt;Name&gt;_SDK3/FX/FX.controller, Gesture_*.anim (+ .meta)
+&lt;out&gt;/Assets/&lt;Name&gt;_SDK3/Parameters.asset, Menu.asset (+ .meta)
+&lt;out&gt;/Packages/&lt;bundled package&gt;/&hellip;                        # each --vpm-package
+&lt;out&gt;/Packages/vpm-manifest.json                          # com.vrchat.avatars/base + bundled
+&lt;out&gt;/Packages/manifest.json                              # VCC-template Unity packages
+&lt;out&gt;/ProjectSettings/ProjectVersion.txt</code></pre>
+  <p>
+    The output must not already contain <code>Assets/</code> (refuse-before-write); <code>--dry-run</code>
+    plans and reports without touching the filesystem, <code>--json</code> makes the report
+    machine-readable. Generated GUIDs/fileIDs are deterministic (seeded from names). Then: open
+    <code>&lt;out&gt;</code> in the Creator Companion (<em>Add Existing Project</em>), drag the prefab into
+    a scene, check the descriptor, <em>Build &amp; Publish</em> &mdash; and retune PhysBones offline with
+    <a href="physbone.html"><code>avatar physbone</code></a>.
+  </p>
+</section>
+
+<section class="doc-section" id="limits">
+  <h2>Limits</h2>
+  <ul>
+    <li>Locomotion/emote/sitting overrides are not migrated (by design); rebuild them on SDK3 layers if wanted.</li>
+    <li>DynamicBone distribution curves and <code>m_EndLength</code> are not carried; endpoint set from <code>m_EndOffset</code> only.</li>
+    <li>Prefabs only (one root Transform); nested prefab instances (<code>stripped</code> documents) are not resolved.</li>
+    <li>The Unity import itself is not verified here (no editor in this toolchain); <a href="sdk3-lint-rules.html"><code>avatar lint</code></a> / <a href="performance-stats.html"><code>avatar stats</code></a> on the output are the offline checks.</li>
+  </ul>
+</section>

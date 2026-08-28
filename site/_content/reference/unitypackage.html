@@ -1,0 +1,114 @@
+<header class="page-header">
+  <div class="breadcrumb"><a href="../index.html">home</a> &middot; <a href="index.html">reference</a> &middot; .unitypackage</div>
+  <h1>The .unitypackage format</h1>
+  <p class="lede">
+    <code>avatar-unitypackage</code> (CLI <code>avatar unitypackage</code>) reads Unity's
+    <code>.unitypackage</code> distribution format &mdash; the file an avatar or world is usually shipped
+    as &mdash; and bridges it to the rest of the toolchain, plus a file-level "test an avatar inside a world"
+    cross-check. Full text: <code>docs/reference/unitypackage.md</code>.
+  </p>
+</header>
+
+<section class="doc-section" id="format">
+  <h2>The format: gzip + tar, GUID directories</h2>
+  <p>
+    A <code>.unitypackage</code> is a <strong>gzip-compressed tar</strong>. There is no manifest; every asset
+    is a top-level directory named by its Unity <strong>GUID</strong> (32 hex chars), containing:
+  </p>
+  <table>
+    <thead><tr><th>Member</th><th>Contents</th></tr></thead>
+    <tbody>
+      <tr><td><code>pathname</code></td><td>The project-relative path the asset had on export, e.g. <code>Assets/Avatar/final.fbx</code>. First non-empty line is the path; Unity occasionally appends trailing lines, which are ignored.</td></tr>
+      <tr><td><code>asset</code></td><td>The raw asset bytes. <strong>Absent</strong> for folder entries (a directory has a <code>pathname</code> and a <code>.meta</code> but no <code>asset</code>).</td></tr>
+      <tr><td><code>asset.meta</code></td><td>The Unity <code>.meta</code> sidecar (YAML) &mdash; same <code>guid</code>, plus import settings.</td></tr>
+      <tr><td><code>preview.png</code></td><td>Optional thumbnail. Ignored.</td></tr>
+    </tbody>
+  </table>
+  <p>
+    The reader loads the whole archive into memory and indexes it by GUID &mdash; built for one-shot CLI runs,
+    not streaming. A large world export can be ~1&nbsp;GB uncompressed; the <code>testbed</code> cross-check
+    of a ~90&nbsp;MB avatar against a ~700&nbsp;MB world peaks around 1.1&nbsp;GB RSS.
+  </p>
+</section>
+
+<section class="doc-section" id="info">
+  <h2>Summarizing &mdash; <code>avatar unitypackage info</code></h2>
+  <p>
+    <code>UnityPackage::summary()</code> reports entry/file/folder counts, total asset bytes, a size breakdown
+    by extension, and heuristic <code>PackageTraits</code>:
+  </p>
+  <ul>
+    <li><strong><code>vrc_sdk</code></strong> &mdash; <code>Sdk2</code>, <code>Sdk3Avatars</code>,
+      <code>Sdk3Worlds</code>, <code>Unknown</code>, or none. Determined from the runtime plugin DLLs
+      (<code>VRCSDK2.dll</code> vs <code>VRCSDK3*.dll</code>) and VPM package paths
+      (<code>com.vrchat.avatars</code> / <code>com.vrchat.worlds</code>) &mdash; <em>not</em> from
+      <code>VRCSDK/version.txt</code>, which is date-based and whose 2021-era bundle shipped SDK2 and SDK3
+      editor scripts in one folder, making the source tree alone ambiguous.</li>
+    <li><strong><code>looks_like_avatar</code></strong> &mdash; a VRChat avatar prefab
+      (<code>prefab-id-v1_avtr_*.prefab</code>) is present.</li>
+    <li><strong><code>looks_like_world</code></strong> &mdash; scenes present and no avatar prefab.</li>
+  </ul>
+</section>
+
+<section class="doc-section" id="extract">
+  <h2>Extracting &mdash; <code>avatar unitypackage extract</code></h2>
+  <p>
+    <code>extract</code> reconstructs a normal Unity project tree: each asset at
+    <code>&lt;dest&gt;/&lt;pathname&gt;</code> with its <code>.meta</code> beside it. Because the lint/stats
+    and FBX/armature tools only need files on disk plus the <code>.meta</code> GUID index, an extracted
+    package is immediately consumable:
+  </p>
+  <div class="cli"><code>avatar unitypackage extract avatar.unitypackage -o /tmp/proj
+avatar lint  /tmp/proj
+avatar stats /tmp/proj/Assets/Avatar/.../final.fbx
+avatar armature check /tmp/proj/Assets/Avatar/.../final.fbx</code></div>
+  <div class="notice warn"><div class="notice-title">Non-project paths are refused</div>
+    Legitimate assets are always project-relative (<code>Assets/</code>, <code>Packages/</code>,
+    <code>ProjectSettings/</code>, &hellip;), but old SDK exports sometimes leak absolute paths to bundled
+    editor DLLs. The extractor rejects absolute POSIX paths, Windows drive letters (<code>C:/&hellip;</code>
+    &mdash; important on non-Windows hosts, where the std path parser treats <code>C:</code> as an ordinary
+    segment), UNC roots, and <code>..</code> traversal; these are counted in
+    <code>ExtractReport::skipped_unsafe</code> and not written.
+  </div>
+</section>
+
+<section class="doc-section" id="testbed">
+  <h2>The avatar-in-world testbed</h2>
+  <div class="cli"><code>avatar unitypackage testbed avatar.unitypackage world.unitypackage</code></div>
+  <p>
+    Testing an avatar "in a map" offline is, at the file level, the question: <em>if I import both packages
+    into one Unity project, what breaks?</em> <code>UnityPackage::overlap</code> answers it:
+  </p>
+  <ul>
+    <li><strong>GUID collisions</strong> &mdash; the same GUID in both packages. Flagged
+      <code>identical</code> when the asset bytes match (a harmless duplicate); otherwise Unity keeps
+      whichever was imported last, <strong>silently changing</strong> one package's asset &mdash; e.g. two
+      shader or SDK versions fighting.</li>
+    <li><strong>Path collisions</strong> &mdash; different GUIDs claiming the same <code>Assets/...</code>
+      path. The second import overwrites the first file on disk while keeping a different GUID, so references
+      can dangle.</li>
+  </ul>
+  <p>
+    <code>--strict</code> exits non-zero when any different-bytes GUID collision or path collision exists, for
+    gating; <code>--json</code> emits both package summaries and the full overlap. A clean result means the
+    avatar can be dropped into the world's project to preview scale, lighting, and placement without
+    clobbering the world's assets.
+  </p>
+  <div class="hint">
+    Cross-checking two <em>platform variants</em> of one world (a PC vs Quest export) is expected to show
+    large overlap with many content-conflicting GUIDs &mdash; platform-recompressed textures/materials and
+    serialized Udon programs.
+  </div>
+</section>
+
+<section class="doc-section" id="notes">
+  <h2>Notes</h2>
+  <p>
+    SDK2 avatars surface their age through the rest of the toolchain naturally: <code>avatar lint</code>
+    reports <code>VRC001</code> (no <code>com.vrchat.avatars</code> package) and finds no SDK3 descriptor,
+    and <code>avatar stats</code> on the project finds no avatar because the prefab carries the SDK2
+    <code>VRC_AvatarDescriptor</code>. Run <code>avatar stats &lt;fbx&gt;</code> directly for the geometry
+    rank regardless &mdash; or take the SDK2 package through
+    <a href="migrate.html"><code>avatar migrate sdk3</code></a>.
+  </p>
+</section>

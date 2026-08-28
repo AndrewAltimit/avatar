@@ -104,4 +104,6 @@ if let Some(controller) = AnimatorController::from_file(&file) {
 Built (**M2**, AnimationClip added post-M5). AnimatorController + AnimationClip reading; other
 typed asset graphs (descriptor, menus, parameters) are read elsewhere — see
 [`avatar-vrc-descriptor`](../../crates/vrc-descriptor/README.md) and the
-[lint rules](sdk3-lint-rules.md). Material / scene typing is still to come (`PLAN.md` M4).
+[lint rules](sdk3-lint-rules.md). Material / scene typing in *this* crate remains open — the
+material → texture chain the performance stats need is implemented untyped in `avatar-stats`
+(`crates/stats/src/project.rs`).

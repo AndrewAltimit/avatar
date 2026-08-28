@@ -2,31 +2,46 @@
 
 Reference for the bone mapping `avatar-armature` infers and validates. Sourced from the
 [VRChat Rig Requirements](https://creators.vrchat.com/avatars/rig-requirements/) and Unity's
-`HumanBodyBones`.
+`HumanBodyBones`; the table of record is `crates/armature/src/humanoid.rs` (`HumanBone::ALL`,
+25 slots, each with a `Requirement`).
 
-## Required by VRChat (humanoid)
+## Required (Unity humanoid)
 
-VRChat requires these to be mapped for a humanoid avatar:
+Fifteen bones are **Required** — Unity will not import the rig as humanoid without them, and a
+missing one makes `avatar armature check` exit non-zero:
 
-- **Spine chain**: Hips, Spine, Chest, Neck — and **Shoulders** — must all be present/mapped.
-- **Head**: Head.
-- **Hands**: LeftHand, RightHand (plus the lower/upper arm chain feeding them).
-- **Feet**: LeftFoot, RightFoot (plus the leg chain).
+- **Hips, Spine, Head**.
+- **Arm chain**: LeftUpperArm, LeftLowerArm, LeftHand (and the right side).
+- **Leg chain**: LeftUpperLeg, LeftLowerLeg, LeftFoot (and the right side).
 
-Fingers, eyes, jaw, toes, and the upper-chest are **optional** but enable extra features (hand
-tracking detail, simulated eye look, visemes/jaw).
+## Recommended
 
-## Notes that drive validation rules
+**Chest, Neck, and the Shoulders** are **Recommended**, not required: VRChat's guidance is to map
+them for a well-behaved spine and arm rig, but a rig without them still imports as humanoid.
+`armature check` reports them as missing-recommended without failing.
+
+## Optional
+
+UpperChest, toes, eyes, and jaw are **Optional** but enable extra features (simulated eye look,
+visemes/jaw, toe articulation).
+
+**Fingers have no slots** in the 25-bone table at all: finger bones are recognized by the name
+classifier (`thumb`/`index`/`middle`/… tokens) precisely so they can be *excluded* from body
+mapping — a `LeftHandMiddle1` must never be mistaken for the Hand.
+
+## Structural check, and import guidance
+
+Of the rig expectations, only one drives a validation rule here: a clean **single armature root**
+— `armature check` warns when the skeleton has no bone-bearing root or more than one.
+
+The rest is import guidance (nothing in `armature check` validates it):
 
 - **Eye bones point up.** SDK3 expects eye bones oriented upward, not outward.
 - **T-pose** is expected at import for correct muscle/retarget setup.
-- A clean single skeleton root (no stray extra roots) is expected.
 
 ## Common naming conventions we infer from
 
 Bone-name → Humanoid mapping must tolerate many rig exporters. Examples to map to `Hips`:
 `Hips`, `hip`, `pelvis`, `mixamorig:Hips`, `Bip01_Pelvis`, `J_Bip_C_Hips` (VRoid), etc. The
-inference table lives in `avatar-armature` and is data-driven so it can grow.
-
-> TODO: expand into the full `HumanBodyBones` enum table with per-bone synonym lists and
-> required/optional flags as the inference table in `avatar-armature` matures.
+inference table lives in `avatar-armature` (`humanoid.rs`) and is data-driven — per-bone synonym
+tokens plus the requirement classification above — so it can grow.

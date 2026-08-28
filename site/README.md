@@ -12,7 +12,15 @@ overlay) is injected at runtime by `js/layout.js`. There is no build toolchain b
 
 ```sh
 python3 site/_gen.py        # regenerate the HTML pages + search-index.json
-# then open site/index.html in a browser (file:// works)
+# then open site/index.html in a browser (file:// works for the doc pages)
+```
+
+The **FBX analyzer** page additionally needs the wasm bundle (and, because module/wasm
+loading is blocked under `file://`, an http server):
+
+```sh
+wasm-pack build crates/web-analyzer --target web --release --out-dir ../../site/wasm
+python3 -m http.server -d site   # then open http://localhost:8000/analyzer.html
 ```
 
 ## Layout
@@ -23,6 +31,8 @@ python3 site/_gen.py        # regenerate the HTML pages + search-index.json
 | `_content/*.html` | Per-page `<main>` body fragments (the only thing you edit). |
 | `js/layout.js` | The single source of truth for nav order; injects the chrome. |
 | `js/main.js` | Scroll-spy, copy buttons, the search overlay. |
+| `js/analyzer.js` | The Analyzer page: drag-and-drop FBX → the wasm report, rendered. |
+| `wasm/` | **Generated** — the `crates/web-analyzer` bundle wasm-pack builds (never committed; wasm-pack writes its own `.gitignore`). |
 | `css/styles.css` | The stylesheet (three-column wiki layout). |
 | `img/favicon.svg` | Favicon. |
 | `.gitignore` | **Generated** manifest of build outputs — they are not committed. |
@@ -34,8 +44,10 @@ duplicate `_content/`.
 ## How it's published
 
 The `deploy-pages` job in `.github/workflows/main-ci.yml` runs on a **self-hosted** runner: on a
-push to `main` it runs `python3 site/_gen.py`, then `actions/upload-pages-artifact` +
-`actions/deploy-pages`. Nothing here needs Rust or a WASM toolchain.
+push to `main` it builds the analyzer wasm bundle (`wasm-pack build crates/web-analyzer`), runs
+`python3 site/_gen.py`, then `actions/upload-pages-artifact` + `actions/deploy-pages`. The main
+`ci` job carries a cheap `wasm32-unknown-unknown` build check so wasm regressions fail before the
+deploy job.
 
 ## Adding a page
 

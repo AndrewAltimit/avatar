@@ -6,7 +6,8 @@ Typed Unity asset graphs over [`avatar-unity-yaml`](../unity-yaml/README.md). Pa
 ## What it does
 
 Currently covers the **AnimatorController** (`.controller`) — the structure VRChat avatars drive
-through their playable layers (FX, Gesture, Action, …). A `.controller` is a multi-document Unity
+through their playable layers (FX, Gesture, Action, …) — and the **AnimationClip** (`.anim`) those
+controllers play (`AnimationClip::from_file`). A `.controller` is a multi-document Unity
 YAML stream: one `AnimatorController` (class 91) plus the state machines (1107), states (1102),
 transitions (1101/1109), and blend trees (206) it owns, linked by local `fileID`s.
 
@@ -29,9 +30,10 @@ Unity serialization, not VRChat specifics.
 
 Built: **AnimatorController (M2)** + **AnimationClip** (curve bindings: float/transform/PPtr
 counts, muscle detection, per-state `MotionRef`s on the controller side). Material / scene typing
-is still planned (**M4**).
+in this crate is still open.
 
 ## See also
 
-- [`docs/reference/sdk3-lint-rules.md`](../../docs/reference/sdk3-lint-rules.md) — the `VRC04x`
-  animator-controller rules this crate feeds.
+- [`docs/reference/sdk3-lint-rules.md`](../../docs/reference/sdk3-lint-rules.md) — the
+  `VRC040`–`VRC049` controller/clip rules this crate feeds, plus `VRC062` (blendshape drift),
+  which also consumes it.

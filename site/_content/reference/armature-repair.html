@@ -2,9 +2,10 @@
   <div class="breadcrumb"><a href="../index.html">home</a> &middot; <a href="index.html">reference</a> &middot; armature repair</div>
   <h1>Armature repair &amp; the FBX writer</h1>
   <p class="lede">
-    What <code>avatar armature fix</code> repairs, what it only flags, and how the native binary FBX
-    write-back works. The repair is deliberately conservative: it applies the changes that are safe as
-    metadata edits and refuses the ones that would silently move geometry. Full text:
+    What <code>avatar armature fix</code> repairs, what it only flags, the headless-Blender script route that
+    applies the whole plan, and the mesh-side tooling (<code>avatar fbx reslot</code> / <code>blendshapes</code>)
+    built on the same native FBX writer. The repair is deliberately conservative: it applies the changes that
+    are safe as metadata edits and refuses the ones that would silently move geometry. Full text:
     <code>docs/reference/armature-repair.md</code>.
   </p>
 </header>
@@ -30,18 +31,68 @@
   </p>
 </section>
 
+<section class="doc-section" id="blender-script">
+  <h2>The Blender-script route (<code>--blender-script</code>)</h2>
+  <p>
+    The flagged repairs aren't a dead end: <code>avatar armature fix model.fbx --blender-script fix.py</code>
+    emits a <strong>headless Blender Python script</strong> that applies the <em>whole</em> plan &mdash;
+    renames, geometry-aware reparents, and scale/orientation baking &mdash; in one pass, run with
+    <code>blender --background --python fix.py</code>. Blender can apply what the FBX writer only flags:
+    edit-bones store absolute rest transforms (so reparenting preserves the world rest pose by construction),
+    and the importer's meter/Z-up normalization is baked with <code>transform_apply</code>, exported with
+    Unity-friendly settings. The script is deterministic text, self-contained on the original FBX, and never
+    executed by the tool itself; <code>--blender-output</code> sets its export path.
+  </p>
+</section>
+
 <section class="doc-section" id="writer">
   <h2>The FBX writer</h2>
   <p>
-    <code>avatar-fbx</code>'s <code>FbxDocument</code> retains <code>fbxcel</code> 0.9's mutable tree (enable
-    the <code>writer</code> feature) and serializes via <code>Writer::write_tree</code> /
-    <code>finalize</code>. It edits objects by FBX <strong>object id</strong> &mdash; skin/anim refs are by id,
-    not name &mdash; so renames are safe. One caveat: <code>fbxcel</code>'s <code>write_tree</code> re-emits
-    arrays uncompressed, so a written FBX is larger than the original but semantically identical.
+    <code>avatar-fbx</code>'s <code>FbxDocument</code> retains <code>fbxcel</code>'s mutable tree and
+    serializes via <code>Writer::write_tree</code> / <code>finalize</code>. It edits objects by FBX
+    <strong>object id</strong> &mdash; skin/anim refs are by id, not name &mdash; so renames are safe. One
+    known characteristic: <code>write_tree</code> re-emits arrays uncompressed, so a written FBX is larger
+    than the original but re-loads identically here.
   </p>
-  <div class="hint">
-    The optional Unity acceptance CI job (<code>unity-acceptance.yml</code>) closes the loop: it imports a
-    repaired FBX in a real Unity editor (inside a GameCI Docker image) and asserts it configures as Humanoid.
-    It self-skips until a Unity license secret is configured.
+  <div class="notice warn"><div class="notice-title">Open problem: rewritten skinned avatars import invisible in Unity 2022.3</div>
+    A full-avatar FBX (3 skinned meshes, 148 bones, blendshapes) rewritten by this writer re-loads fine in
+    these tools &mdash; same objects, geometry, skin, blendshapes &mdash; but imported <strong>invisible</strong>
+    in Unity 2022.3. Not yet diagnosed. Until it is, treat any written FBX destined for Unity as
+    <strong>unverified</strong>: keep the original, and prefer the texture-side route (<code>--uv-mask</code>)
+    or a Blender re-export for mesh edits.
   </div>
+  <div class="hint">
+    The optional Unity acceptance CI job (<code>unity-acceptance.yml</code>) closes the loop for the
+    armature path: it emits a broken Mixamo-named rig, repairs it with <code>armature fix</code>, imports the
+    result in a real Unity editor (GameCI Docker), and asserts it configures as a valid Humanoid with no
+    manual bone assignment. It self-skips until a Unity license secret is configured.
+  </div>
+</section>
+
+<section class="doc-section" id="reslot">
+  <h2>Beyond the armature: material-slot tooling</h2>
+  <p>
+    <code>avatar fbx reslot</code> is the one <em>mesh</em> edit that keeps coming up on converted avatars: a
+    region of polygons on the wrong material (an MMD-conversion hair strand glowing under the wrong emission
+    map). It selects triangles by combinable criteria &mdash; current slot, distance from a bone's bind
+    position, height band, skin-weight exclusions, brightness sampled from a texture ("the ones lit by this
+    emission map") &mdash; and rewrites their <code>LayerElementMaterial</code> entries to another slot.
+    Nothing else in the file is touched; preview with <code>avatar render --material-texture</code>.
+  </p>
+  <p>
+    <strong><code>--uv-mask MASK.png</code></strong> is the texture-side route when the FBX can't be rewritten
+    (see the open problem above): it rasterizes the selected triangles' UV footprint and reports every
+    unselected same-slot triangle overlapping it &mdash; exactly what a texture edit under the mask would also
+    hit. Paint the map under the mask instead of moving polygons.
+  </p>
+  <p>
+    <strong><code>avatar fbx blendshapes</code></strong> is the read-only companion for emote shading bugs: it
+    lists every blendshape channel with the material slots its target vertices render with, and
+    <code>--uv-mask</code> writes per-channel/slot PNGs of the touched UV footprint &mdash; a shape that slides
+    hidden overlay geometry into view (an MMD cheek-blush) renders with whatever material that slot carries,
+    and this names the material to fix.
+  </p>
+  <div class="cli"><code>avatar armature fix model.fbx --blender-script fix.py
+avatar fbx reslot model.fbx --mesh Hair --to-slot 10 --brighter-than Hair_Emission.png:0.2 -o out.fbx
+avatar fbx blendshapes model.fbx --filter Blush --uv-mask masks/</code></div>
 </section>

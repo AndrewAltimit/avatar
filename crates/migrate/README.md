@@ -49,7 +49,8 @@ project around it that the VRChat Creator Companion can open:
 - `physbone`: post-migration tuning on any SDK3 prefab — `list`/`info`/`find` (`PhysBoneInfo`:
   root, chains, colliders, tuning), `set(&mut rw, id, &Tuning, ignore±, colliders±)`,
   `split(&mut rw, id, chains, &Tuning)`, `stretch(&mut rw, id, factor, from_depth)`,
-  `flare(&mut rw, id, FlareTarget, hinge_depth)` — wired to
+  `flare(&mut rw, id, FlareTarget, hinge_depth)`,
+  `nudge(&mut rw, id, out, up, hinge_depth, only)` — wired to
   `avatar physbone list|set|split|stretch|flare|nudge` ([`docs/reference/physbone.md`](../../docs/reference/physbone.md)).
 - `sdk2::Sdk2Avatar::read(&Scene)` — structural recognition of the SDK2 descriptor, PipelineManager,
   DynamicBone(+Collider), Cloth, CapsuleCollider, root Animator.

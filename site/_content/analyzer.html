@@ -1,0 +1,51 @@
+<!--HEAD: <script type="module" src="js/analyzer.js"></script> -->
+<header class="page-header">
+  <div class="breadcrumb"><a href="index.html">home</a> &middot; analyzer</div>
+  <h1>FBX analyzer</h1>
+  <p class="lede">
+    Drop an avatar <code>.fbx</code> and get the same diagnosis the CLI gives &mdash; humanoid rig
+    check, VRChat performance rank, blendshape inventory &mdash; right here in the browser. The
+    analysis is the actual Rust diagnose graph (<code>avatar-fbx</code> + <code>avatar-armature</code> +
+    <code>avatar-stats</code>) compiled to WebAssembly, so it matches <code>avatar describe</code>
+    output bit for bit.
+  </p>
+</header>
+
+<div class="hint">
+  <strong>Your file never leaves this page.</strong> There is no upload: the file is read into
+  memory, analyzed by WebAssembly locally, and forgotten on reload. Nothing is sent to any server
+  &mdash; this site is static hosting.
+</div>
+
+<section class="doc-section" id="drop">
+  <h2>Analyze a file</h2>
+  <div class="an-drop" id="an-drop" tabindex="0" role="button" aria-label="Choose or drop an FBX file">
+    <div class="an-drop-icon">&#8681;</div>
+    <div class="an-drop-text">Drop a binary <code>.fbx</code> here, or click to choose a file</div>
+    <input type="file" id="an-file" accept=".fbx" hidden>
+  </div>
+  <p class="an-fineprint" id="an-status">Loading analyzer&hellip;</p>
+  <div id="an-results"></div>
+</section>
+
+<section class="doc-section" id="what-it-checks">
+  <h2>What it checks</h2>
+  <ul>
+    <li><strong>Humanoid rig</strong> &mdash; infers the Unity humanoid mapping from the bone
+      hierarchy and validates it against VRChat's rig requirements: required + recommended bones,
+      duplicate mappings, stray skeleton roots. See <a href="reference/humanoid-bones.html">humanoid
+      bones</a> and <a href="reference/armature-repair.html">armature repair</a> for what the CLI can
+      then fix.</li>
+    <li><strong>Performance rank</strong> &mdash; VRChat's Excellent&rarr;Very Poor rank computed
+      offline from the geometry (triangles, meshes, bones, materials), against both the PC and
+      Android limit tables. See <a href="reference/performance-stats.html">performance stats</a>.</li>
+    <li><strong>Blendshapes</strong> &mdash; every blendshape channel and the mesh it deforms; the
+      raw material for visemes and expressions.</li>
+  </ul>
+  <p>
+    Only binary FBX 7.x is supported (the Autodesk / Unity / Blender default export) &mdash; ASCII
+    FBX must be re-exported as binary. Project-level checks (descriptor, animators, menus,
+    <a href="reference/sdk3-lint-rules.html">the SDK3 lint rules</a>) need a full Unity project tree,
+    so those stay on the CLI: <code>avatar lint</code>.
+  </p>
+</section>

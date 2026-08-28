@@ -1,0 +1,105 @@
+<header class="page-header">
+  <div class="breadcrumb"><a href="../index.html">home</a> &middot; <a href="index.html">reference</a> &middot; testing &amp; fixtures</div>
+  <h1>Testing &amp; fixtures</h1>
+  <p class="lede">
+    How the workspace pins behaviour against regressions: a <strong>fixture corpus</strong> (the assets under
+    test) plus the <strong>golden harness</strong> in <code>avatar-testkit</code> (the machinery that
+    snapshots a report and diffs it). Most read paths produce a JSON report agents consume; a golden test
+    pins the whole serialized report, so any change surfaces as a reviewable diff instead of passing
+    silently. Full text: <code>docs/reference/testing.md</code>.
+  </p>
+</header>
+
+<section class="doc-section" id="corpus">
+  <h2>The corpus: three layers</h2>
+  <ol>
+    <li><strong>Committed synthetic Unity projects</strong> &mdash;
+      <code>fixtures/projects/{Sample,Avatar,Dynamics}Project</code>. Hand-authored to exercise specific lint
+      rules and component-stats paths; hermetic, run on any machine. Resolved in tests via
+      <code>avatar_testkit::corpus("projects/SampleProject")</code>.</li>
+    <li><strong>In-code synthetic FBX</strong> &mdash; <code>avatar_testkit::fbx::humanoid_skeleton()</code>
+      builds a deterministic binary FBX in memory via the <code>fbxcel</code> writer (feature
+      <code>fbx</code>). No committed <code>.fbx</code> blob; covers the armature + geometry-stats paths.</li>
+    <li><strong>Env-gated real assets</strong> &mdash; <code>AVATAR_SAMPLE_FBX</code>,
+      <code>AVATAR_SAMPLE_UNITYPACKAGE</code>, <code>AVATAR_SAMPLE_UNITYPACKAGE_WORLD</code>. Tests
+      <strong>self-skip</strong> when the variable is unset, so CI without fixtures stays green; on the
+      self-hosted runner they point at real files, so the real-data paths run every push.</li>
+  </ol>
+  <p>
+    Layers 1&ndash;2 are hermetic and run everywhere (including forks); layer 3 is the ground-truth pass.
+  </p>
+  <div class="notice warn"><div class="notice-title">Never commit user assets</div>
+    User FBX files and Unity projects are never committed (see <code>.gitignore</code>) &mdash; the committed
+    corpus is synthetic, and real assets only ever enter tests through the env-var gate.
+  </div>
+</section>
+
+<section class="doc-section" id="harness">
+  <h2>The harness &mdash; <code>avatar-testkit</code></h2>
+  <p>
+    A <code>publish = false</code> workspace member, added as a dev-dependency by the crates that golden-test:
+  </p>
+  <ul>
+    <li><code>golden::assert_json(path, &amp;value)</code> &mdash; serialize to canonical pretty JSON
+      (2-space indent, trailing newline) and compare against the file at <code>path</code> (relative to the
+      consuming crate). On mismatch it panics with a line-located diff; a missing file tells you to
+      regenerate.</li>
+    <li><code>golden::redact_roots(&amp;mut value)</code> / <code>golden::redact</code> &mdash; scrub
+      machine-specific absolute paths (a report's <code>project_root</code>, <code>source</code>) before
+      snapshotting, replacing the workspace-root prefix with <code>&lt;ROOT&gt;</code> so snapshots are
+      identical on every machine.</li>
+    <li><code>corpus(rel)</code> / <code>workspace_root()</code> &mdash; resolve a corpus path from any
+      crate's tests, at runtime.</li>
+    <li><code>fbx::humanoid_skeleton()</code> &mdash; the in-code synthetic FBX.</li>
+  </ul>
+  <p>
+    Snapshots live beside the consuming test, under <code>crates/&lt;crate&gt;/tests/golden/*.json</code>,
+    and are committed. Lists with no guaranteed order (lint diagnostics, the per-avatar
+    <code>PerfReport</code> vec) are sorted in the test before snapshotting so the golden is stable.
+  </p>
+  <h3>Writing a golden test</h3>
+  <pre><code>use avatar_testkit::{corpus, golden};
+
+#[test]
+fn golden_my_project() {
+    let report = avatar_lint::run(&amp;corpus("projects/SampleProject")).unwrap();
+    let mut value = serde_json::to_value(&amp;report).unwrap();
+    golden::redact_roots(&amp;mut value);
+    golden::assert_json("tests/golden/SampleProject.lint.json", &amp;value);
+}</code></pre>
+</section>
+
+<section class="doc-section" id="update-golden">
+  <h2>Updating snapshots</h2>
+  <p>
+    After an <strong>intentional</strong> change to a report shape or a fixture, regenerate and review the
+    diff before committing &mdash; the diff <em>is</em> the change-review:
+  </p>
+  <div class="cli"><code>UPDATE_GOLDEN=1 cargo test --workspace      # rewrite every snapshot
+git diff -- '**/tests/golden/**'            # review, then commit</code></div>
+  <p>
+    <code>UPDATE_GOLDEN</code> is honored for any non-empty, non-<code>0</code> value. With it unset, a
+    mismatch fails the test &mdash; which is the point.
+  </p>
+</section>
+
+<section class="doc-section" id="coverage">
+  <h2>Current golden coverage</h2>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>Crate</th><th>Snapshot</th><th>Covers</th></tr></thead>
+    <tbody>
+      <tr><td><code>avatar-lint</code></td><td><code>{Sample,Avatar,Dynamics}Project.lint.json</code></td><td>the full <code>LintReport</code> per corpus project</td></tr>
+      <tr><td><code>avatar-stats</code></td><td><code>{Sample,Avatar,Dynamics}Project.project-stats.json</code></td><td>per-avatar <code>PerfReport</code>s (component side)</td></tr>
+      <tr><td><code>avatar-stats</code></td><td><code>humanoid_skeleton.fbx-stats.json</code></td><td>FBX geometry <code>PerfReport</code></td></tr>
+      <tr><td><code>avatar-armature</code></td><td><code>humanoid_skeleton.armature.json</code></td><td>the full <code>ArmatureReport</code> (humanoid mapping)</td></tr>
+      <tr><td><code>avatar-migrate</code></td><td><code>Sdk2Project.migrate.json</code>, <code>Sdk2Project.migrated.prefab.txt</code>, <code>Sdk2Project.FX.controller.txt</code>, <code>Sdk2Project.physbones.json</code>, <code>Sdk2Project.physbones.tuned.json</code></td><td>the full <code>MigrationReport</code>, the rewritten prefab text, the generated FX controller for the synthetic SDK2 fixture, and the <code>avatar physbone list</code> of the migrated prefab before / after a split + set (curves) + stretch pass</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="hint">
+    To extend coverage, drop a fixture into the corpus (or add an <code>avatar-testkit::fbx</code> builder)
+    and add a golden test that runs the analysis over it. See also <code>fixtures/README.md</code> and
+    <code>CONTRIBUTING.md</code>.
+  </div>
+</section>

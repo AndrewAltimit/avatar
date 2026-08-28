@@ -21,24 +21,99 @@
   <h2>Components (from a project)</h2>
   <p>
     <code>analyze_project</code> measures per-avatar components: PhysBones, colliders, contacts, particles,
-    lights, renderers, constraints. VRChat dynamics are recognized <strong>structurally</strong>; the rest by
-    Unity class id. A project path additionally resolves:
+    lights, renderers, constraints. Most are matched by <strong>stable Unity class id</strong>; the VRChat
+    dynamics and constraint components are MonoBehaviours whose script GUID changes across SDK versions, so
+    they're recognized <strong>structurally</strong> by their distinctive serialized fields
+    (<code>collisionTags</code> &rArr; Contact, <code>bonesAsSpheres</code>/<code>insideBounds</code> &rArr;
+    PhysBone collider, <code>endpointPosition</code>/<code>multiChildType</code> &rArr; PhysBone, a
+    <code>Sources</code> list with a <code>TargetTransform</code> &rArr; VRChat constraint). A project path
+    additionally resolves:
   </p>
   <ul>
     <li><strong>Triangles</strong> &mdash; renderer <code>m_Mesh</code> guid &rarr; source FBX via the <code>.meta</code> index (distinct files summed once; unresolved meshes flagged).</li>
     <li><strong>Bones</strong> &mdash; distinct <code>m_Bones</code> transforms.</li>
     <li><strong>Texture memory for PC <em>and</em> Android</strong> &mdash; renderer &rarr; material &rarr; texture chain; per-texture VRAM estimated from image-header dimensions + the <code>.meta</code> <code>TextureImporter</code> per-platform format (DXT/BC vs ASTC/ETC2). An estimate, since the imported GPU format isn't knowable offline.</li>
-    <li><strong>PhysBone affected-transform &amp; collision-check counts</strong> &mdash; walking the hierarchy under each PhysBone's <code>rootTransform</code> (descendants minus <code>ignoreTransforms</code>, plus an endpoint per chain tip, × assigned colliders).</li>
-    <li><strong>Particles</strong> &mdash; per <code>ParticleSystem</code>, <code>min(maxParticles, ceil(rate × lifetime))</code>, summed.</li>
-    <li><strong>Constraints</strong> &mdash; Unity built-in constraint class ids 320&ndash;325 + VRChat constraint MonoBehaviours; depth = longest constraint&rarr;source chain via a cycle-safe walk.</li>
+    <li><strong>PhysBone affected-transform &amp; collision-check counts</strong> &mdash; walking the hierarchy under each PhysBone's <code>rootTransform</code> (descendants minus <code>ignoreTransforms</code>, plus an endpoint per chain tip, &times; assigned colliders).</li>
+    <li><strong>Total particles</strong> &mdash; per <code>ParticleSystem</code>, VRChat's own ceiling <code>min(maxParticles, ceil(rate &times; lifetime))</code>, summed; MinMaxCurves are read by their constant term (bursts and sub-emitters approximated, so burst-heavy effects read low).</li>
+    <li><strong>Mesh-particle polygons</strong> &mdash; each Mesh-render-mode <code>ParticleSystemRenderer</code> (paired to its system by GameObject) resolves its mesh to a source FBX and multiplies its triangles by the system's live-particle estimate. <strong>Trail</strong> and <strong>collision</strong> flags are read off <code>TrailModule</code>/<code>CollisionModule</code> <code>enabled</code>.</li>
+    <li><strong>Constraints</strong> &mdash; Unity built-in constraint class ids 320&ndash;325 + VRChat constraint MonoBehaviours; depth = longest constraint&rarr;source chain via a memoized, cycle-safe walk (depth reported only when every source slot resolves).</li>
   </ul>
+  <div class="hint">
+    Everything either source can reproduce from the files is measured &mdash; the project view's
+    <code>not_evaluated</code> list is empty by default. An individual metric adds a note there only when its
+    inputs were incomplete (an unparseable particle module, a mesh that resolves to a non-FBX source, an
+    unresolvable constraint chain), marking the value as a lower bound rather than silently dropping it.
+  </div>
 </section>
 
 <section class="doc-section" id="limits">
-  <h2>Limits</h2>
+  <h2>The threshold tables</h2>
   <p>
-    PC + Android limit tables are encoded as data on <code>Metric::limits</code>. What remains in
-    <code>not_evaluated</code> is now only the particle sub-metrics (mesh-particle polygons, trail/collision
-    flags).
+    Encoded as data on <code>Metric::limits(Platform)</code> (rules as data, not constants), sourced from
+    VRChat's Avatar Performance Ranking System. Each cell is the inclusive upper bound for that tier; anything
+    past Poor is <strong>Very Poor</strong>.
+  </p>
+  <h3>PC (Windows)</h3>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Metric</th><th>Excellent</th><th>Good</th><th>Medium</th><th>Poor</th></tr></thead>
+    <tbody>
+      <tr><td>Triangles</td><td>32,000</td><td>70,000</td><td>70,000</td><td>70,000</td></tr>
+      <tr><td>Skinned Meshes</td><td>1</td><td>2</td><td>8</td><td>16</td></tr>
+      <tr><td>Basic Meshes</td><td>4</td><td>8</td><td>16</td><td>24</td></tr>
+      <tr><td>Material Slots</td><td>4</td><td>8</td><td>16</td><td>32</td></tr>
+      <tr><td>Bones</td><td>75</td><td>150</td><td>256</td><td>400</td></tr>
+      <tr><td>PhysBone Components</td><td>4</td><td>8</td><td>16</td><td>32</td></tr>
+      <tr><td>PhysBone Colliders</td><td>4</td><td>8</td><td>16</td><td>32</td></tr>
+      <tr><td>PhysBone Affected Transforms</td><td>16</td><td>64</td><td>128</td><td>256</td></tr>
+      <tr><td>PhysBone Collision Check Count</td><td>32</td><td>128</td><td>256</td><td>512</td></tr>
+      <tr><td>Contacts</td><td>8</td><td>16</td><td>24</td><td>32</td></tr>
+      <tr><td>Particle Systems</td><td>0</td><td>4</td><td>8</td><td>16</td></tr>
+      <tr><td>Total Particles</td><td>0</td><td>300</td><td>1,000</td><td>2,500</td></tr>
+      <tr><td>Mesh Particle Polygons &dagger;</td><td>0</td><td>2,000</td><td>20,000</td><td>50,000</td></tr>
+      <tr><td>Particle Trails</td><td>0</td><td>0</td><td>0</td><td>1</td></tr>
+      <tr><td>Particle Collision</td><td>0</td><td>0</td><td>0</td><td>1</td></tr>
+      <tr><td>Constraints</td><td>100</td><td>250</td><td>300</td><td>350</td></tr>
+      <tr><td>Constraint Depth</td><td>20</td><td>50</td><td>80</td><td>100</td></tr>
+      <tr><td>Lights</td><td>0</td><td>0</td><td>0</td><td>1</td></tr>
+      <tr><td>Audio Sources</td><td>1</td><td>4</td><td>8</td><td>8</td></tr>
+      <tr><td>Trail Renderers</td><td>1</td><td>2</td><td>4</td><td>8</td></tr>
+      <tr><td>Line Renderers</td><td>1</td><td>2</td><td>4</td><td>8</td></tr>
+      <tr><td>Cloths</td><td>0</td><td>1</td><td>1</td><td>1</td></tr>
+      <tr><td>Physics Colliders</td><td>0</td><td>1</td><td>8</td><td>8</td></tr>
+      <tr><td>Physics Rigidbodies</td><td>0</td><td>1</td><td>8</td><td>8</td></tr>
+      <tr><td>Animators</td><td>1</td><td>4</td><td>16</td><td>32</td></tr>
+    </tbody>
+  </table></div>
+  <h3>Android / Quest (stricter)</h3>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Metric</th><th>Excellent</th><th>Good</th><th>Medium</th><th>Poor</th></tr></thead>
+    <tbody>
+      <tr><td>Triangles</td><td>7,500</td><td>10,000</td><td>15,000</td><td>20,000</td></tr>
+      <tr><td>Skinned Meshes</td><td>1</td><td>1</td><td>2</td><td>2</td></tr>
+      <tr><td>Basic Meshes</td><td>1</td><td>1</td><td>2</td><td>2</td></tr>
+      <tr><td>Material Slots</td><td>1</td><td>1</td><td>2</td><td>4</td></tr>
+      <tr><td>Bones</td><td>75</td><td>90</td><td>150</td><td>150</td></tr>
+      <tr><td>PhysBone Components</td><td>0</td><td>4</td><td>6</td><td>8</td></tr>
+      <tr><td>PhysBone Colliders</td><td>0</td><td>4</td><td>8</td><td>16</td></tr>
+      <tr><td>PhysBone Affected Transforms</td><td>0</td><td>16</td><td>32</td><td>64</td></tr>
+      <tr><td>PhysBone Collision Check Count</td><td>0</td><td>16</td><td>32</td><td>64</td></tr>
+      <tr><td>Contacts</td><td>2</td><td>4</td><td>8</td><td>16</td></tr>
+      <tr><td>Particle Systems</td><td>0</td><td>0</td><td>0</td><td>2</td></tr>
+      <tr><td>Total Particles</td><td>0</td><td>0</td><td>0</td><td>200</td></tr>
+      <tr><td>Mesh Particle Polygons &dagger;</td><td>0</td><td>0</td><td>2,000</td><td>20,000</td></tr>
+      <tr><td>Particle Trails</td><td>0</td><td>0</td><td>0</td><td>1</td></tr>
+      <tr><td>Particle Collision</td><td>0</td><td>0</td><td>0</td><td>1</td></tr>
+      <tr><td>Constraints</td><td>30</td><td>60</td><td>120</td><td>150</td></tr>
+      <tr><td>Constraint Depth</td><td>5</td><td>15</td><td>35</td><td>50</td></tr>
+      <tr><td>Trail Renderers</td><td>0</td><td>0</td><td>0</td><td>1</td></tr>
+      <tr><td>Line Renderers</td><td>0</td><td>0</td><td>0</td><td>1</td></tr>
+      <tr><td>Animators</td><td>1</td><td>1</td><td>1</td><td>2</td></tr>
+    </tbody>
+  </table></div>
+  <p>
+    Lights, Audio Sources, Cloths, and the physics colliders/rigidbodies are <strong>not ranked on
+    Android</strong> (those components are stripped on mobile). &dagger; The Mesh Particle Polygons bounds are
+    the repo's own triangle-style ramp &mdash; VRChat folds mesh-particle polygons into its particle budget
+    rather than publishing a standalone table.
   </p>
 </section>

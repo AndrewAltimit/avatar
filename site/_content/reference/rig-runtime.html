@@ -26,5 +26,12 @@
     renderer-free <strong>rest-pose reproduction</strong> invariant: posing the skeleton at its rest pose and
     skinning must reproduce the original mesh.
   </p>
+  <p>
+    When the per-cluster bind <code>Transform</code>s can't be trusted (converted/MMD&rarr;FBX avatars), a
+    pose can still be applied to the <strong>raw control points</strong> as a per-bone delta
+    (<code>G&#8315;&#185; &middot; world(pose) &middot; world(rest)&#8315;&#185; &middot; G</code>) that never
+    involves the cluster binds &mdash; identity for every untouched bone. <code>avatar render --pose
+    &lt;prefab&gt;</code> / <code>--stretch</code> are built on it (see <a href="render.html">render</a>).
+  </p>
   <div class="hint"><code>glam</code> (f32) is confined to pose/input/gltf &mdash; it never reaches the lint/cli graph, which is verified by <code>cargo tree</code>.</div>
 </section>

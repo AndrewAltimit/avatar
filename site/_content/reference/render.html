@@ -1,0 +1,136 @@
+<header class="page-header">
+  <div class="breadcrumb"><a href="../index.html">home</a> &middot; <a href="index.html">reference</a> &middot; rendering &amp; preview</div>
+  <h1>Rendering &amp; preview</h1>
+  <p class="lede">
+    <code>avatar render</code> (the <code>avatar-render</code> crate) turns an avatar &mdash; and a Unity
+    world scene &mdash; into a PNG, headless, with no Unity in the loop. It builds on the runtime rig layer
+    (FBX/glTF &rarr; <code>RawMesh</code>) and the Unity-YAML reader; <code>avatar view</code> opens the same
+    scene in an interactive window. Full text: <code>docs/reference/render.md</code>.
+  </p>
+</header>
+
+<section class="doc-section" id="pipeline">
+  <h2>The offscreen wgpu pipeline</h2>
+  <p>
+    A renderer-agnostic wgpu pipeline: input is a <code>Scene</code> of <code>RenderMesh</code>es (world-space
+    transform per mesh), a look-at camera, a directional+ambient light; output is RGBA8 pixels &rarr; PNG.
+    There is no window or surface &mdash; it renders into a texture and reads it back, so it works over SSH and
+    in CI wherever a GPU adapter (Vulkan/GL/Metal/DX) exists. <code>render_to_rgba</code> returns
+    <code>Err</code> when no adapter is available, and the crate's smoke test skips.
+  </p>
+  <ul>
+    <li>One merged vertex buffer (transforms baked CPU-side), one uniform; the index buffer is grouped into
+      per-texture <strong>batches</strong> &mdash; one draw per distinct texture.</li>
+    <li>A <code>Scene</code> carries a texture pool; untextured batches bind a 1&times;1 white texel so the
+      shader path is uniform. UVs are V-flipped (FBX/glTF are bottom-left origin, wgpu samples top-left), and
+      an <strong>alpha cutout</strong> at 0.5 keeps foliage/hair/decal cards from rendering as opaque squares.</li>
+    <li>4&times; MSAA + depth buffer; <strong>two-sided</strong> Lambert + ambient, because imported meshes
+      have inconsistent triangle winding.</li>
+  </ul>
+  <div class="hint">
+    This is where <code>glam</code> enters the CLI dependency graph for the first time &mdash; confined to the
+    renderer and the CLI's <code>render_scene</code>/<code>world</code> modules, per the workspace invariant.
+  </div>
+</section>
+
+<section class="doc-section" id="avatar-rest-pose">
+  <h2>Rendering an avatar</h2>
+  <div class="cli"><code>avatar render --avatar model.fbx -o out.png</code></div>
+  <p>
+    The avatar loader imports the mesh(es) and renders the rest/bind pose from the <strong>raw control
+    points</strong> &mdash; it deliberately does <em>not</em> apply the FBX skin-bind matrices. Ripped and
+    converted avatars (notably MMD&rarr;FBX) ship inconsistent per-cluster <code>Transform</code> matrices,
+    so linear-blend skinning through them blends opposing rotations and the mesh collapses into spikes; the
+    control points are always a clean, undeformed bind.
+  </p>
+  <p>
+    The model is <strong>auto-uprighted</strong> by aligning its hips&rarr;head axis to +Y, measured from
+    cluster centroids in control-point space (weights + control points are reliable; the bind matrices are
+    not) &mdash; a model authored lying down or sideways comes out standing. Non-humanoid rigs fall back to
+    the file's declared <code>UpAxis</code>. The avatar is textured from its FBX-embedded materials (per
+    material slot, embedded blobs or files resolved relative to the FBX), and the camera auto-frames the
+    bounds (<code>--yaw</code>/<code>--pitch</code> orbit).
+  </p>
+  <h3>Pose-adjacent previews</h3>
+  <ul>
+    <li><code>--stretch HINGE:FACTOR</code> (repeatable, <code>*</code> wildcards, FBX only) previews the
+      chain-length edit <a href="physbone.html"><code>avatar physbone stretch</code></a> makes: bones below
+      the hinge have their parent offsets scaled and the mesh is CPU-skinned through the resulting pose.
+      The one place the renderer poses &mdash; it uses the pose <em>delta</em> only, identity everywhere the
+      pose is untouched, never the untrusted per-cluster binds.</li>
+    <li><code>--material-texture NAME=IMAGE</code> draws a material with a different image &mdash; preview a
+      texture edit, or draw a hair material with its emission map to see where a glow lands.</li>
+    <li><code>--pose PREFAB</code> (FBX only) takes every bone's local transform from the prefab's same-named
+      GameObject &mdash; the render shows what Unity will show for <em>that prefab</em> (stretched and
+      re-angled chains, hand-posed bones), undoing Unity's import mirroring and import scale. Verified:
+      posing from an untouched migration prefab (152 bones) reproduces the rest render to the pixel.</li>
+  </ul>
+</section>
+
+<section class="doc-section" id="world-render">
+  <h2>Rendering a world</h2>
+  <div class="cli"><code>avatar render --world scene.unity -o out.png
+avatar render --world path/to/project -o out.png</code></div>
+  <p>
+    The world loader parses a Unity <code>.unity</code> scene and emulates enough of Unity's FBX import
+    pipeline to place geometry correctly: Transform/MeshFilter/MeshRenderer/PrefabInstance objects are read
+    with a lossy YAML parse, world matrices composed up the <code>m_Father</code> chain, each FBX mesh placed
+    by its <code>Model</code> node's transform up the FBX parent chain, and Unity's <strong>import
+    scale</strong> applied &mdash; fixing cm-unit props that would otherwise render 100&times; too big.
+    Prefab-instanced models (whose meshes are never serialized into the scene) are re-instantiated from
+    <code>m_SourcePrefab</code>; materials resolve through scene <code>.mat</code>s or the model importer's
+    material remap, falling back to FBX-embedded materials and then neutral grey. Unity's left-handed Y-up
+    space is converted to the renderer's right-handed space.
+  </p>
+  <p>
+    Validated against the Cozy Cabin world (PC export): the cabin assembles at correct scale (~6&nbsp;m),
+    props at real-world sizes, everything textured &mdash; alpha-cut foliage as proper pine.
+  </p>
+</section>
+
+<section class="doc-section" id="avatar-at-spawn">
+  <h2>Dropping an avatar into a world</h2>
+  <div class="cli"><code>avatar render --avatar model.fbx --world scene.unity -o out.png</code></div>
+  <p>
+    With both, the avatar is placed where VRChat would materialise a player: the scene's spawn is resolved
+    from the <code>VRC_SceneDescriptor</code>'s first <code>spawns[]</code> transform (falling back to the
+    <code>VRCWorld</code> GameObject), the avatar is normalised to <strong>human height</strong>
+    (1.6&nbsp;m &mdash; ripped/MMD FBX units vary wildly), and its feet stand on the spawn point. The camera
+    defaults to framing on the avatar with the map around it; <code>--frame world</code> frames the whole
+    scene. Validated: the SDK2 avatar stands at the Cozy Cabin's real spawn point, on the porch, at correct
+    scale.
+  </p>
+</section>
+
+<section class="doc-section" id="viewer">
+  <h2>Interactive viewer &mdash; <code>avatar view</code></h2>
+  <p>
+    <code>avatar view --avatar X --world Y</code> opens a native window onto the same assembled scene instead
+    of writing a PNG: <strong>drag</strong> to orbit, <strong>wheel</strong> to zoom,
+    <strong>WASD</strong> (+Space/Shift) to walk the focus point, <strong>R</strong> to reset,
+    <strong>Esc</strong> to quit. It reuses the offscreen geometry/shader pipeline but draws to a live
+    swapchain, opening at the same framing the PNG would produce. The CLI's <code>viewer</code> feature is on
+    by default (winit builds headlessly and only needs a display at runtime);
+    <code>--no-default-features</code> gives a pure-offscreen binary.
+  </p>
+</section>
+
+<section class="doc-section" id="limits">
+  <h2>Limits</h2>
+  <div class="notice warn"><div class="notice-title">A static preview, not a pixel-accurate Unity render</div>
+    Shading is flat-lit: one base-colour texture &times; tint under a single Lambert light &mdash; no
+    normal/metallic/emission maps, no transparency blending (only the 0.5 alpha cutout), no lightmaps or
+    custom shaders. Texture decode is limited to what <code>image</code> handles (PNG/JPEG/TGA/BMP/GIF &mdash;
+    no DDS/PSD/EXR); undecodable textures fall back to the material's flat colour.
+  </div>
+  <ul>
+    <li><strong>FBX transform fidelity</strong> &mdash; only <code>Lcl</code> translation/rotation/scaling is
+      composed: no per-node <code>RotationOrder</code>, pre/post-rotation, pivots, geometric transforms, or
+      scale-inheritance modes. Rare on static world props; edge cases can be mis-oriented.</li>
+    <li>No prefab nesting or per-platform import overrides; only the first material per renderer is read for
+      colour.</li>
+    <li>The standalone avatar render is the rest pose &mdash; full <em>posed</em> skinning would need the
+      bind matrices this class of asset can't be trusted to provide (the <code>--stretch</code>/<code>--pose</code>
+      delta trick sidesteps that).</li>
+  </ul>
+</section>
