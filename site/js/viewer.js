@@ -24,6 +24,10 @@
  *   v.setOverlay('skeleton'|'grid'|'labels'|'autorotate', bool);
  *   v.highlightBone(index|null);            // select a joint from outside (e.g. the bone tree)
  *   v.resetView();                          // re-frame the camera from the bounds
+ *   await v.applyTextures(library);         // library.find(relative, absolute, materialName) -> { name, blob, via? } | null:
+ *                                           // resolve external (non-embedded) textures from dropped files
+ *   v.textureStatus() -> [{ index, name, path, kind: embedded|file|missing|none|error, source, width, height, alpha, thumb }]
+ *   v.onTextures = status => {};            // fires whenever texture decoding settles
  *   v.screenshot() -> 'data:image/png;base64,…'
  *   v.getState()   -> { mode, overlays, selectedBone, stats }
  *   v.dispose();                            // tear down everything (canvas, GPU, listeners)
@@ -224,6 +228,7 @@ export function createViewer(container, opts = {}) {
     stats: null,
     disposed: false,
     loaded: false,
+    library: (opts && opts.textureLibrary) || null,
   };
 
   let THREE = null, OrbitControls = null, viaMap = true;
@@ -431,33 +436,121 @@ export function createViewer(container, opts = {}) {
     return { min, max };
   }
 
-  async function makeTexture(sceneView, matIndex, matInfo, w) {
-    const tinfo = matInfo && matInfo.texture;
-    if (!tinfo || !tinfo.embedded) return null;
-    let bytes;
-    try { bytes = sceneView.texture(matIndex); } catch (e) { return null; }
-    if (!bytes || bytes.length === 0) return null;
-    const mime = tinfo.mime || 'application/octet-stream';
-    const isTga = mime === 'image/x-tga' || mime === 'image/tga' || /\.tga$/i.test(tinfo.relative || '');
-    const url = URL.createObjectURL(new Blob([bytes], { type: isTga ? 'application/octet-stream' : mime }));
+  // --- textures ------------------------------------------------------------------
+  // A material's texture comes from one of two places: bytes embedded in the FBX
+  // (`sceneView.texture(i)`) or a file the page handed us through a texture
+  // library (`library.find(relative, absolute)` → { name, blob } | null) — MMD /
+  // Blender exports reference their images by relative path and ship them next
+  // to the .fbx, so the page lets the user drop those files in after the fact.
+
+  const IMAGE_MIME = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', bmp: 'image/bmp', gif: 'image/gif', webp: 'image/webp', tga: 'image/x-tga' };
+
+  function extOf(name) { const m = /\.([a-z0-9]+)$/i.exec(name || ''); return m ? m[1].toLowerCase() : ''; }
+
+  function texturePath(tinfo) { return (tinfo && (tinfo.relative || tinfo.absolute)) || ''; }
+
+  // Decode image bytes into a three texture; also report alpha use + a thumbnail.
+  async function decodeTexture(bytes, mime, name, w) {
+    const isTga = mime === 'image/x-tga' || mime === 'image/tga' || extOf(name) === 'tga';
+    const url = URL.createObjectURL(new Blob([bytes], { type: isTga ? 'application/octet-stream' : (mime || 'application/octet-stream') }));
     w.blobUrls.push(url);
-    try {
-      let tex;
-      if (isTga) {
-        const TGALoader = await loadTgaLoader(viaMap);
-        tex = await new TGALoader().loadAsync(url);
-      } else {
-        tex = await new THREE.TextureLoader().loadAsync(url);
-      }
-      tex.colorSpace = THREE.SRGBColorSpace;
-      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-      tex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
-      w.textures.push(tex);
-      return tex;
-    } catch (e) {
-      console.warn('viewer: texture for material', matIndex, 'failed to decode:', e);
-      return null;
+    let tex;
+    if (isTga) {
+      const TGALoader = await loadTgaLoader(viaMap);
+      tex = await new TGALoader().loadAsync(url);
+    } else {
+      tex = await new THREE.TextureLoader().loadAsync(url);
     }
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+    w.textures.push(tex);
+    const meta = inspectImage(tex.image);
+    return { tex, ...meta };
+  }
+
+  // Sample the decoded image on a small canvas: does it use alpha, and a thumbnail data URL.
+  function inspectImage(image) {
+    const out = { width: image && image.width || 0, height: image && image.height || 0, alpha: false, thumb: null };
+    try {
+      const size = 96;
+      const c = document.createElement('canvas');
+      c.width = c.height = size;
+      const g = c.getContext('2d');
+      if (image && image.data && image.width && image.height) {
+        // TGALoader → { data: RGBA bytes, width, height } (rows bottom-up per TGA, flipped by the loader).
+        const src = document.createElement('canvas');
+        src.width = image.width; src.height = image.height;
+        const id = new ImageData(new Uint8ClampedArray(image.data.buffer, image.data.byteOffset, image.width * image.height * 4), image.width, image.height);
+        src.getContext('2d').putImageData(id, 0, 0);
+        g.drawImage(src, 0, 0, size, size);
+      } else if (image && image.width) {
+        g.drawImage(image, 0, 0, size, size);
+      } else {
+        return out;
+      }
+      const px = g.getImageData(0, 0, size, size).data;
+      for (let i = 3; i < px.length; i += 4) { if (px[i] < 250) { out.alpha = true; break; } }
+      out.thumb = c.toDataURL('image/png');
+    } catch (e) { /* tainted canvas or decode quirk: no thumbnail */ }
+    return out;
+  }
+
+  // Resolve where a material's texture bytes come from. Returns null if nowhere (yet).
+  function resolveTextureSource(sceneView, matIndex, tinfo, matName) {
+    if (!tinfo) return null;
+    if (tinfo.embedded) {
+      let bytes = null;
+      try { bytes = sceneView.texture(matIndex); } catch (e) { bytes = null; }
+      if (bytes && bytes.length) return { kind: 'embedded', bytes, mime: tinfo.mime, name: texturePath(tinfo), source: 'embedded in the FBX' };
+    }
+    const lib = state.library;
+    if (lib && typeof lib.find === 'function') {
+      const hit = lib.find(tinfo.relative || null, tinfo.absolute || null, matName || null);
+      if (hit && hit.blob) return { kind: 'file', blob: hit.blob, mime: hit.blob.type || IMAGE_MIME[extOf(hit.name)] || null, name: hit.name, source: hit.via ? `${hit.name} (via ${hit.via})` : hit.name };
+    }
+    return null;
+  }
+
+  async function attachTexture(entry) {
+    // entry: { index, info, mat, status, ... } from world.materials
+    if (!world || !entry || entry.loading || entry.kind === 'embedded' || entry.kind === 'file' || !entry.info.texture) return false;
+    const src = resolveTextureSource(entry.sceneView, entry.index, entry.info.texture, entry.info.name);
+    if (!src) { entry.kind = 'missing'; return false; }
+    entry.loading = true;
+    const w = world;
+    try {
+      const bytes = src.bytes || new Uint8Array(await src.blob.arrayBuffer());
+      if (state.disposed || world !== w) return false;
+      const r = await decodeTexture(bytes, src.mime, src.name, w);
+      if (state.disposed || world !== w) return false;
+      const m = entry.mat;
+      m.map = r.tex;
+      if (r.alpha) { m.transparent = true; m.alphaTest = 0.02; m.depthWrite = true; }
+      m.needsUpdate = true;
+      Object.assign(entry, { kind: src.kind, source: src.source, width: r.width, height: r.height, alpha: r.alpha, thumb: r.thumb, bytes: bytes.length, error: null });
+      return true;
+    } catch (e) {
+      console.warn('viewer: texture for material', entry.index, 'failed to decode:', e);
+      entry.kind = 'error'; entry.error = String(e && e.message ? e.message : e); entry.source = src.source;
+      return false;
+    } finally { entry.loading = false; }
+  }
+
+  function textureStatus() {
+    if (!world) return [];
+    return world.materials.map(e => ({
+      index: e.index, name: e.info.name || `material ${e.index}`, path: texturePath(e.info.texture),
+      kind: e.kind, source: e.source || null, width: e.width || 0, height: e.height || 0,
+      alpha: !!e.alpha, thumb: e.thumb || null, bytes: e.bytes || 0, error: e.error || null,
+    }));
+  }
+
+  function notifyTextures() {
+    if (state.disposed || !world) return;
+    const st = textureStatus();
+    if (typeof api.onTextures === 'function') { try { api.onTextures(st); } catch (e) { console.warn(e); } }
+    if (opts.onTextures) { try { opts.onTextures(st); } catch (e) { console.warn(e); } }
   }
 
   async function buildMeshes(sceneView, manifest, w) {
@@ -483,11 +576,13 @@ export function createViewer(container, opts = {}) {
       m.name = info.name || `material ${mi}`;
       matCache.set(mi, m);
       w.mats.push(m);
-      texJobs.push(makeTexture(sceneView, mi, info, w).then(tex => {
-        if (tex && !state.disposed) { m.map = tex; m.needsUpdate = true; }
-      }));
       return m;
     };
+    // One status entry per manifest material (also the ones no mesh uses), attached lazily.
+    w.materials = materials.map((info, mi) => ({
+      index: mi, info, sceneView, mat: materialFor(mi, MESH_PALETTE[mi % MESH_PALETTE.length]),
+      kind: info.texture ? 'missing' : 'none', source: null, loading: false,
+    }));
 
     const positionsList = [];
     let totalVerts = 0, totalTris = 0, groupCount = 0;
@@ -568,7 +663,8 @@ export function createViewer(container, opts = {}) {
       bones: (manifest.bones || []).length,
     };
     // Textures decode in the background; the scene is usable immediately.
-    Promise.all(texJobs).catch(() => {});
+    texJobs.push(...w.materials.map(e => attachTexture(e)));
+    Promise.all(texJobs).then(() => { if (world === w) notifyTextures(); }).catch(() => {});
   }
 
   function buildSkeleton(manifest, w) {
@@ -847,14 +943,15 @@ export function createViewer(container, opts = {}) {
     ready,
     get element() { return container; },
 
-    async load(sceneView, manifest) {
+    async load(sceneView, manifest, loadOpts) {
       await ready;
       if (state.disposed) return;
+      if (loadOpts && loadOpts.textureLibrary !== undefined) state.library = loadOpts.textureLibrary;
       if (typeof manifest === 'string') manifest = JSON.parse(manifest);
       if (!manifest && sceneView && typeof sceneView.manifest === 'function') manifest = JSON.parse(sceneView.manifest());
       freeWorld();
       showMessage('');
-      const w = { group: new THREE.Group(), meshes: [], geoms: [], mats: [], textures: [], blobUrls: [], skin: [], skeleton: null, grid: null, bounds: null, manifest };
+      const w = { group: new THREE.Group(), meshes: [], geoms: [], mats: [], materials: [], textures: [], blobUrls: [], skin: [], skeleton: null, grid: null, bounds: null, manifest };
       try {
         await buildMeshes(sceneView, manifest, w);
         buildSkeleton(manifest, w);
@@ -895,6 +992,23 @@ export function createViewer(container, opts = {}) {
     },
 
     resetView() { frameCamera(); },
+
+    /** Supply (or replace) the texture library and (re)try every unresolved material.
+     *  Resolves to the texture status list once decoding settles. */
+    async applyTextures(library) {
+      if (library !== undefined) state.library = library;
+      if (!world) return [];
+      const w = world;
+      await Promise.all(w.materials.map(e => attachTexture(e)));
+      if (world === w) notifyTextures();
+      return textureStatus();
+    },
+
+    /** Per-material texture status: { index, name, path, kind: embedded|file|missing|none|error, source, width, height, alpha, thumb, bytes, error }. */
+    textureStatus() { return textureStatus(); },
+
+    /** Set by the host page: called with the status list whenever textures settle. */
+    onTextures: null,
 
     screenshot() {
       if (!renderer) return null;

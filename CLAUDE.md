@@ -185,8 +185,10 @@ READMEs. What exists today, with its doc:
   by the self-hosted `deploy-pages` CI job, incl. the in-browser wasm **avatar inspector**
   (`crates/web-analyzer`: the fbx+armature+stats diagnose graph via wasm-bindgen, plus a `SceneView`
   export handing uprighted geometry / skin weights / bone positions / embedded textures to a three.js
-  viewer with skeleton, weight-heatmap, wireframe, UV and normal overlays; tabbed report with rank meters,
-  bone tree, viseme checklist; `sample_fbx()` = the testkit's skinned humanoid).
+  viewer with skeleton, weight-heatmap, wireframe, UV and normal overlays; external textures resolved
+  from image files / a Unity project folder dropped onto the page — `.mat` `_MainTex` guid → `.meta`,
+  then filename; tabbed report with rank meters, bone tree, viseme checklist, per-material texture
+  status; `sample_fbx()` = the testkit's skinned humanoid).
 - **Runtime rig** — `mesh`/`pose`/`input` + `gltf`, the renderer-agnostic VR-spectator foundation
   ([`rig-runtime.md`](docs/reference/rig-runtime.md)).
 

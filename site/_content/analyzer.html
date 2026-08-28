@@ -22,8 +22,11 @@
   <h2>Analyze a file</h2>
   <div class="an-drop" id="an-drop" tabindex="0" role="button" aria-label="Choose or drop an FBX file">
     <div class="an-drop-icon">&#8681;</div>
-    <div class="an-drop-text">Drop a binary <code>.fbx</code> here, or click to choose a file</div>
-    <input type="file" id="an-file" accept=".fbx" hidden>
+    <div class="an-drop-text">Drop a binary <code>.fbx</code> here, or click to choose a file<br>
+      <span class="an-drop-sub">Textures not embedded in the file? Drop the image files or the folder next to the <code>.fbx</code> too &mdash; before or after.</span></div>
+    <input type="file" id="an-file" accept=".fbx,.png,.jpg,.jpeg,.bmp,.gif,.webp,.tga" multiple hidden>
+    <input type="file" id="an-texfiles" accept=".png,.jpg,.jpeg,.bmp,.gif,.webp,.tga" multiple hidden>
+    <input type="file" id="an-texdir" webkitdirectory multiple hidden>
   </div>
   <div class="an-toolbar" id="an-toolbar">
     <button type="button" class="an-btn an-btn-primary" id="an-sample" disabled>Try the sample avatar</button>
@@ -39,6 +42,8 @@
     <div class="an-filebar-actions">
       <button type="button" class="an-btn" id="an-download">Download report JSON</button>
       <button type="button" class="an-btn" id="an-screenshot">Screenshot</button>
+      <button type="button" class="an-btn" id="an-addtex" title="Match image files to the materials' texture paths by filename">Add textures&hellip;</button>
+      <button type="button" class="an-btn an-btn-quiet" id="an-addtexdir" title="Add every image in a folder (e.g. the folder the .fbx sits in)">Add texture folder&hellip;</button>
       <button type="button" class="an-btn an-btn-quiet" id="an-another">Load another&hellip;</button>
     </div>
   </div>
@@ -56,6 +61,12 @@
       in sync with the rig tree. See <a href="reference/render.html">rendering &amp; preview</a> for
       why raw control points (not the per-cluster bind matrices) are the faithful choice for
       ripped/MMD-derived avatars.</li>
+    <li><strong>Textures</strong> &mdash; embedded images are decoded straight out of the FBX
+      (PNG/JPEG/BMP/TGA). Most Blender and MMD exports instead <em>reference</em> their images by
+      path; drop those files (or the folder that holds them) onto the page and they are matched to
+      the materials by filename &mdash; extension mismatches like a <code>.tga</code> reference with a
+      <code>.png</code> on disk are tolerated. The Textures tab lists every reference, where it was
+      resolved from, its size, and whether it uses alpha.</li>
     <li><strong>Overview</strong> &mdash; the headline numbers (humanoid-ready, PC and Android rank,
       triangles, bones, materials, blendshapes) and one aggregated issues list: missing or duplicate
       humanoid bones, extra skeleton roots, a unit scale other than 100 or a non-Y up axis in the

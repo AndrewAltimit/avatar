@@ -394,3 +394,24 @@ th.an-num { text-align: right; }
 #an-results .an-issue-item { padding: 0.6rem 0.8rem; }
 #an-results .an-tree ul { min-width: max-content; }
 .an-tree-name { flex: 0 0 auto; overflow: visible; text-overflow: clip; }
+
+/* --- textures ------------------------------------------------------------------ */
+.an-drop-sub { display: inline-block; margin-top: 0.35rem; font-size: 0.8rem; color: var(--text-muted); }
+.an-drop.an-collapsed .an-drop-sub { display: none; }
+body.an-dragging .an-drop, body.an-dragging .an-viewer { outline: 2px dashed var(--accent); outline-offset: 3px; }
+.an-dim { color: var(--text-dim); }
+.an-tex-summary { color: var(--text-muted); font-size: 0.86rem; margin: 0.2rem 0 0.6rem; }
+.an-tex-notice p { margin: 0.3rem 0 0.6rem; }
+.an-tex-actions { display: flex; flex-wrap: wrap; gap: 0.45rem; }
+.an-tex-table td { vertical-align: middle; }
+.an-tex-table code { font-size: 0.74rem; overflow-wrap: anywhere; }
+.an-tex-thumb { width: 3rem; height: 3rem; border-radius: 4px; overflow: hidden; border: 1px solid var(--border); background:
+  repeating-conic-gradient(var(--bg-card-hi) 0 25%, var(--bg-card) 0 50%) 0 0 / 0.75rem 0.75rem; }
+.an-tex-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.an-tex-thumb-empty { opacity: 0.5; }
+tr.an-tex-missing td { background: color-mix(in srgb, var(--warn, #d9a441) 7%, transparent); }
+.an-tex-lib { margin-top: 0.8rem; font-size: 0.84rem; }
+.an-tex-lib ul { margin: 0.4rem 0 0.6rem 1.2rem; }
+.an-tex-lib li { margin: 0.15rem 0; }
+.an-nowrap { white-space: nowrap; }
+.an-tex-path { cursor: help; }

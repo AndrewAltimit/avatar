@@ -196,6 +196,13 @@ function makeTabs(defs) {
   const idx = Math.max(0, defs.findIndex(d => d.id === wanted));
   select(idx, false);
   root.selectTab = id => { const i = defs.findIndex(d => d.id === id); if (i >= 0) select(i, false); };
+  root.setBadge = (id, text, warn) => {
+    const i = defs.findIndex(d => d.id === id); if (i < 0) return;
+    let c = tabs[i].querySelector('.an-tab-count');
+    if (text == null) { if (c) c.remove(); return; }
+    if (!c) { c = h('span', { class: 'an-tab-count' }); tabs[i].append(c); }
+    c.textContent = text; c.classList.toggle('an-tab-count-warn', !!warn);
+  };
   return root;
 }
 
@@ -614,9 +621,203 @@ function renderPerformance(report) {
 // Meshes & materials
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Texture library — image files dropped alongside the .fbx, matched by name
+// ---------------------------------------------------------------------------
+
+const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'bmp', 'gif', 'webp', 'tga']);
+const extOf = name => { const m = /\.([a-z0-9]+)$/i.exec(name || ''); return m ? m[1].toLowerCase() : ''; };
+const baseOf = path => (path || '').split(/[\\/]/).pop();
+const stemOf = name => name.replace(/\.[a-z0-9]+$/i, '');
+
+/** FBX materials reference textures by (often Windows, often stale) path; an export ships the
+ *  images next to the file. Resolution order for a material:
+ *   1. Unity project route — a `.mat` named after the FBX material (or after the referenced
+ *      texture's stem, Unity's "by base texture name" convention) whose `_MainTex` guid matches an
+ *      image's `.meta` guid. That is what the imported avatar actually renders with, even when the
+ *      FBX path is stale.
+ *   2. Dropped image whose basename matches the referenced path.
+ *   3. Same stem, different extension (a `.tga` reference with a `.png` on disk after a conversion). */
+class TextureLibrary {
+  constructor() {
+    this.byName = new Map(); this.byStem = new Map(); this.entries = [];
+    this.mats = new Map();     // lowercase material name → { guid, file }   (from .mat)
+    this.byGuid = new Map();   // guid → lowercase image basename          (from .meta)
+  }
+  get size() { return this.entries.length; }
+  get matCount() { return this.mats.size; }
+  async add(file, path) {
+    const name = baseOf(path || file.name);
+    const ext = extOf(name);
+    if (ext === 'mat') return this.addMat(file, name);
+    if (ext === 'meta') return this.addMeta(file, name);
+    if (!IMAGE_EXTS.has(ext)) return false;
+    const entry = { name, path: path || file.name, blob: file };
+    this.entries.push(entry);
+    this.byName.set(name.toLowerCase(), entry);
+    const st = stemOf(name).toLowerCase();
+    if (!this.byStem.has(st)) this.byStem.set(st, entry);
+    return true;
+  }
+  async addMat(file, name) {
+    if (file.size > 4 * 1024 * 1024) return false;
+    let text; try { text = await file.text(); } catch (e) { return false; }
+    const nm = /^\s*m_Name:\s*(.+?)\s*$/m.exec(text);
+    const mt = /_MainTex:\s*\n\s*m_Texture:\s*\{[^}]*guid:\s*([0-9a-f]{32})/i.exec(text);
+    if (!nm || !mt) return false;
+    for (const key of new Set([nm[1].toLowerCase(), stemOf(name).toLowerCase()])) if (!this.mats.has(key)) this.mats.set(key, { guid: mt[1].toLowerCase(), file: name });
+    return false;
+  }
+  async addMeta(file, name) {
+    const target = name.replace(/\.meta$/i, '');
+    if (!IMAGE_EXTS.has(extOf(target)) || file.size > 256 * 1024) return false;
+    let text; try { text = await file.text(); } catch (e) { return false; }
+    const g = /^guid:\s*([0-9a-f]{32})/mi.exec(text);
+    if (g) this.byGuid.set(g[1].toLowerCase(), target.toLowerCase());
+    return false;
+  }
+  async addAll(list) {
+    let images = 0;
+    for (const x of list) if (await this.add(x.file, x.path)) images++;
+    return images;
+  }
+  clear() { this.byName.clear(); this.byStem.clear(); this.entries = []; this.mats.clear(); this.byGuid.clear(); }
+  find(relative, absolute, materialName) {
+    const stems = [materialName, stemOf(baseOf(relative)), stemOf(baseOf(absolute))].filter(Boolean).map(x => x.toLowerCase());
+    for (const key of stems) {
+      const mat = this.mats.get(key);
+      if (!mat) continue;
+      const img = this.byGuid.get(mat.guid);
+      const hit = img && this.byName.get(img);
+      if (hit) return { ...hit, via: mat.file };
+    }
+    for (const p of [relative, absolute]) {
+      const b = baseOf(p).toLowerCase();
+      if (b && this.byName.has(b)) return this.byName.get(b);
+    }
+    for (const p of [relative, absolute]) {
+      const b = baseOf(p);
+      if (!b) continue;
+      const hit = this.byStem.get(stemOf(b).toLowerCase());
+      if (hit) return hit;
+    }
+    return null;
+  }
+}
+
+/** Every file in a drop, walking dropped folders (webkitGetAsEntry) → [{ file, path }]. */
+async function collectDropped(dt) {
+  const out = [];
+  const items = dt.items ? Array.from(dt.items) : [];
+  const entries = items.map(it => (typeof it.webkitGetAsEntry === 'function' ? it.webkitGetAsEntry() : null));
+  if (entries.some(Boolean)) {
+    const walk = async (entry, prefix) => {
+      if (!entry) return;
+      if (entry.isFile) {
+        const file = await new Promise((res, rej) => entry.file(res, rej)).catch(() => null);
+        if (file) out.push({ file, path: prefix + entry.name });
+      } else if (entry.isDirectory) {
+        const reader = entry.createReader();
+        for (;;) {
+          const batch = await new Promise((res, rej) => reader.readEntries(res, rej)).catch(() => []);
+          if (!batch.length) break;
+          for (const e of batch) await walk(e, prefix + entry.name + '/');
+        }
+      }
+    };
+    for (const e of entries) await walk(e, '');
+    if (out.length) return out;
+  }
+  for (const f of Array.from(dt.files || [])) out.push({ file: f, path: f.webkitRelativePath || f.name });
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// Textures tab
+// ---------------------------------------------------------------------------
+
+const TEX_KIND = {
+  embedded: ['embedded', 'an-yes'], file: ['from file', 'an-yes'], missing: ['missing', 'an-no'],
+  none: ['no texture', 'an-dim'], error: ['undecodable', 'an-no'],
+};
+
+function renderTextures(report, ctx) {
+  const out = h('div', {});
+  const fill = () => {
+    out.replaceChildren();
+    const materials = report.materials || [];
+    const status = ctx.viewer ? ctx.viewer.textureStatus() : [];
+    const byIndex = new Map(status.map(s => [s.index, s]));
+    const refs = materials.filter(m => m.texture);
+    const missing = refs.filter(m => { const s = byIndex.get(m.index ?? materials.indexOf(m)); return !s || s.kind === 'missing' || s.kind === 'error'; });
+    const embedded = refs.filter(m => m.texture.embedded).length;
+    const libSize = ctx.library ? ctx.library.size : 0;
+
+    out.append(h('h3', {}, 'Textures ', h('span', { class: 'an-tab-count' }, refs.length)));
+    if (!refs.length) { out.append(h('p', { class: 'an-bs-empty' }, 'No material in this file references a texture.')); return; }
+    const summary = h('p', { class: 'an-tex-summary' },
+      `${refs.length} texture reference${refs.length === 1 ? '' : 's'} · ${embedded} embedded · ${refs.length - embedded} external`,
+      libSize ? ` · ${libSize} image file${libSize === 1 ? '' : 's'} added` : null,
+      ctx.library && ctx.library.matCount ? ` · ${ctx.library.matCount} Unity .mat read` : null);
+    out.append(summary);
+    if (missing.length && !ctx.viewer) {
+      out.append(h('div', { class: 'notice' }, 'Texture resolution needs the 3D preview, which is unavailable here.'));
+    } else if (missing.length) {
+      out.append(h('div', { class: 'notice warn an-tex-notice' },
+        h('div', { class: 'notice-title' }, `${missing.length} texture${missing.length === 1 ? ' is' : 's are'} not in the FBX`),
+        h('p', {}, 'This export references its images by path instead of embedding them (typical for Blender / MMD exports). ',
+          'Drop the image files — or the whole folder next to the ', h('code', {}, '.fbx'), ' — anywhere on this page and they are matched by filename. ',
+          'If the folder is a Unity project (', h('code', {}, '.mat'), ' + ', h('code', {}, '.meta'), ' files), the materials\' actual main textures are used, even where the FBX path is stale. ',
+          'Nothing is uploaded.'),
+        h('div', { class: 'an-tex-actions' },
+          h('button', { type: 'button', class: 'an-btn an-btn-primary', onclick: () => document.getElementById('an-texfiles').click() }, 'Add image files…'),
+          h('button', { type: 'button', class: 'an-btn', onclick: () => document.getElementById('an-texdir').click() }, 'Add a folder…'))));
+    }
+    out.append(h('div', { class: 'table-wrap' }, h('table', { class: 'an-tex-table' },
+      h('thead', {}, h('tr', {}, h('th', {}, ''), h('th', {}, 'Material'), h('th', {}, 'Referenced path'), h('th', {}, 'Status'), h('th', {}, 'Resolved from'), h('th', { class: 'an-num' }, 'Size'), h('th', {}, 'Alpha'))),
+      h('tbody', {}, refs.map(m => {
+        const i = materials.indexOf(m);
+        const st = byIndex.get(i);
+        const kind = st ? st.kind : (m.texture.embedded ? 'embedded' : 'missing');
+        const [label, cls] = TEX_KIND[kind] || TEX_KIND.missing;
+        const thumb = h('div', { class: 'an-tex-thumb' });
+        if (st && st.thumb) thumb.append(h('img', { src: st.thumb, alt: `texture of ${m.name}` }));
+        else thumb.classList.add('an-tex-thumb-empty');
+        return h('tr', { class: kind === 'missing' || kind === 'error' ? 'an-tex-missing' : '' },
+          h('td', {}, thumb),
+          h('td', {}, h('strong', {}, m.name || `material #${i}`)),
+          h('td', {}, (() => {
+            const full = m.texture.relative || m.texture.absolute || '';
+            const short = m.texture.relative && m.texture.relative.length <= 40 ? m.texture.relative : baseOf(full);
+            return h('code', { title: [m.texture.relative, m.texture.absolute].filter(Boolean).join('\n'), class: 'an-tex-path' }, short || '(unnamed)');
+          })()),
+          h('td', { class: 'an-nowrap' }, h('span', { class: cls, title: st && st.error ? st.error : '' }, label)),
+          h('td', {}, st && st.source ? h('code', {}, st.source) : h('span', { class: 'an-dim' }, '—')),
+          h('td', { class: 'an-num' }, st && st.width ? `${st.width}×${st.height}` : '—'),
+          h('td', {}, st && st.kind !== 'missing' && st.kind !== 'error' && st.kind !== 'none' ? yesNo(st.alpha) : '—'));
+      })))));
+    if (libSize) {
+      out.append(h('details', { class: 'an-tex-lib' }, h('summary', {}, `${libSize} added image file${libSize === 1 ? '' : 's'}`),
+        h('ul', {}, ctx.library.entries.map(e => h('li', {}, h('code', {}, e.path), ' ', h('span', { class: 'an-dim' }, fmtBytes(e.blob.size))))),
+        h('button', { type: 'button', class: 'an-btn an-btn-small an-btn-quiet', onclick: () => { ctx.library.clear(); ctx.refreshTextures(); } }, 'Forget added files')));
+    }
+  };
+  fill();
+  ctx.refreshTextures = fill;
+  return out;
+}
+
 function renderMeshes(report, ctx) {
   const out = h('div', {});
+  const fill = () => { out.replaceChildren(); fillMeshes(out, report, ctx); };
+  fill();
+  ctx.refreshMeshes = fill;
+  return out;
+}
+
+function fillMeshes(out, report, ctx) {
   const meshes = report.meshes || [];
+  const texStatus = new Map((ctx.viewer ? ctx.viewer.textureStatus() : []).map(s => [s.index, s]));
   const materials = report.materials || [];
   const manifest = ctx.manifest;
 
@@ -637,7 +838,7 @@ function renderMeshes(report, ctx) {
     })))));
 
   out.append(h('h3', {}, `Materials `, h('span', { class: 'an-tab-count' }, materials.length)));
-  if (!materials.length) { out.append(h('p', { class: 'an-bs-empty' }, 'No materials in this file.')); return out; }
+  if (!materials.length) { out.append(h('p', { class: 'an-bs-empty' }, 'No materials in this file.')); return; }
   const grid = h('div', { class: 'an-mat-grid' });
   const frag = document.createDocumentFragment();
   materials.forEach((m, i) => {
@@ -648,7 +849,13 @@ function renderMeshes(report, ctx) {
     const tex = m.texture;
     const mime = manifest?.materials?.[i]?.texture?.mime || null;
     let placed = false;
-    if (tex && tex.embedded && ctx.sceneView) {
+    const st = texStatus.get(i);
+    if (st && st.thumb) {
+      thumb.append(h('img', { src: st.thumb, alt: `texture of ${m.name}` }));
+      dims.textContent = `${st.width}×${st.height}` + (st.kind === 'file' ? ` · ${st.source}` : st.kind === 'embedded' ? ' · embedded' : '');
+      placed = true;
+    }
+    if (!placed && tex && tex.embedded && ctx.sceneView) {
       try {
         const bytes = ctx.sceneView.texture(i);
         if (bytes && bytes.length) {
@@ -672,6 +879,7 @@ function renderMeshes(report, ctx) {
     if (!placed) {
       if (css) thumb.style.background = css;
       else thumb.append(h('div', { class: 'an-mat-none' }, tex ? 'external texture' : 'no texture'));
+      if (tex && !tex.embedded) thumb.append(h('div', { class: 'an-mat-none an-no' }, 'not found — see Textures tab'));
       if (tex && tex.embedded && tex.embedded_bytes) dims.textContent = fmtBytes(tex.embedded_bytes) + ' embedded';
     }
     frag.append(h('div', { class: 'an-mat-card' },
@@ -688,7 +896,6 @@ function renderMeshes(report, ctx) {
   });
   grid.append(frag);
   out.append(grid);
-  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -792,6 +999,7 @@ function renderReport(report, ctx) {
     { id: 'rig', label: 'Rig', count: a.bone_like_count, warn: a.missing_required.length > 0, body: renderRig(report, ctx) },
     { id: 'performance', label: 'Performance', body: renderPerformance(report) },
     { id: 'meshes', label: 'Meshes & materials', count: (report.meshes?.length ?? report.fbx.geometries), body: renderMeshes(report, ctx) },
+    { id: 'textures', label: 'Textures', count: (report.materials || []).filter(m => m.texture).length || null, body: renderTextures(report, ctx) },
     { id: 'blendshapes', label: 'Blendshapes', count: report.blendshapes.length, body: renderBlendshapes(report) },
     { id: 'raw', label: 'Raw JSON', body: renderRaw(report) },
   ]);
@@ -831,7 +1039,7 @@ async function boot() {
   });
 
   const ctx = { viewer: null, sceneView: null, manifest: null, blobUrls: [], rowById: new Map(), tabs: null, report: null, fileName: null,
-    select(id, from) {}, };
+    library: new TextureLibrary(), refreshTextures: null, refreshMeshes: null, select(id, from) {}, };
   let selectedId = null;
 
   function boneIndexForId(id) {
@@ -889,7 +1097,7 @@ async function boot() {
         h('p', {}, 'Only binary FBX 7.x is supported — ASCII FBX must be re-exported as binary.')));
       return;
     }
-    ctx.report = report; ctx.fileName = name;
+    ctx.report = report; ctx.fileName = name; ctx.fileSize = size;
     $('an-file-name').textContent = name;
     $('an-file-meta').textContent = `${fmtBytes(size)} · FBX ${report.fbx.version}`;
     filebar.hidden = false;
@@ -916,7 +1124,8 @@ async function boot() {
         try {
           ctx.viewer = viewerModule.createViewer(viewerEl);
           ctx.viewer.onBoneSelect = idx => ctx.select(idx == null ? null : boneIdForIndex(idx), 'viewer');
-          ctx.viewer.load(ctx.sceneView, ctx.manifest);
+          ctx.viewer.onTextures = () => onTexturesSettled();
+          ctx.viewer.load(ctx.sceneView, ctx.manifest, { textureLibrary: ctx.library });
         } catch (e) {
           console.warn('viewer failed', e);
           ctx.viewer = null;
@@ -930,16 +1139,79 @@ async function boot() {
 
   const handleFile = async file => handle(new Uint8Array(await file.arrayBuffer()), file.name, file.size);
 
+  // The texture tab's badge + the status line reflect what the viewer resolved.
+  function texCounts() {
+    const st = ctx.viewer ? ctx.viewer.textureStatus() : [];
+    const refs = st.filter(x => x.kind !== 'none').length;
+    const missing = st.filter(x => x.kind === 'missing' || x.kind === 'error').length;
+    return { refs, missing };
+  }
+  function onTexturesSettled() {
+    if (ctx.refreshTextures) ctx.refreshTextures();
+    if (ctx.refreshMeshes) ctx.refreshMeshes();
+    if (!ctx.viewer || !ctx.tabs) return;
+    const { refs, missing } = texCounts();
+    ctx.tabs.setBadge?.('textures', refs ? `${refs - missing}/${refs}` : null, missing > 0);
+    if (!refs) return;
+    if (missing === 0) { status.textContent = `All ${refs} textures resolved.`; return; }
+    status.replaceChildren(
+      refs - missing === 0
+        ? `${missing} of ${refs} textures are external files not embedded in the FBX — drop the image files or their folder onto the page to see them. `
+        : `${refs - missing} of ${refs} textures resolved; ${missing} still missing. `,
+      h('a', { href: '#tab=textures', onclick: () => ctx.tabs.selectTab('textures') }, 'Textures tab'));
+  }
+
+  // Accept an .fbx, image files, or folders — in any combination, from any drop.
+  async function ingest(list) {
+    if (!list.length) return;
+    let fbx = list.filter(x => extOf(x.file.name) === 'fbx');
+    // Dropping the folder the loaded avatar sits in shouldn't re-analyze the same file.
+    if (ctx.report && fbx.length === 1 && fbx[0].file.name === ctx.fileName && fbx[0].file.size === ctx.fileSize) fbx = [];
+    const added = await ctx.library.addAll(list);
+    if (fbx.length) {
+      if (fbx.length > 1) status.textContent = `Several .fbx files dropped — loading ${fbx[0].file.name}.`;
+      await handleFile(fbx[0].file);   // textures resolve during load, via onTextures
+      return;
+    }
+    if (!ctx.report) {
+      status.textContent = added ? `${added} image file${added === 1 ? '' : 's'} kept — now drop the .fbx they belong to.` : 'No .fbx or image files in that drop.';
+      return;
+    }
+    if (!added) { status.textContent = 'No image files (png/jpg/bmp/gif/webp/tga) in that drop.'; return; }
+    if (ctx.viewer) {
+      status.textContent = `Matching ${added} image file${added === 1 ? '' : 's'}…`;
+      try { await ctx.viewer.applyTextures(ctx.library); } catch (e) { console.warn('applyTextures', e); }
+      onTexturesSettled();
+    } else if (ctx.refreshTextures) ctx.refreshTextures();
+  }
+  const ingestFiles = files => ingest(Array.from(files || []).map(f => ({ file: f, path: f.webkitRelativePath || f.name })));
+
   drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('an-over'); });
   drop.addEventListener('dragleave', () => drop.classList.remove('an-over'));
-  drop.addEventListener('drop', e => {
-    e.preventDefault(); drop.classList.remove('an-over');
-    const file = e.dataTransfer.files && e.dataTransfer.files[0];
-    if (file) handleFile(file);
+  drop.addEventListener('drop', async e => {
+    e.preventDefault(); e.stopPropagation(); drop.classList.remove('an-over');
+    ingest(await collectDropped(e.dataTransfer));
+  });
+  // Once a file is loaded the drop zone collapses; the whole page keeps accepting drops (textures).
+  let dragDepth = 0;
+  document.addEventListener('dragenter', e => { if (e.dataTransfer?.types?.includes('Files')) { dragDepth++; document.body.classList.add('an-dragging'); } });
+  document.addEventListener('dragleave', () => { if (--dragDepth <= 0) { dragDepth = 0; document.body.classList.remove('an-dragging'); } });
+  document.addEventListener('dragover', e => { if (e.dataTransfer?.types?.includes('Files')) e.preventDefault(); });
+  document.addEventListener('drop', async e => {
+    dragDepth = 0; document.body.classList.remove('an-dragging');
+    if (!e.dataTransfer?.types?.includes('Files')) return;
+    e.preventDefault();
+    if (drop.contains(e.target)) return;  // handled above
+    ingest(await collectDropped(e.dataTransfer));
   });
   drop.addEventListener('click', () => input.click());
   drop.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); input.click(); } });
-  input.addEventListener('change', () => { if (input.files[0]) handleFile(input.files[0]); input.value = ''; });
+  input.addEventListener('change', () => { ingestFiles(input.files); input.value = ''; });
+  const texFiles = $('an-texfiles'), texDir = $('an-texdir');
+  texFiles.addEventListener('change', () => { ingestFiles(texFiles.files); texFiles.value = ''; });
+  texDir.addEventListener('change', () => { ingestFiles(texDir.files); texDir.value = ''; });
+  $('an-addtex').addEventListener('click', () => texFiles.click());
+  $('an-addtexdir').addEventListener('click', () => texDir.click());
 
   sampleBtn.addEventListener('click', () => {
     try {
