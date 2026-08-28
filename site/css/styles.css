@@ -2624,3 +2624,55 @@ kbd {
   color: var(--text-dim);
   font-size: 0.9rem;
 }
+
+/* ---------- Analyzer page (drag-and-drop wasm FBX analysis) ---------- */
+.an-drop {
+  border: 2px dashed var(--border-hi);
+  border-radius: 10px;
+  background: var(--bg-card);
+  padding: 2.2rem 1.4rem;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color var(--transition), background var(--transition);
+  outline: none;
+}
+.an-drop:hover, .an-drop:focus-visible { border-color: var(--accent); }
+.an-drop.an-over { border-color: var(--accent-hi); background: var(--accent-soft); }
+.an-drop.an-disabled { opacity: 0.55; cursor: not-allowed; }
+.an-drop-icon { font-size: 1.8rem; color: var(--accent); margin-bottom: 0.4rem; }
+.an-drop-text { color: var(--text-muted); font-size: 0.95rem; }
+
+.an-chip-row { display: flex; flex-wrap: wrap; gap: 0.6rem; margin: 0.8rem 0; }
+.an-chip {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.45rem 0.9rem;
+  min-width: 5.2rem;
+  text-align: center;
+}
+.an-chip-value { font-family: var(--font-mono); font-size: 1.1rem; color: var(--text); }
+.an-chip-label { font-size: 0.72rem; color: var(--text-dim); letter-spacing: 0.04em; }
+
+.rank-badge {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.03em;
+  border-radius: 999px;
+  padding: 0.12rem 0.6rem;
+  border: 1px solid transparent;
+  vertical-align: baseline;
+}
+.rank-excellent { background: #10301f; color: #6fd394; border-color: #1d4a30; }
+.rank-good      { background: var(--accent-soft); color: var(--accent-hi); border-color: #234; }
+.rank-medium    { background: #322a12; color: #d8b45a; border-color: #4a3f1d; }
+.rank-poor      { background: #33220f; color: #d89a5a; border-color: #4a331d; }
+.rank-verypoor  { background: #331414; color: #d87a7a; border-color: #4a1d1d; }
+.rank-na        { background: var(--bg-card); color: var(--text-dim); border-color: var(--border); }
+
+.an-issue { margin: 0.35rem 0; font-size: 0.9rem; }
+.an-details { margin: 0.6rem 0; }
+.an-details summary { cursor: pointer; color: var(--accent); font-size: 0.9rem; }
+.an-details p code { word-break: break-word; }
+.an-fineprint { color: var(--text-dim); font-size: 0.82rem; }

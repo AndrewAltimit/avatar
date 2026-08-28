@@ -6,7 +6,7 @@ Unity `.anim` clip and FX-layer blend-tree **generation**. Package `avatar-anim-
 ## What it does
 
 Emits Unity-YAML assets a generator can drop into a project and Unity will import — the M4
-"asset generation" band (`PLAN.md` §4, §9). Two outputs:
+"asset generation" band (`PLAN.md` §4, §9). Six emitters:
 
 - **AnimationClip** (`--- !u!74`, a `.anim`): a keyframed `m_FloatCurves` clip. Two worked cases —
   a **blendshape weight** curve (`blendShape.<name>` on a SkinnedMeshRenderer, class 137) and a
@@ -15,6 +15,11 @@ Emits Unity-YAML assets a generator can drop into a project and Unity will impor
   gesture slot that blends `GestureLeftWeight`/`GestureRightWeight` (float 0→1) across child clips,
   so any gesture reaches any fraction. Emitted either as the bare 206 document (to graft into an
   existing FX controller) or as a self-contained `StateMachine`+`State`+`BlendTree` fragment.
+- **`controller`**: a full FX `AnimatorController` (class 91) wrapping a blend-tree layer.
+- **`expressions`**: `VRCExpressionParameters` / `VRCExpressionsMenu` MonoBehaviour assets.
+- **`gesture`**: gesture-driven FX layers (per-hand states or analog blend trees) — the SDK3
+  counterpart of SDK2's gesture-override slots.
+- **`toggle`**: the composite toggle bundle (clips + controller + params + menu + `.meta`s).
 
 The crate is purely a text generator: the hard part is faithful Unity serialization (exact field
 names, 2-space block indentation, inline `{x: 0, y: 0}` / `{fileID: N}` flow maps, deterministic
@@ -57,7 +62,7 @@ output back** in tests.
 Built: **M4** + the expression/toggle layer. Covers `.anim` float-curve clips, 1D analog-gesture
 blend trees, full FX `AnimatorController` emission, `VRCExpressionParameters` / `VRCExpressionsMenu`
 assets, and the composite toggle bundle. Driven from the CLI (`avatar anim-gen
-clip|blendtree|controller|params|menu`, `avatar toggle`, each with `--json` + write-safe
+clip|blendtree|controller|params|menu|puppet`, `avatar toggle`, each with `--json` + write-safe
 `--dry-run`/`--force`) and as text-returning MCP tools (`avatar_gen_*`). Everything round-trips
 through the repo's own readers in-repo,
 **and** — when a `UNITY_LICENSE` is configured — CLI-generated `.anim`/`.controller` assets are

@@ -3,7 +3,8 @@
   <h1>OSC runtime (M5)</h1>
   <p class="lede">
     <code>avatar-osc</code> speaks VRChat's OSC <em>parameter</em> protocol, and <code>avatar-osc-gestures</code>
-    layers the analog-gesture daemon on top. This is the live layer that drives an already-uploaded avatar.
+    layers the analog-gesture daemon on top. This is the live layer that drives &mdash; and observes &mdash; an
+    already-uploaded avatar: <code>avatar osc send|input|monitor|capture|replay|change|query|gestures</code>.
     Full text: <code>docs/reference/osc-runtime.md</code>.
   </p>
 </header>
@@ -19,9 +20,46 @@
     access) offline.
   </p>
   <div class="hint">
-    This is distinct from the VMC <em>tracker</em> OSC in <code>avatar_input::osc</code> &mdash; that carries
-    transforms to drive a local rig, not avatar parameters.
+    This is distinct from the tracker OSC in <code>avatar_input::osc</code> &mdash; that carries
+    <code>/tracking/*</code> transforms to drive a local rig, not avatar parameters. They never mix.
   </div>
+</section>
+
+<section class="doc-section" id="capture">
+  <h2>Parameter capture &amp; the gesture cross-tab</h2>
+  <p>
+    <code>avatar osc capture [--seconds N] [-o events.jsonl]</code> records the parameter stream VRChat
+    broadcasts and reduces it to the report that answers <em>"what does my controller actually
+    deliver?"</em>: per-parameter update counts and value ranges, plus the <strong>gesture cross-tab</strong>
+    &mdash; for every <code>GestureLeft</code>/<code>GestureRight</code> value held, how often it was entered
+    and the range its <code>&hellip;Weight</code> float covered. A missing row or a weight range stuck at
+    <code>0.000..0.000</code> localizes a gesture bug to the input/binding side in one session; healthy rows
+    put the FX layer at fault. Raw events are appended as JSON lines as they arrive, so a cut-short session
+    keeps its data.
+  </p>
+  <p>
+    Both capture front-ends <strong>advertise themselves over OSCQuery</strong>
+    (<code>avatar_osc::oscquery</code>, <code>--no-advertise</code> to opt out): a hand-built mDNS responder
+    answers <code>PTR _oscjson._tcp.local</code> while a tiny HTTP responder serves the
+    <code>?HOST_INFO</code> handshake and a parameter tree exposing <code>/avatar</code> &mdash; which tells
+    modern VRChat to route its parameter output to the advertised UDP port, whatever it is, removing the
+    fixed-9001 assumption. Scope: same-host VRChat (the advertised address is <code>127.0.0.1</code>).
+    The same logic ships as a standalone, dependency-slim binary <code>avatar-gesture-capture</code> that
+    cross-compiles to a double-clickable Windows <code>.exe</code> for the machine that actually runs VRChat.
+  </p>
+</section>
+
+<section class="doc-section" id="replay">
+  <h2>Offline controller replay</h2>
+  <p>
+    <code>avatar osc replay &lt;events.jsonl&gt; --controller FX.controller [--layer NAME] [--timeline]</code>
+    runs a captured parameter log through the controller's state machines <strong>offline</strong> &mdash; no
+    Unity &mdash; and prints the state timeline each layer actually went through: visits, dwell times, and the
+    blend-parameter range covered inside each state. Capture proves what VRChat <em>delivered</em>; replay
+    proves what the controller <em>did with it</em>. Simulated semantics are the subset the generated
+    controllers use (ordered Any-State + state transitions, <code>m_CanTransitionToSelf</code>, the six
+    condition modes); crossfades are instantaneous and exit-time transitions are not modelled.
+  </p>
 </section>
 
 <section class="doc-section" id="gestures">
@@ -41,5 +79,7 @@
   <p>On-device input is OpenXR (an <code>AnalogSource</code> adapter, pending); headless uses a deterministic <code>DemoSource</code> triangle sweep.</p>
   <div class="cli"><code>avatar osc send VRCEmote 3
 avatar osc query path/to/avatar-osc-config.json
+avatar osc capture --seconds 60 -o events.jsonl
+avatar osc replay events.jsonl --controller FX.controller --timeline
 avatar osc gestures --seconds 10</code></div>
 </section>

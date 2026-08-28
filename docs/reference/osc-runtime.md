@@ -23,6 +23,23 @@ transport that wraps it:
 | `query` | `AvatarConfig`: parses VRChat's per-avatar OSCQuery config JSON into a typed parameter schema, offline. |
 | `lib` | `ParamClient`: a non-blocking UDP transport over the codec (send to VRChat, poll updates back). The only part that owns a socket. |
 
+## CLI — `avatar osc …`
+
+Eight verbs, all thin wrappers over the library:
+
+| Verb | What it does |
+|------|--------------|
+| `send` | Set one avatar parameter: `/avatar/parameters/<NAME>` (typed bool/int/float). |
+| `input` | Send an input axis (`-1..1`) or button press/release: `/input/<NAME>`. |
+| `monitor` | Listen for the parameter updates VRChat broadcasts and print each one. |
+| `capture` | Record the parameter stream and reduce it to the gesture cross-tab report. |
+| `change` | Ask VRChat to switch avatars: `/avatar/change <blueprint-id>`. |
+| `query` | Parse an avatar's OSCQuery config JSON and list its parameters (offline; no socket). |
+| `gestures` | Run the analog-gesture daemon (trigger → `Gesture*`/`Gesture*Weight`). |
+| `replay` | Run a captured parameter log through a `.controller`'s state machines offline. |
+
+`capture`, `replay`, `query`, and `gestures` have their own sections below.
+
 ## The address space
 
 ### Avatar parameters — `/avatar/parameters/<Name>`
@@ -197,8 +214,10 @@ the Fist gesture blend, an end-to-end proof of the pipeline.
 - Send is UDP fire-and-forget; there is no delivery guarantee or retry (matching how VRChat's OSC
   works). The live VRChat socket path is not exercised in CI; the codec, the OSCQuery parser, and a
   loopback `ParamClient` round-trip are.
-- The OSCQuery *HTTP/mDNS discovery* endpoint (advertising and querying over the network) is out of
-  scope — only the on-disk config file is parsed. Live discovery is a future addition.
+- OSCQuery **advertisement** (the mDNS responder + `HOST_INFO`/tree HTTP in
+  `avatar_osc::oscquery`) is in and used by the capture tools (above). *Browse/resolve* discovery —
+  finding and querying *other* services on the network — is what remains out of scope; an avatar's
+  parameter schema is still read from the on-disk config file.
 - The daemon's **production input backend (OpenXR)** is on-device work, not verifiable headless; the
   CLI ships a synthetic `DemoSource` until that adapter lands. The mapping, change detection, and OSC
   send are done and tested.

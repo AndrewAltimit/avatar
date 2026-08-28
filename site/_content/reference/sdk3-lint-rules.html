@@ -5,8 +5,9 @@
     Rules emitted by <code>avatar lint &lt;project&gt;</code> (the <code>avatar-lint</code> crate). Errors are
     things VRChat will reject or that break the avatar; warnings are likely-but-not-certain problems. Codes
     are grouped: <code>VRC00x</code> project, <code>VRC01x</code> parameters, <code>VRC02x</code> menus,
-    <code>VRC03x</code> Avatar Descriptor, <code>VRC04x</code> animator controllers. Full text:
-    <code>docs/reference/sdk3-lint-rules.md</code>.
+    <code>VRC03x</code> Avatar Descriptor, <code>VRC04x</code> animator controllers + animation clips,
+    <code>VRC05x</code> PhysBones / Avatar Dynamics, <code>VRC06x</code> project hygiene / Android (Quest).
+    Full text: <code>docs/reference/sdk3-lint-rules.md</code>.
   </p>
 </header>
 
@@ -19,21 +20,36 @@
       <tr><td><code>VRC002</code></td><td><span class="tag tag-stub">info</span></td><td>No VRC Avatar Descriptor found under <code>Assets/</code> (only when the avatar SDK is present)</td></tr>
       <tr><td><code>VRC010</code></td><td><span class="tag tag-open">error</span></td><td>Synced expression parameters exceed the <strong>256-bit</strong> budget (Bool = 1, Int/Float = 8; only <code>networkSynced</code> count)</td></tr>
       <tr><td><code>VRC011</code></td><td><span class="tag tag-partial">warn</span></td><td>Duplicate expression parameter name within one asset</td></tr>
+      <tr><td><code>VRC012</code></td><td><span class="tag tag-stub">info</span></td><td>An Expression Parameter is referenced by <strong>no</strong> menu control, animator condition, or blend tree anywhere in the project &mdash; a project-wide superset of <code>VRC036</code>. Advisory (the name can be supplied by OSC/contacts/Modular Avatar/VRCFury); built-ins and default-layer params excluded</td></tr>
       <tr><td><code>VRC020</code></td><td><span class="tag tag-open">error</span></td><td>Expression menu has more than <strong>8</strong> controls</td></tr>
       <tr><td><code>VRC021</code></td><td><span class="tag tag-partial">warn</span></td><td>Menu control references a parameter not declared anywhere (and not built-in); may be build-time generated</td></tr>
+      <tr><td><code>VRC022</code></td><td><span class="tag tag-partial">warn</span></td><td>A menu control drives nothing &mdash; no <code>parameter</code>, no <code>subParameters</code>, and no sub-menu</td></tr>
       <tr><td><code>VRC030</code></td><td><span class="tag tag-partial">warn</span></td><td>Custom expressions but the <strong>Expression Parameters</strong> reference is unassigned/missing/wrong type</td></tr>
       <tr><td><code>VRC031</code></td><td><span class="tag tag-partial">warn</span></td><td>As <code>VRC030</code>, for the <strong>Expression Menu</strong> reference</td></tr>
       <tr><td><code>VRC032</code></td><td><span class="tag tag-partial">warn</span></td><td>A custom playable layer references an animator controller whose guid is absent</td></tr>
-      <tr><td><code>VRC033</code></td><td><span class="tag tag-partial">warn</span></td><td>Viseme Blend Shape lip-sync but the viseme mesh is unassigned, or blend-shape count ≠ 15</td></tr>
+      <tr><td><code>VRC033</code></td><td><span class="tag tag-partial">warn</span></td><td>Viseme Blend Shape lip-sync but the viseme mesh is unassigned, or blend-shape count &ne; 15</td></tr>
       <tr><td><code>VRC034</code></td><td><span class="tag tag-partial">warn</span></td><td>Eye Look enabled but no eye bones assigned</td></tr>
       <tr><td><code>VRC035</code></td><td><span class="tag tag-partial">warn</span></td><td>Eyelid Type is Blendshapes but no eyelid skinned mesh assigned</td></tr>
       <tr><td><code>VRC036</code></td><td><span class="tag tag-partial">warn</span></td><td>An Expression Parameter is used by none of the resolvable non-default playable-layer controllers</td></tr>
       <tr><td><code>VRC037</code></td><td><span class="tag tag-partial">warn</span></td><td>An Expression Parameter shares a name with an animator parameter but an incompatible type</td></tr>
+      <tr><td><code>VRC038</code></td><td><span class="tag tag-partial">warn</span></td><td>With the viseme entry count correct (15), an entry is empty/<code>-none-</code>, or two entries name the same blend shape &mdash; complements <code>VRC033</code></td></tr>
+      <tr><td><code>VRC039</code></td><td><span class="tag tag-partial">warn</span></td><td>A viseme blendshape name doesn't exist on the viseme mesh's <strong>source FBX</strong> (its morph channels) &mdash; the descriptor&harr;mesh cross-layer check; silently broken lip-sync in-game. Unresolvable steps return quietly</td></tr>
       <tr><td><code>VRC040</code></td><td><span class="tag tag-partial">warn</span></td><td>A transition condition references an undeclared animator parameter (transition silently never fires)</td></tr>
       <tr><td><code>VRC041</code></td><td><span class="tag tag-partial">warn</span></td><td>A blend tree reads an undeclared animator parameter (respects 1D/2D/Direct blend type)</td></tr>
       <tr><td><code>VRC042</code></td><td><span class="tag tag-partial">warn</span></td><td>A state machine has child states but no default state (never enters any state)</td></tr>
       <tr><td><code>VRC043</code></td><td><span class="tag tag-partial">warn</span></td><td>Duplicate animator parameter name within a controller</td></tr>
-      <tr><td><code>VRC044</code></td><td><span class="tag tag-partial">warn</span></td><td>States in one controller mix Write Defaults on and off (common cause of broken/sticky animations)</td></tr>
+      <tr><td><code>VRC044</code></td><td><span class="tag tag-partial">warn</span></td><td>States in <strong>one</strong> controller mix Write Defaults on and off (common cause of broken/sticky animations)</td></tr>
+      <tr><td><code>VRC045</code></td><td><span class="tag tag-partial">warn</span></td><td>Write Defaults inconsistent <strong>across</strong> the avatar's resolvable non-default playable-layer controllers &mdash; the avatar-level counterpart to <code>VRC044</code></td></tr>
+      <tr><td><code>VRC046</code></td><td><span class="tag tag-partial">warn</span></td><td>A state's (or blend-tree child's) motion references a guid not in the project &mdash; clip moved/deleted, the state silently plays nothing</td></tr>
+      <tr><td><code>VRC047</code></td><td><span class="tag tag-partial">warn</span></td><td>A clip played by the <strong>FX</strong> playable layer animates transform or humanoid-muscle curves (FX is for non-transform animation). FBX-embedded clips are skipped</td></tr>
+      <tr><td><code>VRC048</code></td><td><span class="tag tag-stub">info</span></td><td>A state has no Motion assigned (plays nothing). Advisory &mdash; empty states are a common intentional idiom (e.g. a WD-off buffer state)</td></tr>
+      <tr><td><code>VRC049</code></td><td><span class="tag tag-stub">info</span></td><td>An animation clip has <strong>no curves</strong> &mdash; a no-op asset, usually an authoring slip</td></tr>
+      <tr><td><code>VRC050</code></td><td><span class="tag tag-partial">warn</span></td><td>A PhysBone's root transform can't be resolved in the file (e.g. stripped from a nested prefab)</td></tr>
+      <tr><td><code>VRC051</code></td><td><span class="tag tag-partial">warn</span></td><td>A PhysBone's root resolves but it moves <strong>zero</strong> transforms (no child bones, no endpoint) &mdash; it simulates nothing</td></tr>
+      <tr><td><code>VRC052</code></td><td><span class="tag tag-partial">warn</span></td><td>A PhysBone's <code>colliders</code> list has slots but <strong>every</strong> slot is a null reference (an empty <code>colliders: []</code> is fine)</td></tr>
+      <tr><td><code>VRC060</code></td><td><span class="tag tag-partial">warn</span></td><td>A MonoBehaviour's <code>m_Script</code> is null &mdash; Unity's "Missing (Mono Script)". The SDK's build validation refuses to upload with missing scripts</td></tr>
+      <tr><td><code>VRC061</code></td><td><span class="tag tag-stub">info</span></td><td>A renderer material uses a shader not in VRChat's Android/Quest mobile whitelist (<code>VRChat/Mobile/*</code>) &mdash; fine PC-only, blocks a Quest upload. Conservative: only positively-identified non-mobile shaders</td></tr>
+      <tr><td><code>VRC062</code></td><td><span class="tag tag-partial">warn</span></td><td>A custom-layer animation drives a blendshape the descriptor <strong>registers as an eyelid</strong> &mdash; VRChat's eyelid driver writes registered shapes <em>after</em> the animators every frame, so the animation is silently overridden (the classic "my blink expression does nothing"). Fires regardless of <code>enableEyeLook</code>; resolves eyelid indices through the source FBX's morph channels in import order</td></tr>
     </tbody>
   </table>
 </section>
@@ -44,15 +60,36 @@
     VRChat assets are recognized <strong>structurally</strong>, not by a hardcoded script GUID: an Expression
     Parameters asset has a <code>parameters</code> list whose entries carry <code>valueType</code>/<code>name</code>;
     an Expression Menu has a <code>controls</code> list; an Avatar Descriptor MonoBehaviour carries
-    <code>baseAnimationLayers</code> + <code>ViewPosition</code>. This keeps the linter working across SDK
-    versions. <code>.asset</code>, <code>.prefab</code>, and <code>.unity</code> are all scanned;
-    cross-asset references are resolved through a guid&rarr;path index built from <code>.meta</code> files.
+    <code>baseAnimationLayers</code> + <code>ViewPosition</code>; a PhysBone is a MonoBehaviour carrying
+    <code>endpointPosition</code> or <code>multiChildType</code> (the same test <code>avatar stats</code> uses).
+    This keeps the linter working across SDK versions. <code>.asset</code>, <code>.prefab</code>, and
+    <code>.unity</code> are all scanned; cross-asset references are resolved through a guid&rarr;path index
+    built from <code>.meta</code> files.
   </p>
   <div class="hint">
     A Unity guid is 32 hex characters and is parsed as a string; a reference with only a local
     <code>fileID</code> (no guid) can't be resolved across files and is skipped rather than flagged.
-    <code>.controller</code> files are parsed into a typed <code>AnimatorController</code> by
+    <code>.controller</code> and <code>.anim</code> files are parsed into typed readers by
     <code>avatar-unity-asset</code>; the <code>VRC04x</code> rules aggregate fields by Unity class id, which
     keeps them robust to SDK drift.
   </div>
+</section>
+
+<section class="doc-section" id="coverage">
+  <h2>Coverage and cross-checks</h2>
+  <p>
+    Current scope: Expression Parameters/Menus; the Avatar Descriptor in prefabs/scenes (expression +
+    playable-layer references, viseme lip-sync incl. per-entry checks and the viseme&harr;source-FBX
+    morph-channel cross-check, eye-look config, avatar-level Write-Defaults consistency); animator
+    controllers; animation clips (<code>VRC046</code>&ndash;<code>VRC049</code>); PhysBones / Avatar Dynamics
+    (<code>VRC05x</code>); and project hygiene / Android (<code>VRC06x</code>). Not yet: contacts.
+  </p>
+  <p>
+    The <code>VRC036</code>/<code>037</code> cross-check resolves the descriptor's playable-layer controllers
+    by guid (skipping <code>isDefault</code> layers, which use VRChat's built-in controllers) and compares the
+    union of their declared parameters against the avatar's Expression Parameters &mdash; a name with no match
+    is <code>VRC036</code>, a name matching with a mismatched type is <code>VRC037</code>; the check is skipped
+    when no controller resolves. <code>valueType</code> in <code>VRCExpressionParameters</code>:
+    <code>0</code> Int, <code>1</code> Float, <code>2</code> Bool.
+  </p>
 </section>

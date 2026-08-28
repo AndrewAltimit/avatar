@@ -119,7 +119,7 @@ What it covers: the Expression Parameters sync budget and duplicates, menu size 
 parameter references, the VRC Avatar Descriptor parsed from prefabs/scenes (expression / playable-
 layer references resolved via a guid→path `.meta` index, viseme lip-sync, eye-look), animator-
 controller contents (parameter references, default states, Write Defaults consistency), and
-project/VPM info. Every rule code (`VRC001`–`VRC044`) and its encoding is in
+project/VPM info. Every rule code (`VRC001`–`VRC062`) and its encoding is in
 [`reference/sdk3-lint-rules.md`](reference/sdk3-lint-rules.md).
 
 ## 5. Estimate performance — `avatar stats`
@@ -159,7 +159,8 @@ avatar stats path/to/UnityProject      # full component-side performance rank
 ## Generate animation assets — `avatar anim-gen`
 
 `avatar-anim-gen` emits Unity assets as text (Unity YAML, in the exact shape Unity's own serializer
-writes), with **deterministic** fileIDs so output is diffable and reproducible. Three subcommands:
+writes), with **deterministic** fileIDs so output is diffable and reproducible. Six subcommands —
+`clip`, `blendtree`, `controller`, `params`, `menu`, `puppet`:
 
 ```sh
 # A static expression clip: hold a blendshape (and/or toggle a GameObject on).
@@ -175,6 +176,14 @@ avatar anim-gen blendtree --name FistBlend --parameter GestureLeftWeight \
 # A complete, Unity-importable FX AnimatorController wrapping that blend tree in one layer.
 avatar anim-gen controller --name FX --layer "Base Layer" \
     --clip <relaxed-hand-guid>@0.0 --clip <fist-guid>@1.0 -o FX.controller
+
+# The VRChat expression assets themselves:
+avatar anim-gen params --param Hat:bool --param Dim:float:0.5:local -o Params.asset
+avatar anim-gen menu --toggle Hat:Hat --radial Dim:Dim -o Menu.asset
+
+# Graft a radial-puppet dial into an EXISTING avatar's controller/params/menu (span-splice):
+avatar anim-gen puppet --controller FX.controller --param Blink \
+    --clip <neutral-guid>@0.0 --clip <closed-guid>@1.0 …
 ```
 
 Output goes to stdout (pipe/redirect) or a file with `-o`. A wiring note is printed to stderr
@@ -183,6 +192,68 @@ whole thing, so it needs none). These generators are **write-safe**: `--dry-run`
 touching disk, and an existing output file is never overwritten without `--force`. Add `--json` to
 get a structured report (allocated fileIDs, the wiring note, the YAML) instead of raw YAML. See
 [`reference/anim-gen.md`](reference/anim-gen.md).
+
+The most common composite has its own top-level command — a complete **toggle** in one call:
+
+```sh
+avatar toggle --name Hat --toggle Armature/Head/Hat -o HatBundle/
+```
+
+emits the full ten-file bundle (On/Off clips, a two-state FX controller, expression params + menu,
+and guid-pinning `.meta`s) ready to drop into `Assets/`.
+
+## Edit an existing asset — `avatar asset set`
+
+To change one value inside an asset you already have — without Unity rewriting the whole file —
+`asset set` span-splices the raw text, so fileIDs, references, key order, and formatting all
+survive:
+
+```sh
+avatar asset set Parameters.asset --path m_Name --value Params2
+avatar asset set Avatar.prefab --doc 123456 --path m_LocalPosition/y --value 0.1 -o Avatar.prefab --force
+```
+
+See [`reference/unity-yaml-edit.md`](reference/unity-yaml-edit.md) for the path syntax and the
+structural-edit surface underneath it.
+
+## Migrate an SDK2 avatar — `avatar migrate sdk3`
+
+If what you have is an old SDK2-era avatar `.unitypackage`, the whole modernization is one pass:
+
+```sh
+avatar unitypackage extract avatar2018.unitypackage -o proj    # unpack the old package
+avatar migrate sdk3 proj -o out/ --name MyAvatar --drop-cloth --eyes Eye_L,Eye_R
+```
+
+The migration retypes the descriptor + PipelineManager **in place** (same fileIDs), converts
+DynamicBone → PhysBone using the SDK's own conversion rules, turns gesture overrides into an
+either-hand FX layer with analog trigger-depth blend trees, derives eye look + blink from the rig,
+and assembles a VCC-openable project around the rewritten prefab. `--dry-run` / `--json` preview
+everything. See [`reference/migrate.md`](reference/migrate.md).
+
+Then tune the converted physics — inspect and rewrite `VRCPhysBone` components inside the prefab:
+
+```sh
+avatar physbone list out/Assets/MyAvatar.prefab                # every PhysBone: chains + tuning
+avatar physbone set out/Assets/MyAvatar.prefab Hair --pull 0.3 --spring-curve "0:1,1:0.5" \
+    -o out/Assets/MyAvatar.prefab --force
+avatar physbone stretch out/Assets/MyAvatar.prefab SkirtRoot --factor 1.5 -o … --force
+```
+
+`split`, `flare`, and `nudge` cover the rest (per-strand tuning, skirt re-angling, hinge rings);
+see [`reference/physbone.md`](reference/physbone.md).
+
+## Preview without Unity — `avatar render` / `avatar view`
+
+```sh
+avatar render --avatar model.fbx -o preview.png                       # rest pose, auto-upright
+avatar render --avatar model.fbx --world world/Assets/Scene.unity -o in-world.png  # at the spawn
+avatar render --avatar model.fbx --pose out/Assets/MyAvatar.prefab -o posed.png    # in a prefab's pose
+avatar view   --avatar model.fbx --world world/Assets/Scene.unity     # interactive orbit/zoom/walk
+```
+
+Headless GPU rendering via wgpu — no Unity, no display needed for `render`. `--pose` / `--stretch`
+make it the preview loop for the PhysBone commands above. See [`reference/render.md`](reference/render.md).
 
 ## Drive and inspect a running avatar — `avatar osc`
 
@@ -194,9 +265,14 @@ avatar osc send VRCEmote 3                 # set /avatar/parameters/VRCEmote (au
 avatar osc input Vertical 0.5              # /input axis, -1..1
 avatar osc input Jump true                 # /input button
 avatar osc monitor --seconds 5            # print the parameters VRChat broadcasts
+avatar osc capture --seconds 30 -o params.log  # record the stream → gesture/weight cross-tab
+avatar osc replay params.log FX.controller     # simulate the FX against the capture, offline
 avatar osc query path/to/avtr_….json      # list an avatar's parameters from its OSCQuery config
 avatar osc gestures --seconds 10          # analog-gesture daemon (demo trigger sweep)
 ```
+
+`capture` + `replay` are the two halves of proof when debugging gestures: capture shows what VRChat
+actually delivered; replay shows what your `.controller` did with it.
 
 `osc query --json` emits the parameter list (name, OSC type, read/write access) for tooling.
 
@@ -210,8 +286,17 @@ There is also a renderer-agnostic **runtime rig layer** (`avatar-mesh` / `avatar
 `avatar-pose` / `avatar-input`) for loading and posing a rig at runtime — see
 [`reference/rig-runtime.md`](reference/rig-runtime.md).
 
+## Hand it to an agent — `avatar mcp serve`
+
+Everything read-shaped above is also exposed over the Model Context Protocol: `avatar mcp serve`
+runs a stdio MCP server any agent host can connect to (describe/lint/stats/physbone-list plus
+text-returning generation tools). It never writes to disk — generated YAML comes back as text, and
+writes stay on the CLI behind its dry-run-safe guard. See [`reference/mcp.md`](reference/mcp.md).
+
 ## See also
 
+- The rendered docs site, including the in-browser WebAssembly FBX analyzer:
+  [andrewaltimit.github.io/avatar](https://andrewaltimit.github.io/avatar/).
 - Library usage examples you can run: `crates/cli/examples/` (`cargo run -p avatar-cli --example
   lint_report -- <project>`, `--example perf_stats -- <path>`).
 - [`../CONTRIBUTING.md`](../CONTRIBUTING.md) — build / test / lint and how to add a rule or a crate.

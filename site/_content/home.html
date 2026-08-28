@@ -11,9 +11,16 @@
 
 <div class="notice warn">
   <div class="notice-title">Status: early / alpha (WIP)</div>
-  The crates build green and are covered by tests, but those tests run against <em>synthetic fixtures</em> &mdash;
-  the tools are not yet validated against real Unity imports or a live VRChat. Verify in Unity before you rely
-  on output. APIs, CLI flags, and report formats may change.
+  The crates build green and are covered by tests (synthetic fixtures in CI, sample-gated real assets on the
+  self-hosted runner), generated assets pass a headless Unity import-acceptance gate, and a real SDK2 avatar
+  has been migrated, built, and uploaded to VRChat with these tools. Still: expect rough edges, verify in
+  Unity before you rely on output, and treat APIs, CLI flags, and report formats as subject to change.
+</div>
+
+<div class="hint">
+  <strong>Try it without installing anything:</strong> the <a href="analyzer.html">FBX analyzer</a> runs the
+  actual Rust diagnose graph as WebAssembly in your browser &mdash; drop an avatar <code>.fbx</code>, get
+  the humanoid rig check and VRChat performance rank. The file never leaves your machine.
 </div>
 
 <section class="doc-section" id="two-layers">
@@ -52,15 +59,31 @@
     </a>
     <a class="card" href="reference/anim-gen.html">
       <div class="card-title">Generate assets</div>
-      <div class="card-body">Emit Unity <code>.anim</code> clips and analog-gesture blend trees with deterministic, diffable fileIDs. <code>avatar anim-gen</code>.</div>
+      <div class="card-body">Emit <code>.anim</code> clips, blend trees, full FX controllers, expression params/menus &mdash; or a complete toggle bundle in one command. Deterministic, diffable fileIDs. <code>avatar anim-gen</code> / <code>avatar toggle</code>.</div>
+    </a>
+    <a class="card" href="reference/migrate.html">
+      <div class="card-title">Migrate SDK2 &rarr; SDK3</div>
+      <div class="card-body">Retype the descriptor in place, convert DynamicBone &rarr; PhysBone by the SDK's own rules, build FX from gesture overrides, and get a VCC-openable project. <code>avatar migrate sdk3</code>.</div>
+    </a>
+    <a class="card" href="reference/physbone.html">
+      <div class="card-title">Tune PhysBones</div>
+      <div class="card-body">Inspect and retune a prefab's PhysBones in place &mdash; values, per-chain curves, split / stretch / re-angle chains &mdash; with render previews. <code>avatar physbone</code>.</div>
+    </a>
+    <a class="card" href="reference/render.html">
+      <div class="card-title">Preview without Unity</div>
+      <div class="card-body">Headless GPU renders of the avatar, a world scene, or the avatar at the world's spawn &mdash; plus an interactive orbit/zoom/walk viewer. <code>avatar render</code> / <code>avatar view</code>.</div>
     </a>
     <a class="card" href="reference/osc-runtime.html">
       <div class="card-title">Drive avatars over OSC</div>
-      <div class="card-body">Speak VRChat's OSC parameter protocol and run the analog-gesture daemon &mdash; "Vive advanced controls on any hardware". <code>avatar osc</code>.</div>
+      <div class="card-body">Speak VRChat's OSC parameter protocol, capture + replay parameter streams, and run the analog-gesture daemon &mdash; "Vive advanced controls on any hardware". <code>avatar osc</code>.</div>
+    </a>
+    <a class="card" href="reference/mcp.html">
+      <div class="card-title">Hand it to an agent</div>
+      <div class="card-body"><code>--json</code> + JSON Schemas across the read surface, and an MCP server exposing the diagnose/generate tools to any agent host. <code>avatar mcp serve</code>.</div>
     </a>
     <a class="card" href="crates/index.html">
       <div class="card-title">Browse the crates</div>
-      <div class="card-body">Sixteen crates from FBX I/O through the runtime rig layer to the OSC daemon &mdash; purpose, key API, and status for each.</div>
+      <div class="card-body">Twenty-two crates from FBX I/O through migration and the runtime rig layer to the OSC daemon &mdash; purpose, key API, and status for each.</div>
     </a>
   </div>
 </section>
@@ -68,11 +91,13 @@
 <section class="doc-section" id="status">
   <h2>Where the build is</h2>
   <p>
-    Built and green through <strong>M3</strong> (FBX read/write + armature fix, project linting), with the
-    <strong>M4</strong> asset-generation and <strong>M5</strong> OSC-runtime layers landed and wired to the
-    <code>avatar anim-gen</code> / <code>avatar osc</code> subcommands &mdash; including the analog-gesture
-    daemon. The remaining on-device piece is the daemon's OpenXR input backend. The full roadmap of record
-    lives in <code>PLAN.md</code>; this site mirrors the committed docs under <code>docs/</code>.
+    Built and green through <strong>M5</strong>: diagnose/lint, native FBX read + write with armature repair,
+    asset generation (<strong>M4</strong>), the OSC runtime + analog-gesture daemon (<strong>M5</strong>) &mdash;
+    plus the layers that landed alongside: surgical Unity-YAML editing, SDK2 &rarr; SDK3 migration with
+    PhysBone tuning, the runtime rig layer, the wgpu preview/viewer, and the agent surface
+    (<code>--json</code> everywhere, <code>avatar mcp serve</code>). In flight: the daemon's on-device OpenXR
+    input backend and OSCQuery browse/resolve discovery. The full roadmap of record lives in
+    <code>PLAN.md</code>; this site mirrors the committed docs under <code>docs/</code>.
   </p>
   <div class="cli"><code>cargo run -p avatar-cli -- --help</code></div>
 </section>

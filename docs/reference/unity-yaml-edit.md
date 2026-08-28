@@ -1,8 +1,10 @@
 # Surgical Unity-YAML editing — `EditableUnityFile` / `avatar asset set`
 
 The *modify* counterpart to the read-only `lint`/`stats`/`describe` surface. It edits a value inside
-an **existing** Unity YAML asset (`.asset`, `.controller`, `.prefab`, `.anim`, `.unity`) while
-preserving everything it doesn't touch — byte-for-byte.
+an **existing** Unity YAML asset (`.asset`, `.controller`, `.prefab`, `.anim`, `.unity`) — and makes
+the document-level **structural** edits a prefab rewrite needs (remove/replace/append whole
+documents, add/remove block-sequence items) — while preserving everything it doesn't touch —
+byte-for-byte.
 
 Library: [`avatar_unity_yaml::edit`](../../crates/unity-yaml/src/edit.rs)
 (`EditableUnityFile`, `Scalar`, `Seg`, `parse_path`). CLI: `avatar asset set`.

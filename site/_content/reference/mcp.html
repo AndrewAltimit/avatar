@@ -1,0 +1,91 @@
+<header class="page-header">
+  <div class="breadcrumb"><a href="../index.html">home</a> &middot; <a href="index.html">reference</a> &middot; mcp server</div>
+  <h1>MCP server</h1>
+  <p class="lede">
+    <code>avatar mcp serve</code> exposes the toolchain's read/diagnose surface to an agent host over the
+    Model Context Protocol, so an agent can discover and call capabilities as typed tools instead of shelling
+    out to the CLI and parsing stdout. The protocol plumbing is the domain-agnostic <code>avatar-mcp</code>
+    crate; the avatar tool registry lives in the CLI. Full text: <code>docs/reference/mcp.md</code>.
+  </p>
+</header>
+
+<section class="doc-section" id="running">
+  <h2>Running &amp; connecting</h2>
+  <div class="cli"><code>avatar mcp serve        # newline-delimited JSON-RPC 2.0 on stdin/stdout</code></div>
+  <p>
+    A long-lived stdio server: one JSON-RPC message per line in on stdin, one response per line out on stdout,
+    until stdin reaches EOF. <strong>All diagnostics go to stderr</strong> &mdash; stdout is the protocol
+    channel. In an MCP host, configure it as a stdio server with command <code>avatar</code> and args
+    <code>["mcp", "serve"]</code>.
+  </p>
+  <p>
+    The handshake is standard MCP: <code>initialize</code> &rarr;
+    (<code>notifications/initialized</code>) &rarr; <code>tools/list</code> &rarr; <code>tools/call</code>.
+    The server echoes the client's requested <code>protocolVersion</code> (default <code>2024-11-05</code>),
+    advertises a <code>tools</code> capability, and answers <code>ping</code> with an empty result.
+  </p>
+</section>
+
+<section class="doc-section" id="tools">
+  <h2>The tool registry</h2>
+  <p>
+    The diagnose tools take a single <code>path</code> string and return the same JSON report the
+    corresponding <code>--json</code> CLI flag emits; the generation tools (<code>avatar_gen_*</code>) return
+    the generated YAML (and <code>.meta</code> sidecars) as <em>text inside the result</em> &mdash; the agent
+    host decides what, if anything, lands on disk.
+  </p>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>Tool</th><th>Input</th><th>Returns</th></tr></thead>
+    <tbody>
+      <tr><td><code>avatar_describe</code></td><td><code>path</code> (FBX <strong>or</strong> project)</td><td>Consolidated <code>DescribeReport</code> &mdash; best first call</td></tr>
+      <tr><td><code>avatar_lint</code></td><td><code>path</code> (project)</td><td><code>LintReport</code> (VRC001&ndash;VRC062 diagnostics)</td></tr>
+      <tr><td><code>avatar_stats</code></td><td><code>path</code> (FBX <strong>or</strong> project)</td><td><code>PerfReport</code> (FBX) or <code>PerfReport[]</code> (project avatars)</td></tr>
+      <tr><td><code>avatar_armature_check</code></td><td><code>path</code> (FBX)</td><td><code>ArmatureReport</code> (humanoid-bone mapping + flags)</td></tr>
+      <tr><td><code>avatar_fbx_inspect</code></td><td><code>path</code> (FBX)</td><td><code>InspectSummary</code> (structure counts + unit/orientation flags)</td></tr>
+      <tr><td><code>avatar_physbone_list</code></td><td><code>path</code> (<code>.prefab</code>)</td><td><code>PhysBoneInfo[]</code> &mdash; every VRCPhysBone's root, chains, colliders, tuning + curves (<a href="physbone.html">physbone</a>)</td></tr>
+      <tr><td><code>avatar_unitypackage_info</code></td><td><code>path</code> (<code>.unitypackage</code>)</td><td>Package summary (counts, SDK, avatar/world traits)</td></tr>
+      <tr><td><code>avatar_schema</code></td><td><code>name?</code></td><td>JSON Schema for a report type (omit <code>name</code> to list; <code>all</code> for every) &mdash; only under the <code>schema</code> feature</td></tr>
+      <tr><td><code>avatar_gen_clip</code></td><td><code>name</code>, <code>blendshapes[]?</code>, <code>toggles[]?</code></td><td>A <code>.anim</code> AnimationClip as YAML text (+ suggested file name, fileID)</td></tr>
+      <tr><td><code>avatar_gen_controller</code></td><td><code>clips[]</code>, <code>name?</code>, <code>layer?</code>, <code>parameter?</code></td><td>A complete FX <code>.controller</code> (analog-gesture blend tree) as YAML text</td></tr>
+      <tr><td><code>avatar_gen_params</code></td><td><code>params[]</code>, <code>name?</code></td><td>A <code>VRCExpressionParameters</code> <code>.asset</code> as YAML text + its sync-bit cost</td></tr>
+      <tr><td><code>avatar_gen_menu</code></td><td><code>toggles[]?</code>, <code>buttons[]?</code>, <code>radials[]?</code>, <code>submenus[]?</code>, <code>name?</code></td><td>A <code>VRCExpressionsMenu</code> <code>.asset</code> as YAML text (&le; 8 controls enforced)</td></tr>
+      <tr><td><code>avatar_gen_toggle</code></td><td><code>name</code>, <code>toggles[]?</code>, <code>blendshapes[]?</code>, <code>parameter?</code>, <code>menu_label?</code>, <code>default_on?</code>, <code>saved?</code></td><td>The full ten-file toggle bundle (every file name + content, pinned guids, wiring note)</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p>
+    The output shapes are published as JSON Schemas (<code>avatar_schema</code> / <code>avatar schema</code>),
+    so a consumer can introspect the contract instead of inferring it.
+  </p>
+</section>
+
+<section class="doc-section" id="non-writing">
+  <h2>Why non-writing</h2>
+  <p>
+    Every MCP tool can be called freely with no risk of mutating assets: the diagnose tools only read, and
+    the generation tools run the same generators as <code>avatar anim-gen &hellip;</code> /
+    <code>avatar toggle</code> but hand the output back as text instead of writing it. Spec-string formats
+    (<code>PATH:SHAPE:VALUE</code>, <code>GUID@THRESHOLD</code>,
+    <code>NAME:TYPE[:DEFAULT][:unsaved][:local]</code>, <code>LABEL:PARAM[:VALUE]</code>) match the CLI flags
+    exactly. Actual disk writes stay on the explicit CLI behind the <code>WriteGuard</code>
+    (<code>--dry-run</code>/<code>--force</code>), as do the repairs (<code>armature fix</code>).
+  </p>
+</section>
+
+<section class="doc-section" id="errors">
+  <h2>Errors are two-layered</h2>
+  <ul>
+    <li>A <strong>protocol</strong> error (malformed JSON, unknown method) comes back as a JSON-RPC
+      <code>error</code> object.</li>
+    <li>A <strong>tool</strong> failure (a bad path, a parse error, an unknown tool name) comes back as a
+      <em>successful</em> <code>tools/call</code> result with <code>isError: true</code> and the error text
+      as content &mdash; because that text is for the model to read and act on.</li>
+  </ul>
+  <p>
+    Handlers attach actionable context up front (e.g. <code>path does not exist: &hellip; &mdash; paths are
+    resolved relative to the server's working directory</code>; <code>expected a single FBX file but &hellip;
+    is a directory &mdash; for a Unity project use avatar_lint</code>), and the server renders the full
+    context chain, so the agent gets guidance it can recover from rather than a deep parser error.
+  </p>
+</section>

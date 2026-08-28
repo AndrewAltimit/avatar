@@ -33,7 +33,7 @@ emits; the generation tools (`avatar_gen_*`) return the generated YAML (and `.me
 | Tool | Input | Returns |
 |------|-------|---------|
 | `avatar_describe` | `path` (FBX **or** project) | Consolidated `DescribeReport` — best first call |
-| `avatar_lint` | `path` (project) | `LintReport` (VRC001–VRC052 diagnostics) |
+| `avatar_lint` | `path` (project) | `LintReport` (VRC001–VRC062 diagnostics) |
 | `avatar_stats` | `path` (FBX **or** project) | `PerfReport` (FBX) or `PerfReport[]` (project avatars) |
 | `avatar_armature_check` | `path` (FBX) | `ArmatureReport` (humanoid-bone mapping + flags) |
 | `avatar_fbx_inspect` | `path` (FBX) | `InspectSummary` (structure counts + unit/orientation flags) |

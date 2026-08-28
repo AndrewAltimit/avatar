@@ -149,6 +149,7 @@ PAGES: list[tuple[str, str, str, str]] = [
     ("index.html",       "Home",          "home",         "home.html"),
     ("architecture.html","How it stacks", "architecture", "architecture.html"),
     ("quickstart.html",  "Quick start",   "quickstart",   "quickstart.html"),
+    ("analyzer.html",    "FBX analyzer",  "analyzer",     "analyzer.html"),
     # depth = 1
     ("crates/index.html","Crates",        "crates/index", "crates/index.html"),
     ("cli/index.html",   "CLI commands",  "cli/index",    "cli/index.html"),
@@ -157,9 +158,17 @@ PAGES: list[tuple[str, str, str, str]] = [
     ("reference/sdk3-lint-rules.html",  "SDK3 lint rules",    "reference/sdk3-lint-rules",  "reference/sdk3-lint-rules.html"),
     ("reference/armature-repair.html",  "Armature repair",    "reference/armature-repair",  "reference/armature-repair.html"),
     ("reference/performance-stats.html","Performance stats",  "reference/performance-stats","reference/performance-stats.html"),
-    ("reference/rig-runtime.html",      "Runtime rig layer",  "reference/rig-runtime",      "reference/rig-runtime.html"),
     ("reference/anim-gen.html",         "Asset generation",   "reference/anim-gen",         "reference/anim-gen.html"),
+    ("reference/unity-yaml-edit.html",  "Editing Unity YAML", "reference/unity-yaml-edit",  "reference/unity-yaml-edit.html"),
+    ("reference/unity-asset.html",      "Typed asset readers","reference/unity-asset",      "reference/unity-asset.html"),
+    ("reference/migrate.html",          "SDK2 → SDK3 migration","reference/migrate",        "reference/migrate.html"),
+    ("reference/physbone.html",         "PhysBone tuning",    "reference/physbone",         "reference/physbone.html"),
+    ("reference/render.html",           "Rendering & preview","reference/render",           "reference/render.html"),
+    ("reference/unitypackage.html",     "The .unitypackage format","reference/unitypackage","reference/unitypackage.html"),
+    ("reference/rig-runtime.html",      "Runtime rig layer",  "reference/rig-runtime",      "reference/rig-runtime.html"),
     ("reference/osc-runtime.html",      "OSC runtime",        "reference/osc-runtime",      "reference/osc-runtime.html"),
+    ("reference/mcp.html",              "MCP server",         "reference/mcp",              "reference/mcp.html"),
+    ("reference/testing.html",          "Testing & fixtures", "reference/testing",          "reference/testing.html"),
 ]
 
 

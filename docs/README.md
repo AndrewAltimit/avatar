@@ -14,10 +14,10 @@ Documentation for the [avatar](../README.md) monorepo. Start with the root
 - [`reference/humanoid-bones.md`](reference/humanoid-bones.md) — Unity humanoid bones and VRChat rig
   requirements; the table `avatar-armature` infers and validates against.
 - [`reference/sdk3-lint-rules.md`](reference/sdk3-lint-rules.md) — every `avatar lint` rule
-  (`VRC001`–`VRC052`), how assets are identified, and the valueType/budget encodings.
+  (`VRC001`–`VRC062`), how assets are identified, and the valueType/budget encodings.
 - [`reference/unity-asset.md`](reference/unity-asset.md) — `avatar-unity-asset`: typed
-  AnimatorController (`.controller`) reading — parameters, states, Write Defaults, blend trees — the
-  reader the controller lint rules consume. (Mirrors the style of the other `reference/*.md` docs.)
+  AnimatorController (`.controller`) + AnimationClip (`.anim`) reading — parameters, states, Write
+  Defaults, blend trees, curve bindings — the readers the controller/clip lint rules consume.
 - [`reference/armature-repair.md`](reference/armature-repair.md) — what `avatar armature fix`
   repairs, why renaming is safe and scale/orientation are only flagged, and the FBX writer's
   characteristics.
@@ -52,9 +52,15 @@ Documentation for the [avatar](../README.md) monorepo. Start with the root
   golden-snapshot harness: the three corpus layers, `golden::assert_json`/`redact_roots`, and the
   `UPDATE_GOLDEN` workflow.
 
+## Rendered site
+
+The same material, rendered: [andrewaltimit.github.io/avatar](https://andrewaltimit.github.io/avatar/)
+— built from [`site/`](../site/README.md) on every push to `main`, including the in-browser
+WebAssembly [FBX analyzer](https://andrewaltimit.github.io/avatar/analyzer.html). The Markdown in
+this directory stays the source of truth.
+
 ## Planned directories
 
-These are referenced by the roadmap but not yet populated:
+Referenced by the roadmap but not yet populated:
 
 - `formats/` — byte/field-level format references (FBX, UnityYAML, `.anim`, `.controller`).
-- `subsystems/` — how each subsystem works (the analog-gesture OSC daemon) as it lands.

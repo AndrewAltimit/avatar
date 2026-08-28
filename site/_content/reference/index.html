@@ -7,8 +7,8 @@
   </p>
 </header>
 
-<section class="doc-section" id="index">
-  <h2>Pages</h2>
+<section class="doc-section" id="diagnose">
+  <h2>Diagnose</h2>
   <div class="card-grid">
     <a class="card" href="humanoid-bones.html">
       <div class="card-title">Humanoid bones</div>
@@ -16,27 +16,71 @@
     </a>
     <a class="card" href="sdk3-lint-rules.html">
       <div class="card-title">SDK3 lint rules</div>
-      <div class="card-body">Every <code>avatar lint</code> rule, <code>VRC001</code>&ndash;<code>VRC044</code>, plus encodings.</div>
+      <div class="card-body">Every <code>avatar lint</code> rule, <code>VRC001</code>&ndash;<code>VRC062</code>, plus encodings.</div>
     </a>
     <a class="card" href="armature-repair.html">
       <div class="card-title">Armature repair</div>
-      <div class="card-body">What <code>avatar armature fix</code> repairs vs. flags, and how the FBX writer works.</div>
+      <div class="card-body">What <code>avatar armature fix</code> repairs vs. flags, the Blender repair script, and the FBX writer.</div>
     </a>
     <a class="card" href="performance-stats.html">
       <div class="card-title">Performance stats</div>
-      <div class="card-body">The metrics behind <code>avatar stats</code>, component recognition, and PC/Android thresholds.</div>
+      <div class="card-body">The metrics behind <code>avatar stats</code> (incl. particles &amp; constraints), component recognition, PC/Android thresholds.</div>
+    </a>
+    <a class="card" href="unity-asset.html">
+      <div class="card-title">Typed asset readers</div>
+      <div class="card-body">The AnimatorController + AnimationClip readers the controller/clip lint rules consume.</div>
+    </a>
+  </div>
+</section>
+
+<section class="doc-section" id="generate-edit">
+  <h2>Generate, edit &amp; migrate</h2>
+  <div class="card-grid">
+    <a class="card" href="anim-gen.html">
+      <div class="card-title">Asset generation</div>
+      <div class="card-body"><code>.anim</code> clips, blend trees, full FX controllers, expression params/menus, the toggle bundle &mdash; deterministic fileIDs.</div>
+    </a>
+    <a class="card" href="unity-yaml-edit.html">
+      <div class="card-title">Editing Unity YAML</div>
+      <div class="card-body"><code>EditableUnityFile</code> / <code>avatar asset set</code>: surgical, round-trip-safe value + structural edits by span-splicing.</div>
+    </a>
+    <a class="card" href="migrate.html">
+      <div class="card-title">SDK2 &rarr; SDK3 migration</div>
+      <div class="card-body"><code>avatar migrate sdk3</code>: descriptor retype, DynamicBone &rarr; PhysBone, FX from gesture overrides, a VCC-openable project.</div>
+    </a>
+    <a class="card" href="physbone.html">
+      <div class="card-title">PhysBone tuning</div>
+      <div class="card-body"><code>avatar physbone list|set|split|stretch|flare|nudge</code>: retune a prefab's PhysBones in place, with render previews.</div>
+    </a>
+  </div>
+</section>
+
+<section class="doc-section" id="preview-runtime">
+  <h2>Preview, runtime &amp; agents</h2>
+  <div class="card-grid">
+    <a class="card" href="render.html">
+      <div class="card-title">Rendering &amp; preview</div>
+      <div class="card-body">The offscreen wgpu pipeline: avatar rest-pose render, world scenes, avatar-at-spawn, the interactive viewer.</div>
+    </a>
+    <a class="card" href="unitypackage.html">
+      <div class="card-title">The .unitypackage format</div>
+      <div class="card-body">Reading the gzip+tar format, extraction into a project tree, the avatar-in-world co-import testbed.</div>
     </a>
     <a class="card" href="rig-runtime.html">
       <div class="card-title">Runtime rig layer</div>
       <div class="card-body">Skin/bind extraction, posing + bone-matrix palette, two-bone IK, tracker input.</div>
     </a>
-    <a class="card" href="anim-gen.html">
-      <div class="card-title">Asset generation</div>
-      <div class="card-body"><code>.anim</code> clip + analog-gesture blend-tree generation, deterministic fileIDs.</div>
-    </a>
     <a class="card" href="osc-runtime.html">
       <div class="card-title">OSC runtime</div>
-      <div class="card-body">VRChat's OSC address space, codec, UDP client, and OSCQuery config parsing.</div>
+      <div class="card-body">VRChat's OSC address space, codec, UDP client, capture/replay, OSCQuery parsing + advertisement.</div>
+    </a>
+    <a class="card" href="mcp.html">
+      <div class="card-title">MCP server</div>
+      <div class="card-body">The stdio MCP server exposing the read/diagnose + generation tools to an agent host. Non-writing by design.</div>
+    </a>
+    <a class="card" href="testing.html">
+      <div class="card-title">Testing &amp; fixtures</div>
+      <div class="card-body">The fixture corpus, env-gated integration tests, and the golden-snapshot harness.</div>
     </a>
   </div>
 </section>

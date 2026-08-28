@@ -38,6 +38,7 @@ git diff -- '**/tests/golden/**'
 
 ## Status
 
-Built. Used by `avatar-lint`, `avatar-stats`, and `avatar-armature` golden tests. Core deps
+Built. Used by the `avatar-lint`, `avatar-stats`, `avatar-armature`, `avatar-unity-yaml`,
+`avatar-migrate`, and `avatar-vpm` golden tests, and by `avatar-web-analyzer`'s report-shape test. Core deps
 `anyhow` + `serde` + `serde_json`; the optional `fbx` feature adds `fbxcel`. Corpus + workflow:
 [`docs/reference/testing.md`](../../docs/reference/testing.md), [`fixtures/README.md`](../../fixtures/README.md).

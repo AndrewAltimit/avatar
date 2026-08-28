@@ -14,7 +14,10 @@ disk. No window or surface is created, so it runs over SSH and in CI wherever a 
 
 Pure GPU + math (`wgpu`, `glam`, `bytemuck`, `png`): it knows nothing about FBX, Unity, or skinning.
 The caller hands it world-space meshes. In this repo that caller is the `avatar render` CLI command
-(see `crates/cli/src/render_scene.rs` + `world.rs`).
+(`crates/cli/src/cmd/render.rs`, over the scene assembly in `crates/cli/src/render_scene.rs` +
+`world.rs`; `main.rs` only dispatches). `--avatar` accepts `.fbx`, `.gltf`, or `.glb`, and the
+CLI can feed prefab-posed (`--pose <prefab>`) or `--stretch`-previewed geometry — the meshes
+arrive here already posed.
 
 ## Key API
 
@@ -64,7 +67,8 @@ re-renders every frame from an orbit camera: **drag** to orbit, **wheel** to zoo
 (+Space/Shift) to walk the focus point, **R** to reset, **Esc** to quit. It opens at the framing the
 offscreen render would produce (`Orbit::from_camera(scene.camera)`). The feature adds `winit`; the
 offscreen PNG path pulls none of it. In this repo the caller is `avatar view`
-(`crates/cli/src/main.rs`). Still GPU-only — it knows nothing of FBX/Unity; the caller assembles the
+(`crates/cli/src/cmd/render.rs`; `main.rs` only dispatches). Still GPU-only — it knows nothing of
+FBX/Unity; the caller assembles the
 scene (e.g. an avatar dropped at a world's spawn point).
 
 ## Status

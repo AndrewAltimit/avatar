@@ -265,7 +265,7 @@ merging into existing params/menu assets.
 
 ## CLI surface
 
-Six subcommands in `avatar-cli` (`cmd/anim_gen.rs`, `cmd/toggle.rs`) drive the builders above:
+Seven subcommands in `avatar-cli` (`cmd/anim_gen.rs`, `cmd/toggle.rs`) drive the builders above:
 
 | Command | Emits | Key flags |
 |---------|-------|-----------|
@@ -274,12 +274,14 @@ Six subcommands in `avatar-cli` (`cmd/anim_gen.rs`, `cmd/toggle.rs`) drive the b
 | `avatar anim-gen controller --name N [--layer L] [--parameter P] [--clip GUID@THRESHOLD]…` | a complete FX `.controller` (`fx_blend_tree`) | — |
 | `avatar anim-gen params --param NAME:TYPE[:DEFAULT][:unsaved][:local]…` | a `VRCExpressionParameters` `.asset` | `--script-guid` |
 | `avatar anim-gen menu [--toggle L:P[:V]]… [--button L:P[:V]]… [--radial L:P]… [--submenu L:GUID]…` | a `VRCExpressionsMenu` `.asset` (≤ 8 controls enforced) | `--script-guid` |
+| `avatar anim-gen puppet --controller C --param P [--parameters A] [--menu M] [--clip GUID@THRESHOLD]…` | a radial-puppet dial grafted into the *existing* controller/params/menu, in place (§4c) | `--menu-name`, `--layer-name`, `--on`/`--off`, `--unsaved`, `--default-value` |
 | `avatar toggle --name N [--toggle PATH]… [--blendshape PATH:SHAPE:VALUE]… -o DIR` | the ten-file toggle bundle above | `--param`, `--menu-label`, `--unsaved`, `--default-on` |
 
 `avatar toggle` writes into a *directory* (`-o DIR`, created if missing); the overwrite check runs
 across the whole bundle before any file is written, so a partial bundle is never left behind.
 
-Shared flags on all three:
+Shared flags on the five single-asset emitters (`clip`/`blendtree`/`controller`/`params`/`menu`;
+`puppet` edits its targets in place behind the same `--dry-run`/`--force` guard):
 
 - **`-o, --output <file>`** writes the generated YAML *asset* to a file; without it the YAML goes to
   stdout.

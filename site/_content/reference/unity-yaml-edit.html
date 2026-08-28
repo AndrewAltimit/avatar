@@ -1,0 +1,111 @@
+<header class="page-header">
+  <div class="breadcrumb"><a href="../index.html">home</a> &middot; <a href="index.html">reference</a> &middot; editing unity yaml</div>
+  <h1>Editing Unity YAML</h1>
+  <p class="lede">
+    The <em>modify</em> counterpart to the read-only lint/stats/describe surface:
+    <code>avatar_unity_yaml::EditableUnityFile</code> and <code>avatar asset set</code> edit an
+    <strong>existing</strong> Unity asset (<code>.asset</code>, <code>.controller</code>, <code>.prefab</code>,
+    <code>.anim</code>, <code>.unity</code>) while preserving every byte they don't touch. Full text:
+    <code>docs/reference/unity-yaml-edit.md</code>.
+  </p>
+</header>
+
+<section class="doc-section" id="why-span-splicing">
+  <h2>Why span-splicing, not parse-and-re-emit</h2>
+  <p>
+    A Unity asset is a multi-document YAML stream where each document carries an anchor
+    (<code>--- !u!114 &amp;11400000</code>), and every cross-asset reference
+    (<code>{fileID: 11400000, guid: &hellip;}</code>) points at one of those anchors. Parsing with
+    <code>yaml-rust2</code> discards formatting, key order, and the non-standard headers &mdash; re-emitting
+    from the parsed model would rewrite the whole file (reordered keys, dropped/renumbered anchors, a
+    churned diff), and any of those silently breaks references pointing into the file.
+  </p>
+  <p>
+    So <code>EditableUnityFile</code> keeps the file as <strong>raw text</strong> and edits by span-splicing:
+    an indentation-aware scanner locates the exact byte range of the value, that range &mdash; and only that
+    range &mdash; is replaced, and the result is re-parsed; a splice that produced malformed YAML fails loudly
+    instead of writing a broken asset. Every <code>&amp;fileID</code>, every reference, indentation, key order,
+    the <code>%YAML</code>/<code>%TAG</code> preamble, even CRLF line endings survive untouched because they
+    are never rewritten. Round-trip tests against the fixture corpus pin exactly this: a no-op load&rarr;emit
+    is the identity, and a single-value edit changes exactly one line.
+  </p>
+</section>
+
+<section class="doc-section" id="paths">
+  <h2>Paths</h2>
+  <p>
+    A path is <code>/</code>-separated and addresses a value within one document's body: a <strong>key</strong>
+    descends into a mapping (<code>m_Name</code>), a <strong>numeric</strong> segment indexes a sequence
+    (<code>parameters/0</code> &mdash; Unity mapping keys are never bare integers, so the heuristic is
+    unambiguous), and a final segment may name a subfield of an inline reference
+    (<code>m_Script/guid</code>). Examples: <code>m_Name</code> &middot; <code>parameters/2/saved</code>
+    &middot; <code>m_ChildStates/0/m_State</code>. The scanner handles Unity's quirks: sequences at the
+    key's own indent, a sequence element's first field inline on the <code>- </code> line, and flow-map
+    (<code>- {fileID: N}</code>) elements.
+  </p>
+</section>
+
+<section class="doc-section" id="value-edits">
+  <h2>Value edits &mdash; library and CLI</h2>
+  <p>
+    <code>set_scalar</code> sets an int/float/bool/string (rendered Unity-style: <code>0</code> not
+    <code>0.0</code>, <code>1</code>/<code>0</code> bools) and reaches subfields inside an inline reference;
+    <code>set_reference</code> replaces a whole <code>{&hellip;}</code> reference &mdash; the canonical
+    "swap an animation" edit &mdash; and can add a <code>guid</code> a local reference lacked. Errors are
+    structured <code>anyhow</code> messages, never panics.
+  </p>
+  <pre><code>let mut file = EditableUnityFile::parse(&amp;text)?;
+let doc = file.doc_by_file_id(110200002).unwrap();  // select by &amp;fileID anchor
+file.set_scalar(doc, &amp;parse_path("m_WriteDefaultValues"), Scalar::Int(1))?;
+file.set_reference(doc, &amp;parse_path("m_Motion"), 7400000, Some("&hellip;32 hex&hellip;"), 2)?;
+let edited = file.into_string();</code></pre>
+  <p>The same edits from the CLI:</p>
+  <div class="cli"><code># Rename (single-doc file, --doc optional). Default output is stdout: a pure preview.
+avatar asset set Parameters.asset --path m_Name --value Hands
+
+# Multi-document file: pick the document by its fileID anchor; write in place.
+avatar asset set Hands.controller --doc 110600000 --path m_BlendParameter \
+  --value GestureLeftWeight -o Hands.controller --force
+
+# Re-target a reference (cross-asset); omit --ref-guid/--ref-type for a local {fileID: N}.
+avatar asset set Hands.controller --doc 110200002 --path m_Motion \
+  --ref 7400000 --ref-guid 1234567890abcdef1234567890abcdef --ref-type 2</code></div>
+  <p>
+    <code>--value</code> type is inferred (int &rarr; float &rarr; bool &rarr; string); force it with
+    <code>--type</code>. Writes go through the shared <code>WriteGuard</code>: stdout by default,
+    <code>-o &lt;file&gt;</code> to write (no clobber without <code>--force</code>), <code>--dry-run</code>
+    to report without touching the filesystem, <code>--json</code> for a machine-readable report.
+    Mutation stays on the CLI behind the guard &mdash; it is deliberately not exposed over the read-only
+    <a href="mcp.html">MCP server</a>.
+  </p>
+</section>
+
+<section class="doc-section" id="structural-edits">
+  <h2>Structural edits</h2>
+  <p>
+    Beyond values, the document-level edits a prefab rewrite needs &mdash; still span-based, still leaving
+    every untouched byte alone:
+  </p>
+  <table>
+    <thead><tr><th>Method</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td><code>remove_document</code></td><td>Drop a whole <code>--- !u!&hellip; &amp;id</code> document (header + body). References to it elsewhere are left as-is (Unity reads a dangling local ref as null), so pair it with <code>remove_sequence_item</code> on the owner's list.</td></tr>
+      <tr><td><code>replace_document_body</code></td><td>Swap the body while keeping the header &mdash; the object's fileID and every reference to it stay valid. This is how a component is <strong>retyped</strong> at the same slot (<code>DynamicBone</code> &rarr; <code>VRCPhysBone</code>, SDK2 descriptor &rarr; SDK3).</td></tr>
+      <tr><td><code>retag_document</code></td><td>Rewrite the header for a class change (e.g. <code>CapsuleCollider</code> 136 &rarr; MonoBehaviour 114).</td></tr>
+      <tr><td><code>append_document</code></td><td>Add a new document at the end (fileID must be unused).</td></tr>
+      <tr><td><code>append_sequence_item</code> / <code>remove_sequence_item</code></td><td>Add to / remove from a <strong>block sequence</strong> such as <code>m_Component</code> or <code>m_Children</code> (converting <code>[]</code> &harr; block form; multi-line items re-indented).</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section class="doc-section" id="limits">
+  <h2>Guarantees &amp; limits</h2>
+  <p>
+    Guaranteed: everything the edit doesn't address is byte-identical, and a splice that would produce
+    malformed YAML is refused. Out of scope: adding or removing <em>mapping keys</em> inside a body &mdash;
+    a body that needs a different key set is regenerated whole (the generators in
+    <a href="anim-gen.html">avatar-anim-gen</a>, the component emitters in
+    <a href="migrate.html">avatar-migrate</a>) and swapped in with <code>replace_document_body</code>.
+    A value edit can only change a value that already exists.
+  </p>
+</section>

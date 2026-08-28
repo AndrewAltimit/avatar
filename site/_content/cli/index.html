@@ -4,10 +4,23 @@
   <p class="lede">
     Everything is driven through the single <code>avatar</code> binary (crate <code>avatar-cli</code>, clap v4
     subcommands). The groups below mirror the layers: FBX/armature on the 3D side, lint/stats on the project
-    side, anim-gen for generation, and osc for the live runtime. Run any command with <code>--help</code> for
-    flags.
+    side, generation and surgical editing on the Unity-YAML side, migration and PhysBone tuning for whole
+    avatars, packaging + rendering for preview, and osc for the live runtime. Run any command with
+    <code>--help</code> for flags. Every read and generate command also takes <code>--json</code>; writes are
+    dry-run-safe and never overwrite without <code>--force</code>.
   </p>
 </header>
+
+<section class="doc-section" id="describe">
+  <h2>One-shot snapshot</h2>
+  <table>
+    <thead><tr><th>Command</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td><code>avatar describe &lt;path&gt; [--json]</code></td><td>One call: FBX structure + armature + geometry rank for an FBX, or project lint + per-avatar rank for a Unity project. The agent-friendly entry point.</td></tr>
+      <tr><td><code>avatar schema [name|all]</code></td><td>Print the JSON Schema of a <code>--json</code> report type, so the output shape is a contract, not a guess.</td></tr>
+    </tbody>
+  </table>
+</section>
 
 <section class="doc-section" id="fbx-armature">
   <h2>FBX &amp; armature</h2>
@@ -15,12 +28,13 @@
     <thead><tr><th>Command</th><th>What it does</th></tr></thead>
     <tbody>
       <tr><td><code>avatar fbx inspect &lt;model.fbx&gt;</code></td><td>Node hierarchy, skeleton roots, bone count, scale/orientation, units; flags unapplied transforms, wrong axis/units, extra root, unskinned mesh, missing T-pose.</td></tr>
+      <tr><td><code>avatar fbx reslot &lt;model.fbx&gt; …</code></td><td>Move a region of polygons onto another material slot (a glowing hair patch onto the plain black slot), selecting by bone proximity / height / texture brightness; <code>--uv-mask</code> emits the footprint for a texture-side fix instead.</td></tr>
+      <tr><td><code>avatar fbx blendshapes &lt;model.fbx&gt;</code></td><td>List blendshape channels and the material slot each one's target vertices render with &mdash; which material an emote overlay shape actually uses.</td></tr>
       <tr><td><code>avatar armature check &lt;model.fbx&gt;</code></td><td>Map detected bones &rarr; Unity Humanoid; report missing/mis-mapped. Exits 0 when humanoid-ready.</td></tr>
-      <tr><td><code>avatar armature fix &lt;model.fbx&gt;</code></td><td>Print the repair plan (dry run by default).</td></tr>
-      <tr><td><code>avatar armature fix &lt;model.fbx&gt; -o fixed.fbx</code></td><td>Write a repaired FBX: canonical bone renames applied; topology/scale/orientation flagged, not applied.</td></tr>
+      <tr><td><code>avatar armature fix &lt;model.fbx&gt; [-o fixed.fbx]</code></td><td>Print the repair plan (dry run by default); with <code>-o</code>, write a repaired FBX with canonical bone renames applied. <code>--blender-script fix.py</code> emits a headless-Blender script covering the geometry-level repairs too.</td></tr>
     </tbody>
   </table>
-  <p>Details: <code>docs/reference/armature-repair.md</code>.</p>
+  <p>Details: <code>docs/reference/armature-repair.md</code>. Or try the in-browser <a href="../analyzer.html">FBX analyzer</a>.</p>
 </section>
 
 <section class="doc-section" id="lint-stats">
@@ -28,7 +42,7 @@
   <table>
     <thead><tr><th>Command</th><th>What it does</th></tr></thead>
     <tbody>
-      <tr><td><code>avatar lint &lt;UnityProject&gt;</code></td><td>SDK3 compliance report; exits non-zero on errors.</td></tr>
+      <tr><td><code>avatar lint &lt;UnityProject&gt;</code></td><td>SDK3 compliance report (<code>VRC001</code>&ndash;<code>VRC062</code>: params, menus, descriptor refs, visemes incl. the source-FBX cross-check, animator + clip contents, PhysBones, Quest/hygiene); exits non-zero on errors.</td></tr>
       <tr><td><code>avatar lint &lt;UnityProject&gt; --deny-warnings</code></td><td>Also fail on warnings &mdash; gate CI directly.</td></tr>
       <tr><td><code>avatar stats &lt;model.fbx&gt;</code></td><td>Performance rank from geometry (triangles/meshes/material slots/bones).</td></tr>
       <tr><td><code>avatar stats &lt;UnityProject&gt;</code></td><td>Performance rank from per-avatar components (PhysBones/colliders/contacts/particles/constraints, texture VRAM for PC + Android).</td></tr>
@@ -37,16 +51,48 @@
   <p>Rule codes: <code>docs/reference/sdk3-lint-rules.md</code>. Metrics: <code>docs/reference/performance-stats.md</code>.</p>
 </section>
 
-<section class="doc-section" id="anim-gen">
-  <h2>Asset generation</h2>
+<section class="doc-section" id="generate">
+  <h2>Generate &amp; edit Unity assets</h2>
   <table>
     <thead><tr><th>Command</th><th>What it does</th></tr></thead>
     <tbody>
       <tr><td><code>avatar anim-gen clip --name Smile --blendshape Body:Smile:100 -o Smile.anim</code></td><td>Emit a Unity <code>.anim</code> clip (blendshape-weight / GameObject-active curves).</td></tr>
-      <tr><td><code>avatar anim-gen blendtree ...</code></td><td>Emit an FX-layer analog-gesture blend tree (<code>BlendTree</code>, blending <code>GestureLeft/RightWeight</code>).</td></tr>
+      <tr><td><code>avatar anim-gen blendtree …</code></td><td>Emit a 1D analog-gesture blend tree (blends <code>GestureLeft/RightWeight</code> over child clips).</td></tr>
+      <tr><td><code>avatar anim-gen controller …</code></td><td>Emit a complete, Unity-importable FX <code>AnimatorController</code> &mdash; the full asset, not a splice-in fragment.</td></tr>
+      <tr><td><code>avatar anim-gen params / menu …</code></td><td>Emit <code>VRCExpressionParameters</code> / <code>VRCExpressionsMenu</code> assets from the command line.</td></tr>
+      <tr><td><code>avatar anim-gen puppet …</code></td><td>Graft a radial-puppet dial into an <em>existing</em> avatar: splice a gated blend-tree layer into its FX controller and append the float param + menu control, by span-splice.</td></tr>
+      <tr><td><code>avatar toggle --name Hat --toggle Armature/Head/Hat -o HatBundle/</code></td><td>The composite: a full ten-file toggle bundle &mdash; On/Off clips, two-state FX controller, params, menu, and guid-pinning <code>.meta</code>s.</td></tr>
+      <tr><td><code>avatar asset set &lt;file&gt; --path m_Name --value X</code></td><td>Surgically edit an existing Unity asset (scalars, reference re-targets, structural edits) by span-splicing raw text &mdash; fileIDs/refs/formatting preserved.</td></tr>
     </tbody>
   </table>
-  <p>Output goes to stdout or <code>-o</code>, with deterministic fileIDs so assets are diffable. Details: <code>docs/reference/anim-gen.md</code>.</p>
+  <p>Deterministic fileIDs make generated assets diffable. Details: <code>docs/reference/anim-gen.md</code>, <code>docs/reference/unity-yaml-edit.md</code>.</p>
+</section>
+
+<section class="doc-section" id="migrate-physbone">
+  <h2>Migrate &amp; PhysBone tuning</h2>
+  <table>
+    <thead><tr><th>Command</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td><code>avatar migrate sdk3 &lt;project&gt; -o out/ --name N …</code></td><td>SDK2 &rarr; SDK3: descriptor/PipelineManager retyped in place, DynamicBone &rarr; PhysBone by the SDK's own rules, Cloth &rarr; PhysBone skirt, gesture overrides &rarr; an FX layer, rig-derived eye look, and a VCC-openable project tree around the rewritten prefab.</td></tr>
+      <tr><td><code>avatar physbone list &lt;prefab&gt;</code></td><td>Every <code>VRCPhysBone</code>: root, chains (bones, length), colliders, tuning.</td></tr>
+      <tr><td><code>avatar physbone set|split|stretch|flare|nudge …</code></td><td>Retune in place: values + per-chain curves, split chains onto their own components, lengthen a skirt/tail, re-angle chains toward vertical, shift hinge rings.</td></tr>
+    </tbody>
+  </table>
+  <p>Details: <code>docs/reference/migrate.md</code>, <code>docs/reference/physbone.md</code>.</p>
+</section>
+
+<section class="doc-section" id="package-preview">
+  <h2>Packages &amp; preview</h2>
+  <table>
+    <thead><tr><th>Command</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td><code>avatar unitypackage info|list|extract &lt;pkg&gt;</code></td><td>Summarize a <code>.unitypackage</code> (detected SDK, avatar vs world), list assets, or extract into a Unity <code>Assets/</code> tree.</td></tr>
+      <tr><td><code>avatar unitypackage testbed &lt;avatar&gt; &lt;world&gt;</code></td><td>Co-import cross-check: GUID/path conflicts between an avatar package and a world package.</td></tr>
+      <tr><td><code>avatar render --avatar a.fbx [-o out.png]</code></td><td>Offscreen GPU render (wgpu, headless): avatar rest pose, a world scene, or the avatar dropped at the world's spawn. <code>--pose &lt;prefab&gt;</code> / <code>--stretch</code> preview PhysBone edits.</td></tr>
+      <tr><td><code>avatar view --avatar a.fbx --world Scene.unity</code></td><td>Interactive winit window: orbit / zoom / walk.</td></tr>
+    </tbody>
+  </table>
+  <p>Details: <code>docs/reference/unitypackage.md</code>, <code>docs/reference/render.md</code>.</p>
 </section>
 
 <section class="doc-section" id="osc">
@@ -55,12 +101,25 @@
     <thead><tr><th>Command</th><th>What it does</th></tr></thead>
     <tbody>
       <tr><td><code>avatar osc send &lt;param&gt; &lt;value&gt;</code></td><td>Set an avatar parameter on a running VRChat (e.g. <code>osc send VRCEmote 3</code>).</td></tr>
-      <tr><td><code>avatar osc input ...</code></td><td>Drive <code>/input/*</code> axes &amp; buttons (with reset-to-zero).</td></tr>
-      <tr><td><code>avatar osc monitor</code></td><td>Poll inbound OSC on :9001.</td></tr>
-      <tr><td><code>avatar osc change</code></td><td>Handle <code>/avatar/change</code>.</td></tr>
-      <tr><td><code>avatar osc query &lt;config.json&gt;</code></td><td>Parse an avatar's OSCQuery config offline: parameter names, OSC type tags, read/write access.</td></tr>
+      <tr><td><code>avatar osc input …</code></td><td>Drive <code>/input/*</code> axes &amp; buttons (with reset-to-zero).</td></tr>
+      <tr><td><code>avatar osc monitor</code></td><td>Listen for the avatar parameters VRChat broadcasts and print each update.</td></tr>
+      <tr><td><code>avatar osc capture -o log</code></td><td>Record the parameter stream and reduce it to a gesture/weight cross-tab &mdash; ground truth for "what does my controller deliver?". Also a standalone Windows-cross-compilable <code>avatar-gesture-capture</code> bin, OSCQuery-advertised.</td></tr>
+      <tr><td><code>avatar osc replay &lt;log&gt; &lt;fx.controller&gt;</code></td><td>Simulate a <code>.controller</code> against a captured log offline: the state timeline the FX actually went through.</td></tr>
+      <tr><td><code>avatar osc change &lt;blueprint-id&gt;</code></td><td>Request VRChat switch avatars.</td></tr>
+      <tr><td><code>avatar osc query &lt;config.json&gt;</code></td><td>Parse an avatar's OSCQuery config offline: parameter names, OSC type tags, access.</td></tr>
       <tr><td><code>avatar osc gestures --seconds 10</code></td><td>Run the analog-gesture daemon (headless demo sweep; <code>--hz</code>/<code>--period</code> tunable).</td></tr>
     </tbody>
   </table>
   <p>Details: <code>docs/reference/osc-runtime.md</code>.</p>
+</section>
+
+<section class="doc-section" id="mcp">
+  <h2>Agent surface</h2>
+  <table>
+    <thead><tr><th>Command</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td><code>avatar mcp serve</code></td><td>Run the stdio MCP server: the read/diagnose tools plus text-returning generation tools, discoverable by any MCP host. Non-writing by design &mdash; disk writes stay on the CLI.</td></tr>
+    </tbody>
+  </table>
+  <p>Details: <code>docs/reference/mcp.md</code>.</p>
 </section>

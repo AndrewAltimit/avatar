@@ -9,7 +9,10 @@ Discovers a Unity/VPM project, scans its VRChat assets, and reports SDK3 complia
 expression-parameter sync budget and duplicates, menu size and dangling parameter references, the
 Avatar Descriptor (expression/playable-layer reference resolution via a guid→path `.meta` index,
 visemes, eye-look, parameter↔animator wiring), and animator-controller contents — plus project/SDK
-info.
+info. The newer bands cover cross-layer Write Defaults consistency (VRC045), state/blend-tree
+motion references (VRC046/048), FX clips animating transforms or muscles (VRC047), empty clips
+(VRC049), PhysBone/Avatar-Dynamics problems (VRC050–052), missing scripts (VRC060), a Quest
+shader advisory (VRC061), and blendshape drift between clips and the source mesh (VRC062).
 
 Rules are intentionally conservative: **errors** are things VRChat will reject or that break the
 avatar; **warnings** are likely-but-not-certain problems (e.g. a menu referencing a parameter we
@@ -27,7 +30,8 @@ and [`avatar-unity-asset`](../unity-asset/README.md) over
 
 ## Status
 
-Built: **M2**.
+Built: **M2**; the clip-content, cross-layer, Avatar-Dynamics, and Android/Quest-hygiene rules
+(VRC045–052, VRC060–062) landed after, alongside the features they check.
 
 ## Features
 
@@ -38,4 +42,4 @@ Built: **M2**.
 ## See also
 
 - [`docs/reference/sdk3-lint-rules.md`](../../docs/reference/sdk3-lint-rules.md) — the full rule
-  table (`VRC001`–`VRC052`) and how assets are identified.
+  table (`VRC001`–`VRC062`) and how assets are identified.

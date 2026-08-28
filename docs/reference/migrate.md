@@ -167,8 +167,9 @@ without touching the filesystem. Generated GUIDs/fileIDs are deterministic (seed
   NUnit tests and a project without it fails to compile (`NUnit could not be found`, then a Burst
   `VRC.ExampleCentral.Editor` resolution cascade).
 - Play-test PhysBones, confirm the eye-look preview, test each gesture. Retuning is a one-line
-  edit on the migrated prefab — `avatar physbone set|split|stretch` ([`physbone.md`](physbone.md)):
-  values + per-chain curves, chains split onto their own components, chains lengthened.
+  edit on the migrated prefab — `avatar physbone list|set|split|stretch|flare|nudge`
+  ([`physbone.md`](physbone.md)): values + per-chain curves, chains split onto their own
+  components, chains lengthened, re-angled.
 
 ## Limits
 

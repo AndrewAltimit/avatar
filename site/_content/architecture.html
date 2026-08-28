@@ -11,13 +11,18 @@
 
 <section class="doc-section" id="pipeline">
   <h2>The pipeline</h2>
-  <pre><code>FBX / Unity project ──► [avatar tools] ──► diagnose · fix · validate · generate
-                                                │
-                                drop generated assets into Unity
-                                                │
-                                    (you) build &amp; upload via VRCSDK
-                                                │
-                          [avatar osc] ──► drive parameters at runtime</code></pre>
+  <pre><code>.unitypackage ──extract──► FBX / Unity project
+                                   │
+                                   ▼
+        [avatar tools] ──► diagnose · fix · lint · rank · generate · edit · migrate
+                                   │
+                    preview offline (avatar render / avatar view)
+                                   │
+                     drop generated assets into Unity
+                                   │
+                         (you) build &amp; upload via VRCSDK
+                                   │
+               [avatar osc] ──► drive parameters at runtime</code></pre>
   <p>
     This repo is <strong>file transformation / analysis / validation / generation</strong> plus an
     <strong>OSC runtime daemon</strong> &mdash; not a Unity replacement. The conceptual overview lives in
@@ -55,6 +60,15 @@
     A Unity GUID is 32 hex chars and must contain letters; an all-digit "guid" parses as a number and breaks
     GUID resolution. The lint engine resolves expression/playable-layer references through a guid&rarr;path
     <code>.meta</code> index.
+  </p>
+  <p>
+    <strong>Editing</strong> an existing asset is its own third mode, distinct from read and generate:
+    <code>EditableUnityFile</code> span-splices value and structural changes into the raw text, so fileIDs,
+    references, key order, and formatting all survive round-trip (<a href="reference/unity-yaml-edit.html">editing
+    Unity YAML</a>). That editing surface is what makes whole-avatar operations safe in place:
+    <a href="reference/migrate.html">SDK2 &rarr; SDK3 migration</a> retypes the descriptor at its existing
+    fileIDs, and <a href="reference/physbone.html">PhysBone tuning</a> rewrites component values inside a
+    prefab without disturbing anything else.
   </p>
 </section>
 

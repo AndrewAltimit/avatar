@@ -47,6 +47,10 @@ for update in client.poll()? { /* update.name, update.value */ }
 ## Status
 
 Built and green: the codec, OSCQuery config parser, and `ParamClient` transport, with round-trip
-unit tests for every parameter type and an embedded-JSON OSCQuery parse test. The analog-gesture
-daemon that drives this (`avatar-osc-gestures`, PLAN §4) is the next M5 piece. Behaviour:
+unit tests for every parameter type and an embedded-JSON OSCQuery parse test — plus the `capture`
+module (parameter recording + the gesture cross-tab, also shipped as the standalone
+`avatar-gesture-capture` bin) and the `oscquery` mDNS/HTTP advertisement responder both capture
+front-ends use. The analog-gesture daemon that drives this landed as `avatar-osc-gestures`
+(`avatar osc gestures`, PLAN §4), and `avatar osc replay` simulates a `.controller` offline
+against a captured log. Behaviour:
 [`docs/reference/osc-runtime.md`](../../docs/reference/osc-runtime.md).

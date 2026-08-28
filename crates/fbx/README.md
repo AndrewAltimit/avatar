@@ -8,7 +8,7 @@ Load **and write** binary FBX files. Package `avatar-fbx` · library `avatar_fbx
 Reads the parts of a binary FBX that avatar tooling needs — the object table (`Model`, `Geometry`,
 …) and the `Connections` graph that wires objects into a hierarchy — and exposes them as a flat,
 typed scene. It also retains `fbxcel`'s mutable node tree so a loaded document can be edited and
-serialized back to binary FBX (the basis of `avatar armature fix`).
+serialized back to binary FBX (the basis of `avatar armature fix` and `avatar fbx reslot`).
 
 The crate stays close to the raw FBX structure: it does not compute world transforms or interpret
 skinning. Higher-level interpretation lives in [`avatar-armature`](../armature/README.md).
@@ -22,10 +22,12 @@ clear error — re-export as binary.
   `parent_of(id)`, `blendshape_channels()` (the morph-channel names Unity imports as blendshapes,
   each traced to its mesh), plus `global_settings`, `objects`, `connections`.
 - `FbxDocument` — the writable document: `load(path)` / `from_bytes(&[u8])`, `scene()` (recomputed
-  read view), `blendshape_target_indexes(channel)` (the control points a morph channel deforms —
-  join with `meshes()` for "which material slots does this blendshape touch"), and id-addressed
-  mutators `rename_object`, `reparent_object`, `set_global_setting_f64/i32`, `scale_object`, then
-  `to_bytes()` / `write(path)`.
+  read view), `meshes()` (every mesh's geometry + skin binding as `avatar_mesh::RawMesh`),
+  `geometry_of_model(model_id)`, `blendshape_target_indexes(channel)` (the control points a morph
+  channel deforms — join with `meshes()` for "which material slots does this blendshape touch";
+  backs `avatar fbx blendshapes`), and id-addressed mutators `rename_object`, `reparent_object`,
+  `set_global_setting_f64/i32`, `scale_object`, `set_polygon_materials` (per-polygon material-slot
+  reassignment — backs `avatar fbx reslot`), then `to_bytes()` / `write(path)`.
 - `FbxObject`, `Connection`, `GlobalSettings`, `LocalTransform` — the typed pieces of the scene.
 
 Mutators address objects by FBX **object id** — the stable identifier skin clusters and animation

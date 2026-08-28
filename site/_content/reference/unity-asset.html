@@ -1,0 +1,82 @@
+<header class="page-header">
+  <div class="breadcrumb"><a href="../index.html">home</a> &middot; <a href="index.html">reference</a> &middot; typed asset readers</div>
+  <h1>Typed asset readers</h1>
+  <p class="lede">
+    <code>avatar-unity-asset</code> is the <strong>typed</strong> layer over <code>avatar-unity-yaml</code>:
+    where that crate splits a Unity file into class-tagged documents of raw YAML, this one reads a specific
+    asset <em>graph</em> into Rust structs &mdash; the <strong>AnimatorController</strong>
+    (<code>.controller</code>) VRChat avatars drive through their playable layers, and the
+    <strong>AnimationClip</strong> (<code>.anim</code>) those controllers play. It is the reader the
+    <code>VRC04x</code>+ <a href="sdk3-lint-rules.html">lint rules</a> consume. Library crate only, no CLI
+    surface of its own. Full text: <code>docs/reference/unity-asset.md</code>.
+  </p>
+</header>
+
+<section class="doc-section" id="controller-stream">
+  <h2>What a <code>.controller</code> file is</h2>
+  <p>
+    A <code>.controller</code> is a multi-document Unity YAML stream: one <code>AnimatorController</code>
+    object (class id 91) owns a graph of further objects, linked by local <code>fileID</code>s.
+  </p>
+  <table>
+    <thead><tr><th>Class id</th><th>Object</th><th>What this crate reads from it</th></tr></thead>
+    <tbody>
+      <tr><td><code>91</code></td><td><code>AnimatorController</code></td><td>name, declared parameters (<code>m_AnimatorParameters</code>)</td></tr>
+      <tr><td><code>1107</code></td><td><code>AnimatorStateMachine</code></td><td>child-state count, whether <code>m_DefaultState</code> resolves</td></tr>
+      <tr><td><code>1102</code></td><td><code>AnimatorState</code></td><td><code>m_WriteDefaultValues</code> and the <code>m_Motion</code> reference (one per state)</td></tr>
+      <tr><td><code>1101</code> / <code>1109</code></td><td><code>AnimatorStateTransition</code> / <code>AnimatorTransition</code></td><td>each <code>m_Conditions</code> entry</td></tr>
+      <tr><td><code>206</code></td><td><code>BlendTree</code></td><td>blend type, blend parameter(s), per-child direct parameters + external child-motion guids</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section class="doc-section" id="aggregate">
+  <h2>Aggregate, not full graph</h2>
+  <p>
+    For the questions the lint rules ask &mdash; <em>which parameters are referenced, are write-defaults
+    consistent, is a default state set</em> &mdash; the full linked graph is unnecessary. So
+    <code>from_file</code> walks the file's documents and <strong>aggregates the relevant fields by Unity
+    class id</strong> rather than rebuilding the state-machine topology. That is robust to SDK version
+    drift, because the field names are stable Unity serialization rather than VRChat specifics.
+  </p>
+</section>
+
+<section class="doc-section" id="controller-types">
+  <h2>Key controller types</h2>
+  <ul>
+    <li><strong><code>AnimatorController</code></strong> &mdash; the parsed result: <code>name</code>, <code>parameters</code>, <code>conditions</code> (every condition across every transition), <code>blend_trees</code>, <code>state_machines</code>, <code>write_defaults</code> (one bool per state, in document order), <code>states</code>, <code>state_count</code>. <code>from_file(&amp;UnityFile)</code> returns <code>None</code> if the file has no controller document.</li>
+    <li><strong><code>AnimatorParameter</code></strong> &mdash; <code>raw_type</code> is Unity's <code>m_Type</code> (1 Float, 3 Int, 4 Bool, 9 Trigger).</li>
+    <li><strong><code>AnimatorCondition</code></strong> &mdash; <code>parameter</code>, raw <code>m_ConditionMode</code> (1 If, 2 IfNot, 3 Greater, 4 Less, 6 Equals, 7 NotEqual), threshold (Unity's misspelled <code>m_EventTreshold</code> field).</li>
+    <li><strong><code>BlendTreeInfo</code></strong> &mdash; <code>blend_type</code> (0 = 1D, 1&ndash;3 = 2D variants, 4 = Direct); <code>referenced_parameters()</code> returns only what the tree actually reads given its type: a 1D tree reads X, a 2D tree X and Y, a Direct tree each child's direct parameter.</li>
+    <li><strong><code>StateMachineInfo</code></strong> &mdash; <code>has_default_state</code> is <code>true</code> only when <code>m_DefaultState</code> points at a real state.</li>
+    <li><strong><code>StateInfo</code></strong> &mdash; per-state name, write-defaults flag, and a <code>MotionRef { file_id, guid }</code>: a local blend tree (<code>fileID</code> only), an external clip (<code>guid</code> set), or null. <code>blend_tree_motion_guids</code> collects every external guid blend-tree children reference.</li>
+  </ul>
+</section>
+
+<section class="doc-section" id="animation-clip">
+  <h2>AnimationClip (<code>.anim</code>, class 74)</h2>
+  <p>
+    <code>AnimationClip::from_file</code> reads a clip down to its curve <strong>bindings</strong> &mdash;
+    what each curve animates, not the keyframe data, which is all the clip-content lint rules need:
+  </p>
+  <ul>
+    <li><code>float_curves</code> &mdash; every <code>m_FloatCurves</code> entry as <code>{ path, attribute, class_id }</code> (blendshapes bind class 137, GameObject toggles class 1, humanoid muscle curves class 95 with an empty path &mdash; <code>is_muscle()</code> tests the latter).</li>
+    <li><code>transform_curves</code> &mdash; total entries across position/rotation/euler/scale curves; <code>pptr_curves</code> &mdash; <code>m_PPtrCurves</code> entries (material swaps).</li>
+    <li>Predicates: <code>is_empty()</code>, <code>animates_transforms()</code>, <code>animates_muscles()</code>.</li>
+  </ul>
+</section>
+
+<section class="doc-section" id="lint-consumption">
+  <h2>What lint asks of it</h2>
+  <p>
+    The <a href="sdk3-lint-rules.html">controller and clip lint rules</a> are direct consumers: undeclared
+    parameters in transition conditions and blend trees (respecting blend type), state machines with no
+    default state, duplicate parameter names, and mixed Write Defaults across states &mdash; a controller
+    should be all-on or all-off. The clip bindings feed the clip-content rules (empty clips, transform or
+    muscle curves where they don't belong).
+  </p>
+  <div class="hint">
+    Other typed asset graphs (descriptor, menus, parameters) are read elsewhere &mdash; see
+    <code>crates/vrc-descriptor/README.md</code>. Material / scene typing is still to come.
+  </div>
+</section>

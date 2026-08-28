@@ -2,9 +2,10 @@
   <div class="breadcrumb"><a href="../index.html">home</a> &middot; crates</div>
   <h1>Crates</h1>
   <p class="lede">
-    Sixteen crates, from binary-FBX I/O up through the runtime rig layer to the analog-gesture OSC daemon.
-    Crate dirs are unprefixed (<code>crates/fbx</code>); package names are <code>avatar-&lt;slug&gt;</code>;
-    lib names are <code>avatar_&lt;slug&gt;</code>; the binary is <code>avatar</code>. Each card links to that
+    Twenty-two crates, from binary-FBX I/O up through diagnostics, generation, migration, the runtime
+    rig layer, GPU preview, and the analog-gesture OSC daemon. Crate dirs are unprefixed
+    (<code>crates/fbx</code>); package names are <code>avatar-&lt;slug&gt;</code>; lib names are
+    <code>avatar_&lt;slug&gt;</code>; the binary is <code>avatar</code>. Each card links to that
     crate's README on GitHub.
   </p>
 </header>
@@ -14,19 +15,23 @@
   <div class="card-grid">
     <a class="card" href="https://github.com/AndrewAltimit/avatar/blob/main/crates/fbx/README.md" target="_blank" rel="noopener">
       <div class="card-title">avatar-fbx</div>
-      <div class="card-body">Load <strong>and write</strong> binary FBX: typed scene graph + connections, edit/serialize via <code>FbxDocument</code>, extract geometry + skin/bind (<code>meshes()</code>).</div>
+      <div class="card-body">Load <strong>and write</strong> binary FBX: typed scene graph + connections, edit/serialize via <code>FbxDocument</code>, extract geometry + skin/bind (<code>meshes()</code>), re-slot polygon materials.</div>
     </a>
     <a class="card" href="https://github.com/AndrewAltimit/avatar/blob/main/crates/armature/README.md" target="_blank" rel="noopener">
       <div class="card-title">avatar-armature</div>
-      <div class="card-body">Skeleton model, hierarchy-aware Unity-humanoid inference, VRChat SDK3 rig validation, and repair planning (renames applied; topology/scale/orientation flagged).</div>
+      <div class="card-body">Skeleton model, hierarchy-aware Unity-humanoid inference, VRChat SDK3 rig validation, and repair planning (renames applied; topology/scale/orientation flagged + Blender repair script).</div>
     </a>
     <a class="card" href="https://github.com/AndrewAltimit/avatar/blob/main/crates/unity-yaml/README.md" target="_blank" rel="noopener">
       <div class="card-title">avatar-unity-yaml</div>
-      <div class="card-body">Reader for Unity's YAML format (<code>.asset</code>/<code>.prefab</code>/<code>.unity</code>/<code>.meta</code>), multi-doc <code>--- !u!classID &amp;fileID</code> + GUID refs.</div>
+      <div class="card-body">Reader <strong>+ surgical editor</strong> for Unity's YAML format: <code>EditableUnityFile</code> span-splices value and structural edits into an existing asset, preserving fileIDs/refs/formatting.</div>
     </a>
     <a class="card" href="https://github.com/AndrewAltimit/avatar/blob/main/crates/unity-asset/README.md" target="_blank" rel="noopener">
       <div class="card-title">avatar-unity-asset</div>
-      <div class="card-body">Typed Unity asset graphs over the YAML reader (AnimatorController today: params, conditions, blend trees, state machines, write-defaults).</div>
+      <div class="card-body">Typed Unity asset graphs over the YAML reader: the AnimatorController (<code>.controller</code>) + AnimationClip (<code>.anim</code>) readers the controller/clip lint rules consume.</div>
+    </a>
+    <a class="card" href="https://github.com/AndrewAltimit/avatar/blob/main/crates/unitypackage/README.md" target="_blank" rel="noopener">
+      <div class="card-title">avatar-unitypackage</div>
+      <div class="card-body">Read Unity's <code>.unitypackage</code> (gzip+tar): summarize, extract into a project tree, cross-check an avatar against a world for co-import GUID/path conflicts.</div>
     </a>
     <a class="card" href="https://github.com/AndrewAltimit/avatar/blob/main/crates/vpm/README.md" target="_blank" rel="noopener">
       <div class="card-title">avatar-vpm</div>
@@ -40,26 +45,30 @@
 </section>
 
 <section class="doc-section" id="logic">
-  <h2>Diagnostics &amp; generation</h2>
+  <h2>Diagnostics, generation &amp; migration</h2>
   <div class="card-grid">
     <a class="card" href="https://github.com/AndrewAltimit/avatar/blob/main/crates/lint/README.md" target="_blank" rel="noopener">
       <div class="card-title">avatar-lint</div>
-      <div class="card-body">Diagnostics engine: SDK3 compliance rules over a project (params, menus, descriptor refs, visemes) &rarr; structured report. Rules <code>VRC001</code>&ndash;<code>VRC044</code>.</div>
+      <div class="card-body">Diagnostics engine: SDK3 compliance rules over a project (params, menus, descriptor refs, visemes incl. the source-FBX cross-check, animator + clip contents, PhysBones, Quest/hygiene) &rarr; structured report. Rules <code>VRC001</code>&ndash;<code>VRC062</code>.</div>
     </a>
     <a class="card" href="https://github.com/AndrewAltimit/avatar/blob/main/crates/stats/README.md" target="_blank" rel="noopener">
       <div class="card-title">avatar-stats</div>
-      <div class="card-body">Offline VRChat performance ranking (Excellent&rarr;Very Poor) from an FBX (geometry) or a project's avatars (components), against PC + Android limits.</div>
+      <div class="card-body">Offline VRChat performance ranking (Excellent&rarr;Very Poor) from an FBX (geometry) or a project's avatars (components incl. particles &amp; constraints), against PC + Android limits.</div>
     </a>
     <a class="card" href="https://github.com/AndrewAltimit/avatar/blob/main/crates/anim-gen/README.md" target="_blank" rel="noopener">
       <div class="card-title">avatar-anim-gen</div>
-      <div class="card-body">Generate Unity <code>.anim</code> clips + FX-layer analog-gesture blend trees as Unity YAML, with deterministic fileIDs. The M4 asset-generation layer.</div>
+      <div class="card-body">Generate Unity <code>.anim</code> clips, blend trees, full FX <code>AnimatorController</code>s, and VRC expression params/menus as Unity YAML with deterministic fileIDs; the <code>avatar toggle</code> bundle and <code>puppet</code> grafting.</div>
+    </a>
+    <a class="card" href="https://github.com/AndrewAltimit/avatar/blob/main/crates/migrate/README.md" target="_blank" rel="noopener">
+      <div class="card-title">avatar-migrate</div>
+      <div class="card-body">SDK2 &rarr; SDK3 migration of an avatar project: descriptor retyped in place, DynamicBone &rarr; PhysBone by the SDK's own rules, gesture overrides &rarr; FX, a VCC-openable project tree; plus PhysBone tuning on any SDK3 prefab.</div>
     </a>
   </div>
 </section>
 
 <section class="doc-section" id="runtime">
   <h2>Runtime rig layer</h2>
-  <p>The "load and drive a rig at runtime" foundation, renderer-agnostic. <code>glam</code> (f32) is confined to pose/input/gltf &mdash; never the lint/cli graph.</p>
+  <p>The "load and drive a rig at runtime" foundation, renderer-agnostic. <code>glam</code> (f32) is confined to pose/input/gltf/render &mdash; never the lint/osc/cli graph.</p>
   <div class="card-grid">
     <a class="card" href="https://github.com/AndrewAltimit/avatar/blob/main/crates/mesh/README.md" target="_blank" rel="noopener">
       <div class="card-title">avatar-mesh</div>
@@ -77,23 +86,45 @@
       <div class="card-title">avatar-input</div>
       <div class="card-body">Backend-agnostic VR tracker input (<code>TrackerState</code>/<code>TrackerSource</code>): mock + OSC backends, OpenXR planned.</div>
     </a>
+    <a class="card" href="https://github.com/AndrewAltimit/avatar/blob/main/crates/render/README.md" target="_blank" rel="noopener">
+      <div class="card-title">avatar-render</div>
+      <div class="card-body">GPU preview via wgpu, headless: avatar rest-pose render, world-scene render, avatar-at-spawn-in-world PNGs, plus the optional interactive <code>avatar view</code> winit viewer.</div>
+    </a>
   </div>
 </section>
 
 <section class="doc-section" id="osc">
-  <h2>OSC runtime &amp; entry point</h2>
+  <h2>OSC runtime</h2>
   <div class="card-grid">
     <a class="card" href="https://github.com/AndrewAltimit/avatar/blob/main/crates/osc/README.md" target="_blank" rel="noopener">
       <div class="card-title">avatar-osc</div>
-      <div class="card-body">VRChat OSC parameter protocol: <code>/avatar/parameters</code>, <code>/input</code>, <code>/avatar/change</code> codec + UDP client, OSCQuery avatar-config parsing. The M5 foundation.</div>
+      <div class="card-body">VRChat OSC runtime: <code>/avatar/parameters</code>, <code>/input</code>, <code>/avatar/change</code> codec + UDP client, parameter capture, OSCQuery config parsing <em>and</em> mDNS advertisement; the <code>avatar-gesture-capture</code> bin.</div>
     </a>
     <a class="card" href="https://github.com/AndrewAltimit/avatar/blob/main/crates/osc-gestures/README.md" target="_blank" rel="noopener">
       <div class="card-title">avatar-osc-gestures</div>
-      <div class="card-body">The analog-gesture daemon ("Vive advanced controls on any hardware"): controller trigger &rarr; <code>Gesture*</code>/<code>Gesture*Weight</code> over OSC, with deadzone + change detection.</div>
+      <div class="card-body">The analog-gesture daemon &mdash; "Vive advanced controls on any hardware": controller trigger &rarr; <code>Gesture*</code>/<code>Gesture*Weight</code> over OSC, with deadzone + change detection.</div>
     </a>
+  </div>
+</section>
+
+<section class="doc-section" id="surface">
+  <h2>App &amp; agent surface</h2>
+  <div class="card-grid">
     <a class="card" href="https://github.com/AndrewAltimit/avatar/blob/main/crates/cli/README.md" target="_blank" rel="noopener">
       <div class="card-title">avatar-cli</div>
-      <div class="card-body">The <code>avatar</code> binary tying everything together &mdash; clap v4 subcommands. See <a href="../cli/index.html">CLI commands</a>.</div>
+      <div class="card-body">The <code>avatar</code> binary tying everything together &mdash; every subcommand on the <a href="../cli/index.html">CLI page</a>, <code>--json</code> across the read/generate surface, dry-run-safe writes.</div>
+    </a>
+    <a class="card" href="https://github.com/AndrewAltimit/avatar/blob/main/crates/mcp/README.md" target="_blank" rel="noopener">
+      <div class="card-title">avatar-mcp</div>
+      <div class="card-body">A domain-agnostic MCP server (stdio JSON-RPC): the read/diagnose surface plus text-returning generation tools an agent host can discover and call. Non-writing by design.</div>
+    </a>
+    <a class="card" href="https://github.com/AndrewAltimit/avatar/blob/main/crates/web-analyzer/README.md" target="_blank" rel="noopener">
+      <div class="card-title">avatar-web-analyzer</div>
+      <div class="card-body">The wasm bundle behind this site's <a href="../analyzer.html">FBX analyzer</a>: the same fbx + armature + stats diagnose graph, compiled to WebAssembly and run entirely in your browser.</div>
+    </a>
+    <a class="card" href="https://github.com/AndrewAltimit/avatar/blob/main/crates/testkit/README.md" target="_blank" rel="noopener">
+      <div class="card-title">avatar-testkit</div>
+      <div class="card-body">Test-only (<code>publish = false</code>): the golden-snapshot harness + in-code synthetic-FBX builders behind the workspace's fixture corpus.</div>
     </a>
   </div>
 </section>

@@ -18,6 +18,7 @@ output file is never overwritten without `--force`.
 | `avatar describe <path>` | One-shot consolidated snapshot: for an FBX, structure + humanoid-armature analysis + geometry rank; for a project, lint + per-avatar rank. Gates non-zero on a non-humanoid-ready rig or lint errors. Built for "one call → full mental model." |
 | `avatar fbx inspect <path>` | Dump an FBX's structure (objects, hierarchy, global settings); flag unit/orientation issues. |
 | `avatar fbx reslot <path> --mesh M --to-slot N …` | Move a region of a mesh's polygons onto another material slot (select by `--from-slot`, `--near-bone/--radius`, `--min-z/--max-z`, `--exclude-bone`, `--brighter-than TEX:LUM`, `--any-corner`); writes the FBX with `-o` (dry run without), or `--uv-mask MASK.png` to get the selection's UV footprint + same-slot overlap report for a texture-side fix. The "that strand glows white" fix. |
+| `avatar fbx blendshapes <path>` | List blendshape channels and the material slots each one's target vertices render with — which material an emote shape (a blush patch a shape slides into view) actually uses. `--filter`, `--uv-mask DIR` for per-channel/slot UV-footprint masks, `--json`. |
 | `avatar armature check <path>` | Validate the skeleton against VRChat humanoid rig requirements. Exits non-zero when a Unity-required bone is missing (not humanoid-ready), to gate CI. |
 | `avatar armature fix <path> [-o out.fbx]` | Plan repairs; with `-o`, write a repaired FBX (canonical bone renames are applied; mis-wired topology and scale/orientation are flagged). Dry-run by default; `--force` to overwrite input. |
 | `avatar lint <project> [--deny-warnings]` | SDK3-compliance report over a Unity/VRChat project. Exits non-zero on errors (or, with `--deny-warnings`, any warnings) to gate CI. |
@@ -25,19 +26,26 @@ output file is never overwritten without `--force`.
 | `avatar anim-gen blendtree …` | Generate a 1D analog-gesture FX blend tree (Unity YAML) blending `GestureLeftWeight`/`…Right` across child clips. `--tree-only` for just the `BlendTree` document; otherwise a self-contained state-machine fragment. |
 | `avatar anim-gen clip …` | Generate a `.anim` clip from `--blendshape PATH:SHAPE:VALUE` and/or `--toggle PATH` curves. |
 | `avatar anim-gen controller …` | Generate a complete, Unity-importable FX `AnimatorController` (class 91) wrapping an analog-gesture blend tree in one layer — the full M4 asset, not the splice-in fragment. |
+| `avatar anim-gen params --param NAME:TYPE[:DEFAULT][:unsaved][:local] …` | Generate a `VRCExpressionParameters` `.asset` (sync-bit cost reported). |
+| `avatar anim-gen menu [--toggle L:P[:V]] [--button …] [--radial …] [--submenu …]` | Generate a `VRCExpressionsMenu` `.asset` (≤ 8 controls enforced). |
+| `avatar anim-gen puppet --controller C --param P …` | Graft a radial-puppet dial into an *existing* controller/params/menu by span-splice: a gated blend-tree FX layer + float parameter + menu control. |
+| `avatar toggle --name N [--toggle PATH] [--blendshape PATH:SHAPE:VALUE] -o DIR` | Generate the full ten-file toggle bundle: On/Off clips, two-state FX controller, expression params + menu, and guid-pinning `.meta` sidecars. |
+| `avatar migrate sdk3 <extracted-project> -o <out> --name N …` | SDK2 → SDK3 migration: descriptor/PipelineManager retyped in place, DynamicBone → PhysBone, gesture overrides → an FX layer, rig-derived eye look, a VCC-openable project assembled around the rewritten prefab (`--dry-run`/`--json`). |
 | `avatar asset set <file> --path P --value V\|--ref …` | Surgically edit one value in an *existing* Unity YAML asset (scalar, reference re-target, or flow-map subfield), preserving fileIDs/refs/key-order/formatting byte-for-byte. `--doc <fileID>` selects the document in a multi-doc file; stdout preview by default, `-o`+`--force` to write in place, `--dry-run`/`--json` supported. |
 | `avatar physbone list\|set\|split\|stretch\|flare\|nudge <prefab> …` | Inspect and retune an SDK3 prefab's `VRCPhysBone`s in place: `list` (root, chains + lengths, colliders, tuning + curves; `--json`), `set TARGET --pull/--spring/--stiffness/--gravity/--immobile/--limit-type/--max-angle… --*-curve "0:0.7,1:1" --ignore/--collider…`, `split TARGET --chain A --chain B` (chains onto their own components, tuned apart), `stretch TARGET --factor 1.5|--by 0.077` (longer skirt/tail by scaling bone offsets below the root; `--by` adds equal length per chain so an even hem stays even; `--chain NAME=METERS` overrides one chain), `flare TARGET --angle 10\|--scale 0.5` (re-angle chains toward straight down: a funnel skirt hugs the legs), `nudge TARGET --out 0.008` (shift the hinge ring radially: lift a skirt off a waistband). Same write policy as `asset set` (`-o`+`--force` in place, `--dry-run`, `--json`). |
 | `avatar schema [name\|all]` | Print the JSON Schema for a `--json` report type (`describe`/`lint`/`stats`/`armature`/`fbx-inspect`/`migrate`/`physbone`) so an agent can introspect the output contract. Built on the default-on `schema` feature. |
 | `avatar osc send <name> <value>` | Set one `/avatar/parameters/<name>` on a running VRChat (auto-detects bool/int/float; `--type` to force; `--host`/`--port` to retarget). |
 | `avatar osc input <name> <value>` | Send a VRChat `/input/<axis|button>` (axis float `-1..1`, button `true`/`false`). |
 | `avatar osc monitor [--seconds N]` | Listen for the avatar parameters VRChat broadcasts and print each update. |
+| `avatar osc capture [--seconds N] [-o events.jsonl]` | Record the parameter stream and reduce it to per-parameter counts/ranges + the gesture/weight cross-tab ("what does my controller actually deliver?"). OSCQuery-advertised (`--no-advertise` to opt out). |
+| `avatar osc replay <events.jsonl> --controller FX.controller` | Run a captured parameter log through a `.controller`'s state machines offline: the state timeline, dwell times, and blend range each layer actually went through (`--layer`, `--timeline`, `--json`). |
 | `avatar osc change <avtr-id>` | Ask VRChat to load a different avatar. |
 | `avatar osc query <config.json>` | Parse an avatar's OSCQuery config JSON and list its parameters (offline; `--json` available). |
 | `avatar osc gestures` | Run the analog-gesture daemon ("Vive advanced controls on any hardware"): controller trigger → `Gesture*`/`Gesture*Weight`. No on-device input backend headless yet, so it drives a synthetic demo sweep (`--hz`/`--period`/`--seconds`). |
 | `avatar unitypackage info\|list\|extract\|testbed <pkg>` | Inspect a `.unitypackage` (contents, detected SDK, avatar/world), list its assets, extract it into a Unity `Assets/` tree, or cross-check an avatar package against a world package for co-import conflicts. |
 | `avatar render [--avatar X] [--world Y] -o out.png` | Offscreen GPU preview → PNG. With both, the avatar is dropped at the world's player-spawn point at human scale; `--frame avatar\|world`, `--width/--height/--yaw/--pitch`; `--pose X.prefab` draws the FBX in that prefab's pose (what Unity will show), `--stretch 'Skirt_0_*:1.5'` previews a `physbone stretch` alone, `--material-texture NAME=IMAGE` draws a material with another image (e.g. its emission map). |
 | `avatar view [--avatar X] [--world Y]` | Open an interactive window onto the same scene: drag = orbit, wheel = zoom, WASD/Space/Shift = walk, R = reset, Esc = quit. Needs a display (cli `viewer` feature, on by default). |
-| `avatar mcp serve` | Run a Model Context Protocol server over stdio (JSON-RPC), exposing the **read-only** diagnose surface (`describe`/`lint`/`stats`/`armature`/`fbx-inspect`/`physbone-list`/`unitypackage-info`/`schema`) as tools an agent host can discover + call. Each returns the same JSON as the `--json` flags. |
+| `avatar mcp serve` | Run a Model Context Protocol server over stdio (JSON-RPC), exposing the **read-only** diagnose surface (`describe`/`lint`/`stats`/`armature`/`fbx-inspect`/`physbone-list`/`unitypackage-info`/`schema`) plus the text-returning `avatar_gen_*` generation tools as tools an agent host can discover + call. Diagnose tools return the same JSON as the `--json` flags; the generators hand the YAML back as text — still non-writing, disk writes stay on the CLI. |
 
 ```sh
 cargo run -p avatar-cli -- describe model.fbx --json         # one-call snapshot, machine-readable
@@ -68,6 +76,8 @@ Commands that validate exit non-zero on failure, so they gate CI directly:
 - `lint` — fails on any error; with `--deny-warnings`, also on any warning.
 - `describe` — fails on a non-humanoid-ready FBX or a project with lint errors (it shares the gating
   logic of the commands it aggregates).
+- `unitypackage testbed --strict` — fails when the avatar↔world cross-check finds any conflicting
+  GUID collision or path collision.
 
 Other commands (`fbx inspect`, `armature fix`, `anim-gen …`, `asset set`, `schema`) exit zero unless
 they hit a hard error (e.g. an unreadable file, or a refused overwrite without `--force`).
@@ -80,7 +90,8 @@ assets are gated against a real editor by the Unity-acceptance workflow). `osc` 
 **M5** (library + CLI; the daemon's on-device OpenXR input backend is the remaining runtime piece).
 `asset set`: built (surgical, round-trip-safe value edits to an existing Unity asset, behind the same
 `WriteGuard`). `describe` / `schema` and the generators' `--dry-run`/`--force` write-safety: built
-(agent ergonomics). `mcp serve`: built (read-only tool surface over MCP; generation tools next).
+(agent ergonomics). `mcp serve`: built (read-only tool surface over MCP, plus the text-returning
+`avatar_gen_*` generation tools).
 
 ## See also
 

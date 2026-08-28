@@ -1,11 +1,17 @@
 # avatar
 
-> **Status: early / alpha (WIP).** The crates build green and are covered by tests, but those tests
-> run against *synthetic fixtures* — the tools are **not yet validated against real Unity imports or a
-> live VRChat**. Treat output as a starting point, expect rough edges, and verify in Unity before you
-> rely on it. APIs, CLI flags, and report formats may change.
+> **Status: early / alpha (WIP).** The crates build green and are covered by tests — synthetic
+> fixtures in CI plus sample-gated tests against real avatar assets on the self-hosted runner.
+> Generated assets pass a headless **Unity import-acceptance gate**, and a real SDK2 avatar has been
+> migrated, built, and uploaded to VRChat with these tools. Still: expect rough edges, verify in
+> Unity before you rely on output, and treat APIs, CLI flags, and report formats as subject to change.
 
 A Rust monorepo of tools for working with **VRChat avatars** (Unity, SDK3 / Avatars 3.0).
+
+**Docs site:** [andrewaltimit.github.io/avatar](https://andrewaltimit.github.io/avatar/) — including
+an in-browser **[FBX analyzer](https://andrewaltimit.github.io/avatar/analyzer.html)** (the Rust
+diagnose graph compiled to WebAssembly: drop an avatar `.fbx`, get the humanoid rig check and
+VRChat performance rank; the file never leaves your machine).
 
 The goal: bring in an FBX or a Unity avatar project, **diagnose and fix common problems**
 (armature/rig not set up right, broken humanoid mapping, SDK3-noncompliant descriptors),
@@ -19,14 +25,15 @@ avatar is made of. They do **not** replace Unity or the VRChat SDK. The actual a
 still happens in Unity via the VRChat SDK control panel (which requires interactive
 VRChat-account login and is effectively Windows-only). The split looks like:
 
-```
-FBX / Unity project ──► [avatar tools] ──► diagnose · fix · validate · generate
-                                                │
-                                drop generated assets into Unity
-                                                │
-                                    (you) build & upload via VRCSDK
-                                                │
-                          [avatar osc] ──► drive parameters at runtime
+```mermaid
+flowchart TD
+    PKG[".unitypackage"] -- "avatar unitypackage extract" --> SRC["FBX / Unity project"]
+    SRC --> TOOLS["avatar tools<br/>diagnose · fix · lint · rank · generate · edit · migrate"]
+    TOOLS -- "avatar render / view" --> PREVIEW["offline GPU preview<br/>(no Unity needed)"]
+    TOOLS --> DROP["drop generated assets into Unity"]
+    DROP --> UPLOAD["(you) build & upload via VRCSDK"]
+    UPLOAD --> LIVE["avatar live in VRChat"]
+    OSC["avatar osc<br/>params · capture · replay · gesture daemon"] <--> LIVE
 ```
 
 See [`PLAN.md`](PLAN.md) for the full architecture and roadmap, and [`docs/`](docs/) for
@@ -52,16 +59,17 @@ format and subsystem references.
 | [`avatar-anim-gen`](crates/anim-gen/README.md) | **Generate** Unity `.anim` clips, FX-layer blend trees + full FX `AnimatorController`s, VRC expression parameters/menus, and the composite **toggle bundle**, as Unity YAML (deterministic fileIDs/GUIDs) — wired to `avatar anim-gen` / `avatar toggle` |
 | [`avatar-migrate`](crates/migrate/README.md) | **SDK2 → SDK3 migration** of an avatar project: descriptor/PipelineManager retyped in place, DynamicBone → PhysBone (the SDK's own rules), Cloth → PhysBone skirt, clutter stripped, gesture overrides → FX layer, rig-derived eye look, and a VCC-openable project tree around the rewritten prefab — wired to `avatar migrate sdk3`; plus **PhysBone tuning** on any SDK3 prefab (`avatar physbone list|set|split|stretch|flare|nudge`: values + per-chain curves, split chains, lengthen a skirt/tail, re-angle chains) |
 | [`avatar-render`](crates/render/README.md) | **GPU preview** via wgpu: render an avatar (and a Unity world scene, with the avatar dropped at the world's spawn point) to a PNG, headless — plus an optional interactive **winit viewer** (orbit/zoom/walk). Wired to `avatar render` / `avatar view` |
-| [`avatar-osc`](crates/osc/README.md) | VRChat **OSC runtime**: `/avatar/parameters`, `/input`, `/avatar/change` codec + UDP client and OSCQuery avatar-config parsing — the M5 runtime foundation, wired to `avatar osc` |
+| [`avatar-osc`](crates/osc/README.md) | VRChat **OSC runtime**: `/avatar/parameters`, `/input`, `/avatar/change` codec + UDP client, parameter **capture** (gesture/weight cross-tab), OSCQuery avatar-config parsing *and* mDNS advertisement, plus the standalone `avatar-gesture-capture` bin — wired to `avatar osc` |
 | [`avatar-osc-gestures`](crates/osc-gestures/README.md) | The **analog-gesture daemon** ("Vive advanced controls on any hardware"): controller trigger → `Gesture*`/`Gesture*Weight` over OSC, with deadzone + change detection. Wired to `avatar osc gestures` |
 | [`avatar-mcp`](crates/mcp/README.md) | A domain-agnostic **MCP server** (stdio JSON-RPC): exposes the read/diagnose surface plus text-returning generation tools an agent host can discover + call. Wired to `avatar mcp serve` |
 | [`avatar-cli`](crates/cli/README.md) | The `avatar` binary tying the above together |
+| [`avatar-web-analyzer`](crates/web-analyzer/README.md) | The **WebAssembly** bundle behind the docs site's in-browser FBX analyzer: the same fbx + armature + stats diagnose graph, run client-side |
 | [`avatar-testkit`](crates/testkit/README.md) | Test-only (`publish = false`): the golden-snapshot harness + in-code synthetic-FBX builders behind the workspace's fixture corpus |
 
-The asset-generation (`avatar-anim-gen`), OSC-runtime (`avatar-osc`), and analog-gesture daemon
-(`avatar-osc-gestures`) crates are driven by the `avatar anim-gen` / `avatar osc` subcommands. The
-daemon's production input backend (OpenXR) is the remaining on-device M5 piece; its mapping and OSC
-send are done and run headless via a demo source. See [`PLAN.md`](PLAN.md) and
+The asset-generation crate is driven by `avatar anim-gen`, the composite `avatar toggle`, and the
+MCP `avatar_gen_*` tools; the OSC-runtime and analog-gesture crates by `avatar osc`. The daemon's
+production input backend (OpenXR) is the remaining on-device M5 piece; its mapping and OSC send
+are done and run headless via a demo source. See [`PLAN.md`](PLAN.md) and
 [`docs/tutorial.md`](docs/tutorial.md).
 
 ## Quick start
@@ -71,6 +79,8 @@ cargo build --workspace
 cargo run -p avatar-cli -- describe path/to/model.fbx                  # one-shot snapshot (FBX or project)
 cargo run -p avatar-cli -- describe path/to/model.fbx --json           # machine-readable, for agents
 cargo run -p avatar-cli -- fbx inspect path/to/model.fbx
+cargo run -p avatar-cli -- fbx reslot model.fbx --mesh Hair --to-slot 1 --near-bone Head --radius 12 -o fixed.fbx  # re-slot polygons
+cargo run -p avatar-cli -- fbx blendshapes path/to/model.fbx              # which material each emote shape renders with
 cargo run -p avatar-cli -- armature check path/to/model.fbx
 cargo run -p avatar-cli -- armature fix path/to/model.fbx              # dry run: print the repair plan
 cargo run -p avatar-cli -- armature fix path/to/model.fbx -o fixed.fbx # write a repaired FBX
@@ -92,7 +102,10 @@ cargo run -p avatar-cli -- asset set Parameters.asset --path m_Name --value Para
 cargo run -p avatar-cli -- schema describe                            # JSON Schema for a --json report type
 cargo run -p avatar-cli -- osc send VRCEmote 3                         # drive a running VRChat over OSC
 cargo run -p avatar-cli -- osc query path/to/avatar-osc-config.json    # list an avatar's OSC parameters
+cargo run -p avatar-cli -- osc capture --seconds 30 -o params.log      # record the live parameter stream
+cargo run -p avatar-cli -- osc replay params.log FX.controller         # simulate the FX against the capture
 cargo run -p avatar-cli -- osc gestures --seconds 10                   # analog-gesture daemon (demo sweep)
+cargo run -p avatar-cli -- mcp serve                                   # stdio MCP server for agent hosts
 cargo run -p avatar-cli -- unitypackage info avatar.unitypackage       # summarize a .unitypackage (SDK, avatar/world)
 cargo run -p avatar-cli -- unitypackage extract avatar.unitypackage -o proj   # unpack into a Unity Assets/ tree
 cargo run -p avatar-cli -- unitypackage testbed avatar.unitypackage world.unitypackage  # co-import conflict check
@@ -132,7 +145,7 @@ overwritten without `--force`.
 | [`docs/tutorial.md`](docs/tutorial.md) | End-to-end walkthrough of the `avatar` CLI from FBX to lint to stats. |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Build/test/lint, conventions, and how to add a lint rule or crate. |
 | [`docs/reference/humanoid-bones.md`](docs/reference/humanoid-bones.md) | Unity humanoid bones + VRChat rig requirements. |
-| [`docs/reference/sdk3-lint-rules.md`](docs/reference/sdk3-lint-rules.md) | Every `avatar lint` rule (`VRC001`–`VRC061`) + encodings. |
+| [`docs/reference/sdk3-lint-rules.md`](docs/reference/sdk3-lint-rules.md) | Every `avatar lint` rule (`VRC001`–`VRC062`) + encodings. |
 | [`docs/reference/unity-asset.md`](docs/reference/unity-asset.md) | `avatar-unity-asset`: the typed AnimatorController (`.controller`) reader the controller lint rules consume. |
 | [`docs/reference/armature-repair.md`](docs/reference/armature-repair.md) | What `avatar armature fix` repairs, and the FBX writer. |
 | [`docs/reference/performance-stats.md`](docs/reference/performance-stats.md) | `avatar stats`: metrics (incl. particles & constraints), component recognition, and PC/Android threshold tables. |
@@ -144,6 +157,8 @@ overwritten without `--force`.
 | [`docs/reference/osc-runtime.md`](docs/reference/osc-runtime.md) | `avatar-osc`: the OSC address space, codec, and OSCQuery config parsing. |
 | [`docs/reference/unitypackage.md`](docs/reference/unitypackage.md) | `avatar-unitypackage`: the `.unitypackage` format, extraction, and the avatar-in-world testbed. |
 | [`docs/reference/render.md`](docs/reference/render.md) | `avatar-render` / `avatar render` + `avatar view`: the wgpu preview, avatar rest-pose render, world rendering, avatar-at-spawn-in-world, and the interactive viewer. |
+| [`docs/reference/mcp.md`](docs/reference/mcp.md) | `avatar-mcp` / `avatar mcp serve`: the stdio MCP server exposing the read/diagnose + generation tools to an agent host. |
+| [`docs/reference/testing.md`](docs/reference/testing.md) | The fixture corpus + the `avatar-testkit` golden-snapshot harness and the `UPDATE_GOLDEN` workflow. |
 
 **Per-crate READMEs** (purpose · key API · status):
 [`fbx`](crates/fbx/README.md) ·
@@ -164,7 +179,10 @@ overwritten without `--force`.
 [`migrate`](crates/migrate/README.md) ·
 [`osc`](crates/osc/README.md) ·
 [`osc-gestures`](crates/osc-gestures/README.md) ·
-[`cli`](crates/cli/README.md).
+[`mcp`](crates/mcp/README.md) ·
+[`cli`](crates/cli/README.md) ·
+[`web-analyzer`](crates/web-analyzer/README.md) ·
+[`testkit`](crates/testkit/README.md).
 
 ## Contributing
 
