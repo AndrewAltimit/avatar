@@ -51,8 +51,11 @@ cargo run -p avatar-cli -- <subcommand>      # e.g. lint path/to/UnityProject
 
 CI runs `fmt --check` + `clippy --all-targets -D warnings` + `test --workspace` on a self-hosted
 runner (`.github/workflows/main-ci.yml`); all three must be green. Warnings are denied, so treat
-clippy lints as errors. The toolchain is pinned in `rust-toolchain.toml` (fbxcel + edition 2024 want
-a recent compiler) — let it select the version. A GitHub-hosted **fallback job** (`ci-hosted`) runs
+clippy lints as errors. The toolchain is pinned to an **exact version** in `rust-toolchain.toml`
+(fbxcel + edition 2024 want a recent compiler) — let it select the version. The pin is exact, not
+`stable`, so the hosted CI job, the self-hosted runner, and every dev clone run the *same* clippy:
+a floating channel let hosted CI pick up a newer clippy whose new lints failed `-D warnings` on
+main post-merge. Bump the pin deliberately, running the full clippy sweep in the same PR. A GitHub-hosted **fallback job** (`ci-hosted`) runs
 the same three gates against the committed synthetic fixtures only (the env-gated real-sample tests
 self-skip there), so a push is still verified when the self-hosted runner is down.
 

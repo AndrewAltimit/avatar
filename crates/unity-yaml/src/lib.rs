@@ -314,10 +314,10 @@ fn md4(data: &[u8]) -> [u8; 16] {
         0x98ba_dcfeu32,
         0x1032_5476u32,
     );
-    for block in msg.chunks_exact(64) {
+    for block in msg.as_chunks::<64>().0 {
         let mut x = [0u32; 16];
-        for (i, w) in block.chunks_exact(4).enumerate() {
-            x[i] = u32::from_le_bytes([w[0], w[1], w[2], w[3]]);
+        for (i, w) in block.as_chunks::<4>().0.iter().enumerate() {
+            x[i] = u32::from_le_bytes(*w);
         }
         let (mut a, mut b, mut c, mut d) = (a0, b0, c0, d0);
         const S1: [u32; 4] = [3, 7, 11, 19];
