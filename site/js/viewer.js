@@ -24,7 +24,7 @@
  *   v.setOverlay('skeleton'|'grid'|'labels'|'autorotate', bool);
  *   v.highlightBone(index|null);            // select a joint from outside (e.g. the bone tree)
  *   v.resetView();                          // re-frame the camera from the bounds
- *   await v.applyTextures(library);         // library.find(relative, absolute, materialName) -> { name, blob, via? } | null:
+ *   await v.applyTextures(library);         // library.find(relative, absolute, materialName, [{mesh, slot}]) -> { name, blob, via? } | null:
  *                                           // resolve external (non-embedded) textures from dropped files
  *   v.textureStatus() -> [{ index, name, path, kind: embedded|file|missing|none|error, source, width, height, alpha, thumb }]
  *   v.onTextures = status => {};            // fires whenever texture decoding settles
@@ -498,7 +498,7 @@ export function createViewer(container, opts = {}) {
   }
 
   // Resolve where a material's texture bytes come from. Returns null if nowhere (yet).
-  function resolveTextureSource(sceneView, matIndex, tinfo, matName) {
+  function resolveTextureSource(sceneView, matIndex, tinfo, matName, uses) {
     if (!tinfo) return null;
     if (tinfo.embedded) {
       let bytes = null;
@@ -507,7 +507,7 @@ export function createViewer(container, opts = {}) {
     }
     const lib = state.library;
     if (lib && typeof lib.find === 'function') {
-      const hit = lib.find(tinfo.relative || null, tinfo.absolute || null, matName || null);
+      const hit = lib.find(tinfo.relative || null, tinfo.absolute || null, matName || null, uses || []);
       if (hit && hit.blob) return { kind: 'file', blob: hit.blob, mime: hit.blob.type || IMAGE_MIME[extOf(hit.name)] || null, name: hit.name, source: hit.via ? `${hit.name} (via ${hit.via})` : hit.name };
     }
     return null;
@@ -517,7 +517,7 @@ export function createViewer(container, opts = {}) {
   async function attachTexture(entry, w) {
     // entry: { index, info, mat, kind, ... } from w.materials
     if (!w || w.dead || !entry || entry.loading || entry.kind === 'embedded' || entry.kind === 'file' || !entry.info.texture) return false;
-    const src = resolveTextureSource(entry.sceneView, entry.index, entry.info.texture, entry.info.name);
+    const src = resolveTextureSource(entry.sceneView, entry.index, entry.info.texture, entry.info.name, entry.uses);
     if (!src) { entry.kind = 'missing'; return false; }
     entry.loading = true;
     try {
@@ -580,8 +580,11 @@ export function createViewer(container, opts = {}) {
       return m;
     };
     // One status entry per manifest material (also the ones no mesh uses), attached lazily.
+    // Where each material is used: [{ mesh, slot }] — a prefab can override materials per slot.
+    const uses = materials.map(() => []);
+    for (const m of meshes) (m.material_slots || []).forEach((mi, slot) => { if (uses[mi]) uses[mi].push({ mesh: m.name, slot }); });
     w.materials = materials.map((info, mi) => ({
-      index: mi, info, sceneView, mat: materialFor(mi, MESH_PALETTE[mi % MESH_PALETTE.length]),
+      index: mi, info, sceneView, uses: uses[mi], mat: materialFor(mi, MESH_PALETTE[mi % MESH_PALETTE.length]),
       kind: info.texture ? 'missing' : 'none', source: null, loading: false,
     }));
 

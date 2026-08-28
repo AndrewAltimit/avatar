@@ -629,6 +629,7 @@ const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'bmp', 'gif', 'webp', 'tga']);
 const extOf = name => { const m = /\.([a-z0-9]+)$/i.exec(name || ''); return m ? m[1].toLowerCase() : ''; };
 const baseOf = path => (path || '').split(/[\\/]/).pop();
 const stemOf = name => name.replace(/\.[a-z0-9]+$/i, '');
+const unquoteYaml = v => { if (v.length >= 2 && v[0] === '"' && v[v.length - 1] === '"') { try { return JSON.parse(v); } catch (e) { return v.slice(1, -1); } } return v; };
 
 /** FBX materials reference textures by (often Windows, often stale) path; an export ships the
  *  images next to the file. Resolution order for a material:
@@ -643,7 +644,11 @@ class TextureLibrary {
     this.byName = new Map(); this.byStem = new Map(); this.entries = [];
     this.mats = new Map();     // lowercase material name → { guid, file }   (from .mat)
     this.byGuid = new Map();   // guid → lowercase image basename          (from .meta)
+    this.matByGuid = new Map();  // material guid → lowercase .mat stem      (from .mat.meta)
+    this.prefabSlots = new Map(); // lowercase renderer GameObject name → [material guid per slot] (from .prefab)
+    this.prefabs = [];
   }
+  get prefabCount() { return this.prefabs.length; }
   get size() { return this.entries.length; }
   get matCount() { return this.mats.size; }
   async add(file, path) {
@@ -651,6 +656,7 @@ class TextureLibrary {
     const ext = extOf(name);
     if (ext === 'mat') return this.addMat(file, name);
     if (ext === 'meta') return this.addMeta(file, name);
+    if (ext === 'prefab') return this.addPrefab(file, name);
     if (!IMAGE_EXTS.has(ext)) return false;
     const entry = { name, path: path || file.name, blob: file };
     this.entries.push(entry);
@@ -670,10 +676,45 @@ class TextureLibrary {
   }
   async addMeta(file, name) {
     const target = name.replace(/\.meta$/i, '');
-    if (!IMAGE_EXTS.has(extOf(target)) || file.size > 256 * 1024) return false;
+    const ext = extOf(target);
+    if ((!IMAGE_EXTS.has(ext) && ext !== 'mat') || file.size > 256 * 1024) return false;
     let text; try { text = await file.text(); } catch (e) { return false; }
     const g = /^guid:\s*([0-9a-f]{32})/mi.exec(text);
-    if (g) this.byGuid.set(g[1].toLowerCase(), target.toLowerCase());
+    if (!g) return false;
+    if (ext === 'mat') this.matByGuid.set(g[1].toLowerCase(), stemOf(target).toLowerCase());
+    else this.byGuid.set(g[1].toLowerCase(), target.toLowerCase());
+    return false;
+  }
+  /** A prefab's renderers override the FBX's material assignment per slot (that is where a
+   *  "same FBX material, different Unity material on one mesh" edit lives). Record, per renderer
+   *  GameObject name, the material guid of each slot. */
+  async addPrefab(file, name) {
+    if (file.size > 32 * 1024 * 1024) return false;
+    let text; try { text = await file.text(); } catch (e) { return false; }
+    const goNames = new Map();   // fileID → name
+    const renderers = [];        // { go: fileID, guids: [] }
+    for (const doc of text.split(/^--- !u!/m).slice(1)) {
+      const head = /^(\d+) &(-?\d+)/.exec(doc);
+      if (!head) continue;
+      const cls = head[1], id = head[2];
+      if (cls === '1') {
+        const nm = /^\s*m_Name:\s*(.+?)\s*$/m.exec(doc);
+        if (nm) goNames.set(id, unquoteYaml(nm[1]));
+      } else if (cls === '137' || cls === '23') {
+        const go = /^\s*m_GameObject:\s*\{fileID:\s*(-?\d+)/m.exec(doc);
+        const block = /^\s*m_Materials:\s*\n((?:\s*-\s*\{[^}]*\}\s*\n?)+)/m.exec(doc);
+        if (!go || !block) continue;
+        const guids = Array.from(block[1].matchAll(/-\s*\{[^}]*?guid:\s*([0-9a-f]{32})/gi), m => m[1].toLowerCase());
+        renderers.push({ go: go[1], guids });
+      }
+    }
+    let n = 0;
+    for (const r of renderers) {
+      const nm = goNames.get(r.go);
+      if (!nm || !r.guids.length) continue;
+      if (!this.prefabSlots.has(nm.toLowerCase())) { this.prefabSlots.set(nm.toLowerCase(), r.guids); n++; }
+    }
+    this.prefabs.push({ name, renderers: n });
     return false;
   }
   async addAll(list) {
@@ -681,14 +722,22 @@ class TextureLibrary {
     for (const x of list) if (await this.add(x.file, x.path)) images++;
     return images;
   }
-  clear() { this.byName.clear(); this.byStem.clear(); this.entries = []; this.mats.clear(); this.byGuid.clear(); }
-  find(relative, absolute, materialName) {
+  clear() { this.byName.clear(); this.byStem.clear(); this.entries = []; this.mats.clear(); this.byGuid.clear(); this.matByGuid.clear(); this.prefabSlots.clear(); this.prefabs = []; }
+  imageForMat(mat) { const img = this.byGuid.get(mat.guid); return img ? this.byName.get(img) : null; }
+  find(relative, absolute, materialName, uses) {
+    // 0. prefab override: which Unity material sits in this mesh's slot.
+    for (const u of uses || []) {
+      const slots = u && u.mesh ? this.prefabSlots.get(u.mesh.toLowerCase()) : null;
+      const guid = slots && slots[u.slot];
+      const stem = guid && this.matByGuid.get(guid);
+      const mat = stem && this.mats.get(stem);
+      const hit = mat && this.imageForMat(mat);
+      if (hit) return { ...hit, via: `${mat.file} (prefab: ${u.mesh} slot ${u.slot})` };
+    }
     const stems = [materialName, stemOf(baseOf(relative)), stemOf(baseOf(absolute))].filter(Boolean).map(x => x.toLowerCase());
     for (const key of stems) {
       const mat = this.mats.get(key);
-      if (!mat) continue;
-      const img = this.byGuid.get(mat.guid);
-      const hit = img && this.byName.get(img);
+      const hit = mat && this.imageForMat(mat);
       if (hit) return { ...hit, via: mat.file };
     }
     for (const p of [relative, absolute]) {
@@ -758,7 +807,8 @@ function renderTextures(report, ctx) {
     const summary = h('p', { class: 'an-tex-summary' },
       `${refs.length} texture reference${refs.length === 1 ? '' : 's'} · ${embedded} embedded · ${refs.length - embedded} external`,
       libSize ? ` · ${libSize} image file${libSize === 1 ? '' : 's'} added` : null,
-      ctx.library && ctx.library.matCount ? ` · ${ctx.library.matCount} Unity .mat read` : null);
+      ctx.library && ctx.library.matCount ? ` · ${ctx.library.matCount} Unity .mat read` : null,
+      ctx.library && ctx.library.prefabCount ? ` · ${ctx.library.prefabCount} prefab read` : null);
     out.append(summary);
     if (missing.length && !ctx.viewer) {
       out.append(h('div', { class: 'notice' }, 'Texture resolution needs the 3D preview, which is unavailable here.'));
@@ -767,7 +817,7 @@ function renderTextures(report, ctx) {
         h('div', { class: 'notice-title' }, `${missing.length} texture${missing.length === 1 ? ' is' : 's are'} not in the FBX`),
         h('p', {}, 'This export references its images by path instead of embedding them (typical for Blender / MMD exports). ',
           'Drop the image files — or the whole folder next to the ', h('code', {}, '.fbx'), ' — anywhere on this page and they are matched by filename. ',
-          'If the folder is a Unity project (', h('code', {}, '.mat'), ' + ', h('code', {}, '.meta'), ' files), the materials\' actual main textures are used, even where the FBX path is stale. ',
+          'If the folder is a Unity project (', h('code', {}, '.mat'), ' + ', h('code', {}, '.meta'), ' files), the materials\' actual main textures are used, even where the FBX path is stale; include the avatar\'s ', h('code', {}, '.prefab'), ' and per-slot material overrides are honoured too. ',
           'Nothing is uploaded.'),
         h('div', { class: 'an-tex-actions' },
           h('button', { type: 'button', class: 'an-btn an-btn-primary', onclick: () => document.getElementById('an-texfiles').click() }, 'Add image files…'),
@@ -1177,14 +1227,17 @@ async function boot() {
     const nImg = list.filter(x => IMAGE_EXTS.has(extOf(x.file.name))).length;
     const nMat = list.filter(x => extOf(x.file.name) === 'mat').length;
     const nMeta = list.filter(x => extOf(x.file.name) === 'meta').length;
-    status.textContent = `Received ${list.length} file${list.length === 1 ? '' : 's'}: ${fbx.length} .fbx, ${nImg} image${nImg === 1 ? '' : 's'}, ${nMat} .mat, ${nMeta} .meta…`;
+    const nPrefab = list.filter(x => extOf(x.file.name) === 'prefab').length;
+    status.textContent = `Received ${list.length} file${list.length === 1 ? '' : 's'}: ${fbx.length} .fbx, ${nImg} image${nImg === 1 ? '' : 's'}, ${nMat} .mat, ${nMeta} .meta, ${nPrefab} .prefab…`;
     console.info('inspector: drop contained', { files: list.length, fbx: fbx.length, images: nImg, mat: nMat, meta: nMeta });
     await new Promise(r => setTimeout(r, 0));
-    // Dropping the folder the loaded avatar sits in shouldn't re-analyze the same file.
-    if (ctx.report && fbx.length === 1 && fbx[0].file.name === ctx.fileName && fbx[0].file.size === ctx.fileSize) fbx = [];
+    // Dropping the project folder the loaded avatar sits in shouldn't re-analyze it (nor swap it
+    // for some other .fbx in the tree — SDK samples, props); with several new ones, take the biggest.
+    if (ctx.report && fbx.some(x => x.file.name === ctx.fileName && x.file.size === ctx.fileSize)) fbx = [];
+    fbx.sort((a, b) => b.file.size - a.file.size);
     const added = await ctx.library.addAll(list);
     if (fbx.length) {
-      if (fbx.length > 1) status.textContent = `Several .fbx files dropped — loading ${fbx[0].file.name}.`;
+      if (fbx.length > 1) status.textContent = `Several .fbx files dropped — loading the largest, ${fbx[0].file.name}.`;
       await handleFile(fbx[0].file);   // textures resolve during load, via onTextures
       return;
     }
