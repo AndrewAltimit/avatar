@@ -402,6 +402,7 @@ export function createViewer(container, opts = {}) {
   // --- scene construction --------------------------------------------------------
   function freeWorld() {
     if (!world) return;
+    world.dead = true;   // in-flight texture decodes for it must not touch disposed materials
     stopHover();
     scene.remove(world.group);
     for (const g of world.geoms) g.dispose();
@@ -512,18 +513,18 @@ export function createViewer(container, opts = {}) {
     return null;
   }
 
-  async function attachTexture(entry) {
-    // entry: { index, info, mat, status, ... } from world.materials
-    if (!world || !entry || entry.loading || entry.kind === 'embedded' || entry.kind === 'file' || !entry.info.texture) return false;
+  // `w` is the scene the entry belongs to — during the initial build it is not yet `world`.
+  async function attachTexture(entry, w) {
+    // entry: { index, info, mat, kind, ... } from w.materials
+    if (!w || w.dead || !entry || entry.loading || entry.kind === 'embedded' || entry.kind === 'file' || !entry.info.texture) return false;
     const src = resolveTextureSource(entry.sceneView, entry.index, entry.info.texture, entry.info.name);
     if (!src) { entry.kind = 'missing'; return false; }
     entry.loading = true;
-    const w = world;
     try {
       const bytes = src.bytes || new Uint8Array(await src.blob.arrayBuffer());
-      if (state.disposed || world !== w) return false;
+      if (state.disposed || w.dead) return false;
       const r = await decodeTexture(bytes, src.mime, src.name, w);
-      if (state.disposed || world !== w) return false;
+      if (state.disposed || w.dead) return false;
       const m = entry.mat;
       m.map = r.tex;
       if (r.alpha) { m.transparent = true; m.alphaTest = 0.02; m.depthWrite = true; }
@@ -663,7 +664,7 @@ export function createViewer(container, opts = {}) {
       bones: (manifest.bones || []).length,
     };
     // Textures decode in the background; the scene is usable immediately.
-    texJobs.push(...w.materials.map(e => attachTexture(e)));
+    texJobs.push(...w.materials.map(e => attachTexture(e, w)));
     Promise.all(texJobs).then(() => { if (world === w) notifyTextures(); }).catch(() => {});
   }
 
@@ -999,7 +1000,7 @@ export function createViewer(container, opts = {}) {
       if (library !== undefined) state.library = library;
       if (!world) return [];
       const w = world;
-      await Promise.all(w.materials.map(e => attachTexture(e)));
+      await Promise.all(w.materials.map(e => attachTexture(e, w)));
       if (world === w) notifyTextures();
       return textureStatus();
     },
