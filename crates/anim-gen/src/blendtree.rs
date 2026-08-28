@@ -24,8 +24,11 @@ use crate::IdGen;
 use crate::gesture::{CONDITION_GREATER, CONDITION_LESS};
 use crate::yaml_emit::{Emitter, ObjectRef};
 
-/// `m_BlendType` on a BlendTree: 0 = Simple 1D. (2D and Direct exist; this generator emits 1D.)
+/// `m_BlendType` on a BlendTree: 0 = Simple 1D.
 pub const BLEND_TYPE_1D: i64 = 0;
+/// `m_BlendType`: 2D Freeform Cartesian — children live at `(x, y)` positions and the tree
+/// interpolates over the two blend parameters. The shape used for capped two-hand sums.
+pub const BLEND_TYPE_2D_FREEFORM_CARTESIAN: i64 = 3;
 
 /// One child motion of a blend tree.
 #[derive(Debug, Clone)]
@@ -33,8 +36,10 @@ pub struct ChildMotion {
     /// The motion this child plays: a clip (external `.anim`, by guid) or a nested tree (local
     /// fileID). Use [`ObjectRef::external`] for a clip and [`ObjectRef::local`] for a nested tree.
     pub motion: ObjectRef,
-    /// The blend-parameter value at which this child is fully weighted.
+    /// The blend-parameter value at which this child is fully weighted (1D trees).
     pub threshold: f32,
+    /// The child's `(x, y)` sample position (2D trees); `(0, 0)` on 1D children.
+    pub position: (f32, f32),
     /// `m_TimeScale` (playback speed); 1 for normal.
     pub time_scale: f32,
     /// `m_Mirror`.
@@ -48,6 +53,18 @@ impl ChildMotion {
         ChildMotion {
             motion: ObjectRef::external(7400000, guid, 2),
             threshold,
+            position: (0.0, 0.0),
+            time_scale: 1.0,
+            mirror: false,
+        }
+    }
+
+    /// A child clip pinned at a 2D sample position (freeform-cartesian trees).
+    pub fn at(motion: ObjectRef, x: f32, y: f32) -> Self {
+        ChildMotion {
+            motion,
+            threshold: 0.0,
+            position: (x, y),
             time_scale: 1.0,
             mirror: false,
         }
@@ -58,6 +75,7 @@ impl ChildMotion {
         ChildMotion {
             motion,
             threshold,
+            position: (0.0, 0.0),
             time_scale: 1.0,
             mirror: false,
         }
@@ -68,8 +86,12 @@ impl ChildMotion {
 #[derive(Debug, Clone)]
 pub struct BlendTree {
     pub name: String,
-    /// The blend parameter, e.g. `GestureLeftWeight`.
+    /// The blend parameter, e.g. `GestureLeftWeight` (the X axis for 2D trees).
     pub blend_parameter: String,
+    /// The Y-axis blend parameter (2D trees; Unity's default filler `Blend` otherwise).
+    pub blend_parameter_y: String,
+    /// `m_BlendType`: [`BLEND_TYPE_1D`] or [`BLEND_TYPE_2D_FREEFORM_CARTESIAN`].
+    pub blend_type: i64,
     pub children: Vec<ChildMotion>,
     /// `m_UseAutomaticThresholds`: when true Unity spreads thresholds evenly and ignores the
     /// per-child values. We default to *false* (explicit thresholds) so analog mapping is exact.
@@ -82,6 +104,27 @@ impl BlendTree {
         BlendTree {
             name: name.into(),
             blend_parameter: blend_parameter.into(),
+            blend_parameter_y: "Blend".into(),
+            blend_type: BLEND_TYPE_1D,
+            children: Vec::new(),
+            automatic_thresholds: false,
+        }
+    }
+
+    /// A 2D **freeform-cartesian** tree over `(x_parameter, y_parameter)` — children are placed
+    /// with [`ChildMotion::at`]. The shape used for the capped two-hand sum: samples encoding
+    /// `f(x, y) = min(x + y, 1)` (neutral at the origin, half-strength at `(0.5, 0)`/`(0, 0.5)`,
+    /// full everywhere on and past the `x + y = 1` diagonal).
+    pub fn freeform_2d(
+        name: impl Into<String>,
+        x_parameter: impl Into<String>,
+        y_parameter: impl Into<String>,
+    ) -> Self {
+        BlendTree {
+            name: name.into(),
+            blend_parameter: x_parameter.into(),
+            blend_parameter_y: y_parameter.into(),
+            blend_type: BLEND_TYPE_2D_FREEFORM_CARTESIAN,
             children: Vec::new(),
             automatic_thresholds: false,
         }
@@ -123,12 +166,12 @@ impl BlendTree {
             }
             // `m_BlendParameter` / `m_BlendParameterY` are *string* fields (parameter names).
             e.kv("m_BlendParameter", &self.blend_parameter);
-            e.kv("m_BlendParameterY", "Blend");
+            e.kv("m_BlendParameterY", &self.blend_parameter_y);
             e.kv_i64("m_MinThreshold", 0);
             e.kv_f32("m_MaxThreshold", self.max_threshold());
             e.kv_i64("m_UseAutomaticThresholds", self.automatic_thresholds as i64);
             e.kv_i64("m_NormalizedBlendValues", 0);
-            e.kv_i64("m_BlendType", BLEND_TYPE_1D);
+            e.kv_i64("m_BlendType", self.blend_type);
         });
     }
 
@@ -372,7 +415,14 @@ fn emit_child(e: &mut Emitter, c: &ChildMotion) {
     e.indented(|e| {
         e.kv_ref("m_Motion", &c.motion);
         e.kv_f32("m_Threshold", c.threshold);
-        e.kv("m_Position", "{x: 0, y: 0}");
+        e.kv(
+            "m_Position",
+            &format!(
+                "{{x: {}, y: {}}}",
+                crate::yaml_emit::fmt_f32(c.position.0),
+                crate::yaml_emit::fmt_f32(c.position.1)
+            ),
+        );
         e.kv_f32("m_TimeScale", c.time_scale);
         e.kv_i64("m_CycleOffset", 0);
         // `m_DirectBlendParameter` is a *string* (only meaningful for a Direct tree); Unity writes

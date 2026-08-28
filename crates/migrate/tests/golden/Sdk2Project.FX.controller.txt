@@ -69,12 +69,14 @@ AnimatorStateMachine:
     - serializedVersion: 1
       m_State: {fileID: 335705499531228}
       m_Position: {x: 300, y: 240, z: 0}
+    - serializedVersion: 1
+      m_State: {fileID: 335705499531230}
+      m_Position: {x: 300, y: 300, z: 0}
+    - serializedVersion: 1
+      m_State: {fileID: 335705499531232}
+      m_Position: {x: 300, y: 360, z: 0}
   m_ChildStateMachines: []
   m_AnyStateTransitions:
-    - {fileID: 335705499531230}
-    - {fileID: 335705499531231}
-    - {fileID: 335705499531232}
-    - {fileID: 335705499531233}
     - {fileID: 335705499531234}
     - {fileID: 335705499531235}
     - {fileID: 335705499531236}
@@ -93,6 +95,12 @@ AnimatorStateMachine:
     - {fileID: 335705499531249}
     - {fileID: 335705499531250}
     - {fileID: 335705499531251}
+    - {fileID: 335705499531252}
+    - {fileID: 335705499531253}
+    - {fileID: 335705499531254}
+    - {fileID: 335705499531255}
+    - {fileID: 335705499531256}
+    - {fileID: 335705499531257}
   m_EntryTransitions: []
   m_StateMachineTransitions: {}
   m_StateMachineBehaviours: []
@@ -182,7 +190,7 @@ AnimatorState:
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_Name: Victory L
+  m_Name: Fist LR
   m_Speed: 1
   m_CycleOffset: 0
   m_Transitions: []
@@ -207,7 +215,7 @@ AnimatorState:
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_Name: Victory R
+  m_Name: Victory L
   m_Speed: 1
   m_CycleOffset: 0
   m_Transitions: []
@@ -226,118 +234,56 @@ AnimatorState:
   m_MirrorParameter: 
   m_CycleOffsetParameter: 
   m_TimeParameter: 
---- !u!1101 &335705499531230
-AnimatorStateTransition:
+--- !u!1102 &335705499531230
+AnimatorState:
   m_ObjectHideFlags: 1
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_Name: 
-  m_Conditions:
-    - m_ConditionMode: 6
-      m_ConditionEvent: GestureLeft
-      m_EventTreshold: 0
-    - m_ConditionMode: 6
-      m_ConditionEvent: GestureRight
-      m_EventTreshold: 0
-  m_DstStateMachine: {fileID: 0}
-  m_DstState: {fileID: 335705499531221}
-  m_Solo: 0
-  m_Mute: 0
-  m_IsExit: 0
-  serializedVersion: 3
-  m_TransitionDuration: 0.1
-  m_TransitionOffset: 0
-  m_ExitTime: 0.75
-  m_HasExitTime: 0
-  m_HasFixedDuration: 1
-  m_InterruptionSource: 0
-  m_OrderedInterruption: 1
-  m_CanTransitionToSelf: 0
---- !u!1101 &335705499531231
-AnimatorStateTransition:
+  m_Name: Victory R
+  m_Speed: 1
+  m_CycleOffset: 0
+  m_Transitions: []
+  m_StateMachineBehaviours: []
+  m_Position: {x: 50, y: 50, z: 0}
+  m_IKOnFeet: 0
+  m_WriteDefaultValues: 0
+  m_Mirror: 0
+  m_SpeedParameterActive: 0
+  m_MirrorParameterActive: 0
+  m_CycleOffsetParameterActive: 0
+  m_TimeParameterActive: 0
+  m_Motion: {fileID: 335705499531231}
+  m_Tag: 
+  m_SpeedParameter: 
+  m_MirrorParameter: 
+  m_CycleOffsetParameter: 
+  m_TimeParameter: 
+--- !u!1102 &335705499531232
+AnimatorState:
   m_ObjectHideFlags: 1
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_Name: 
-  m_Conditions:
-    - m_ConditionMode: 6
-      m_ConditionEvent: GestureLeft
-      m_EventTreshold: 1
-    - m_ConditionMode: 6
-      m_ConditionEvent: GestureRight
-      m_EventTreshold: 0
-  m_DstStateMachine: {fileID: 0}
-  m_DstState: {fileID: 335705499531222}
-  m_Solo: 0
-  m_Mute: 0
-  m_IsExit: 0
-  serializedVersion: 3
-  m_TransitionDuration: 0.1
-  m_TransitionOffset: 0
-  m_ExitTime: 0.75
-  m_HasExitTime: 0
-  m_HasFixedDuration: 1
-  m_InterruptionSource: 0
-  m_OrderedInterruption: 1
-  m_CanTransitionToSelf: 0
---- !u!1101 &335705499531232
-AnimatorStateTransition:
-  m_ObjectHideFlags: 1
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_Name: 
-  m_Conditions:
-    - m_ConditionMode: 6
-      m_ConditionEvent: GestureLeft
-      m_EventTreshold: 1
-    - m_ConditionMode: 4
-      m_ConditionEvent: GestureRightWeight
-      m_EventTreshold: 0.02
-  m_DstStateMachine: {fileID: 0}
-  m_DstState: {fileID: 335705499531222}
-  m_Solo: 0
-  m_Mute: 0
-  m_IsExit: 0
-  serializedVersion: 3
-  m_TransitionDuration: 0.1
-  m_TransitionOffset: 0
-  m_ExitTime: 0.75
-  m_HasExitTime: 0
-  m_HasFixedDuration: 1
-  m_InterruptionSource: 0
-  m_OrderedInterruption: 1
-  m_CanTransitionToSelf: 0
---- !u!1101 &335705499531233
-AnimatorStateTransition:
-  m_ObjectHideFlags: 1
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_Name: 
-  m_Conditions:
-    - m_ConditionMode: 6
-      m_ConditionEvent: GestureRight
-      m_EventTreshold: 1
-    - m_ConditionMode: 3
-      m_ConditionEvent: GestureRightWeight
-      m_EventTreshold: 0.05
-  m_DstStateMachine: {fileID: 0}
-  m_DstState: {fileID: 335705499531224}
-  m_Solo: 0
-  m_Mute: 0
-  m_IsExit: 0
-  serializedVersion: 3
-  m_TransitionDuration: 0.1
-  m_TransitionOffset: 0
-  m_ExitTime: 0.75
-  m_HasExitTime: 0
-  m_HasFixedDuration: 1
-  m_InterruptionSource: 0
-  m_OrderedInterruption: 1
-  m_CanTransitionToSelf: 0
+  m_Name: Victory LR
+  m_Speed: 1
+  m_CycleOffset: 0
+  m_Transitions: []
+  m_StateMachineBehaviours: []
+  m_Position: {x: 50, y: 50, z: 0}
+  m_IKOnFeet: 0
+  m_WriteDefaultValues: 0
+  m_Mirror: 0
+  m_SpeedParameterActive: 0
+  m_MirrorParameterActive: 0
+  m_CycleOffsetParameterActive: 0
+  m_TimeParameterActive: 0
+  m_Motion: {fileID: 335705499531233}
+  m_Tag: 
+  m_SpeedParameter: 
+  m_MirrorParameter: 
+  m_CycleOffsetParameter: 
+  m_TimeParameter: 
 --- !u!1101 &335705499531234
 AnimatorStateTransition:
   m_ObjectHideFlags: 1
@@ -348,7 +294,7 @@ AnimatorStateTransition:
   m_Conditions:
     - m_ConditionMode: 6
       m_ConditionEvent: GestureLeft
-      m_EventTreshold: 2
+      m_EventTreshold: 0
     - m_ConditionMode: 6
       m_ConditionEvent: GestureRight
       m_EventTreshold: 0
@@ -376,12 +322,12 @@ AnimatorStateTransition:
   m_Conditions:
     - m_ConditionMode: 6
       m_ConditionEvent: GestureLeft
-      m_EventTreshold: 2
-    - m_ConditionMode: 4
-      m_ConditionEvent: GestureRightWeight
-      m_EventTreshold: 0.02
+      m_EventTreshold: 1
+    - m_ConditionMode: 6
+      m_ConditionEvent: GestureRight
+      m_EventTreshold: 1
   m_DstStateMachine: {fileID: 0}
-  m_DstState: {fileID: 335705499531221}
+  m_DstState: {fileID: 335705499531226}
   m_Solo: 0
   m_Mute: 0
   m_IsExit: 0
@@ -403,13 +349,13 @@ AnimatorStateTransition:
   m_Name: 
   m_Conditions:
     - m_ConditionMode: 6
+      m_ConditionEvent: GestureLeft
+      m_EventTreshold: 1
+    - m_ConditionMode: 6
       m_ConditionEvent: GestureRight
-      m_EventTreshold: 2
-    - m_ConditionMode: 3
-      m_ConditionEvent: GestureRightWeight
-      m_EventTreshold: 0.05
+      m_EventTreshold: 0
   m_DstStateMachine: {fileID: 0}
-  m_DstState: {fileID: 335705499531221}
+  m_DstState: {fileID: 335705499531222}
   m_Solo: 0
   m_Mute: 0
   m_IsExit: 0
@@ -432,12 +378,15 @@ AnimatorStateTransition:
   m_Conditions:
     - m_ConditionMode: 6
       m_ConditionEvent: GestureLeft
-      m_EventTreshold: 3
-    - m_ConditionMode: 6
+      m_EventTreshold: 1
+    - m_ConditionMode: 4
+      m_ConditionEvent: GestureRightWeight
+      m_EventTreshold: 0.02
+    - m_ConditionMode: 7
       m_ConditionEvent: GestureRight
-      m_EventTreshold: 0
+      m_EventTreshold: 1
   m_DstStateMachine: {fileID: 0}
-  m_DstState: {fileID: 335705499531221}
+  m_DstState: {fileID: 335705499531222}
   m_Solo: 0
   m_Mute: 0
   m_IsExit: 0
@@ -459,13 +408,16 @@ AnimatorStateTransition:
   m_Name: 
   m_Conditions:
     - m_ConditionMode: 6
-      m_ConditionEvent: GestureLeft
-      m_EventTreshold: 3
-    - m_ConditionMode: 4
+      m_ConditionEvent: GestureRight
+      m_EventTreshold: 1
+    - m_ConditionMode: 3
       m_ConditionEvent: GestureRightWeight
-      m_EventTreshold: 0.02
+      m_EventTreshold: 0.05
+    - m_ConditionMode: 7
+      m_ConditionEvent: GestureLeft
+      m_EventTreshold: 1
   m_DstStateMachine: {fileID: 0}
-  m_DstState: {fileID: 335705499531221}
+  m_DstState: {fileID: 335705499531224}
   m_Solo: 0
   m_Mute: 0
   m_IsExit: 0
@@ -487,11 +439,11 @@ AnimatorStateTransition:
   m_Name: 
   m_Conditions:
     - m_ConditionMode: 6
+      m_ConditionEvent: GestureLeft
+      m_EventTreshold: 2
+    - m_ConditionMode: 6
       m_ConditionEvent: GestureRight
-      m_EventTreshold: 3
-    - m_ConditionMode: 3
-      m_ConditionEvent: GestureRightWeight
-      m_EventTreshold: 0.05
+      m_EventTreshold: 0
   m_DstStateMachine: {fileID: 0}
   m_DstState: {fileID: 335705499531221}
   m_Solo: 0
@@ -516,12 +468,15 @@ AnimatorStateTransition:
   m_Conditions:
     - m_ConditionMode: 6
       m_ConditionEvent: GestureLeft
-      m_EventTreshold: 4
-    - m_ConditionMode: 6
+      m_EventTreshold: 2
+    - m_ConditionMode: 4
+      m_ConditionEvent: GestureRightWeight
+      m_EventTreshold: 0.02
+    - m_ConditionMode: 7
       m_ConditionEvent: GestureRight
-      m_EventTreshold: 0
+      m_EventTreshold: 2
   m_DstStateMachine: {fileID: 0}
-  m_DstState: {fileID: 335705499531226}
+  m_DstState: {fileID: 335705499531221}
   m_Solo: 0
   m_Mute: 0
   m_IsExit: 0
@@ -543,13 +498,16 @@ AnimatorStateTransition:
   m_Name: 
   m_Conditions:
     - m_ConditionMode: 6
-      m_ConditionEvent: GestureLeft
-      m_EventTreshold: 4
-    - m_ConditionMode: 4
+      m_ConditionEvent: GestureRight
+      m_EventTreshold: 2
+    - m_ConditionMode: 3
       m_ConditionEvent: GestureRightWeight
-      m_EventTreshold: 0.02
+      m_EventTreshold: 0.05
+    - m_ConditionMode: 7
+      m_ConditionEvent: GestureLeft
+      m_EventTreshold: 2
   m_DstStateMachine: {fileID: 0}
-  m_DstState: {fileID: 335705499531226}
+  m_DstState: {fileID: 335705499531221}
   m_Solo: 0
   m_Mute: 0
   m_IsExit: 0
@@ -571,13 +529,13 @@ AnimatorStateTransition:
   m_Name: 
   m_Conditions:
     - m_ConditionMode: 6
+      m_ConditionEvent: GestureLeft
+      m_EventTreshold: 3
+    - m_ConditionMode: 6
       m_ConditionEvent: GestureRight
-      m_EventTreshold: 4
-    - m_ConditionMode: 3
-      m_ConditionEvent: GestureRightWeight
-      m_EventTreshold: 0.05
+      m_EventTreshold: 0
   m_DstStateMachine: {fileID: 0}
-  m_DstState: {fileID: 335705499531228}
+  m_DstState: {fileID: 335705499531221}
   m_Solo: 0
   m_Mute: 0
   m_IsExit: 0
@@ -600,10 +558,13 @@ AnimatorStateTransition:
   m_Conditions:
     - m_ConditionMode: 6
       m_ConditionEvent: GestureLeft
-      m_EventTreshold: 5
-    - m_ConditionMode: 6
+      m_EventTreshold: 3
+    - m_ConditionMode: 4
+      m_ConditionEvent: GestureRightWeight
+      m_EventTreshold: 0.02
+    - m_ConditionMode: 7
       m_ConditionEvent: GestureRight
-      m_EventTreshold: 0
+      m_EventTreshold: 3
   m_DstStateMachine: {fileID: 0}
   m_DstState: {fileID: 335705499531221}
   m_Solo: 0
@@ -627,11 +588,14 @@ AnimatorStateTransition:
   m_Name: 
   m_Conditions:
     - m_ConditionMode: 6
-      m_ConditionEvent: GestureLeft
-      m_EventTreshold: 5
-    - m_ConditionMode: 4
+      m_ConditionEvent: GestureRight
+      m_EventTreshold: 3
+    - m_ConditionMode: 3
       m_ConditionEvent: GestureRightWeight
-      m_EventTreshold: 0.02
+      m_EventTreshold: 0.05
+    - m_ConditionMode: 7
+      m_ConditionEvent: GestureLeft
+      m_EventTreshold: 3
   m_DstStateMachine: {fileID: 0}
   m_DstState: {fileID: 335705499531221}
   m_Solo: 0
@@ -655,13 +619,13 @@ AnimatorStateTransition:
   m_Name: 
   m_Conditions:
     - m_ConditionMode: 6
+      m_ConditionEvent: GestureLeft
+      m_EventTreshold: 4
+    - m_ConditionMode: 6
       m_ConditionEvent: GestureRight
-      m_EventTreshold: 5
-    - m_ConditionMode: 3
-      m_ConditionEvent: GestureRightWeight
-      m_EventTreshold: 0.05
+      m_EventTreshold: 4
   m_DstStateMachine: {fileID: 0}
-  m_DstState: {fileID: 335705499531221}
+  m_DstState: {fileID: 335705499531232}
   m_Solo: 0
   m_Mute: 0
   m_IsExit: 0
@@ -684,12 +648,12 @@ AnimatorStateTransition:
   m_Conditions:
     - m_ConditionMode: 6
       m_ConditionEvent: GestureLeft
-      m_EventTreshold: 6
+      m_EventTreshold: 4
     - m_ConditionMode: 6
       m_ConditionEvent: GestureRight
       m_EventTreshold: 0
   m_DstStateMachine: {fileID: 0}
-  m_DstState: {fileID: 335705499531221}
+  m_DstState: {fileID: 335705499531228}
   m_Solo: 0
   m_Mute: 0
   m_IsExit: 0
@@ -712,12 +676,15 @@ AnimatorStateTransition:
   m_Conditions:
     - m_ConditionMode: 6
       m_ConditionEvent: GestureLeft
-      m_EventTreshold: 6
+      m_EventTreshold: 4
     - m_ConditionMode: 4
       m_ConditionEvent: GestureRightWeight
       m_EventTreshold: 0.02
+    - m_ConditionMode: 7
+      m_ConditionEvent: GestureRight
+      m_EventTreshold: 4
   m_DstStateMachine: {fileID: 0}
-  m_DstState: {fileID: 335705499531221}
+  m_DstState: {fileID: 335705499531228}
   m_Solo: 0
   m_Mute: 0
   m_IsExit: 0
@@ -740,12 +707,15 @@ AnimatorStateTransition:
   m_Conditions:
     - m_ConditionMode: 6
       m_ConditionEvent: GestureRight
-      m_EventTreshold: 6
+      m_EventTreshold: 4
     - m_ConditionMode: 3
       m_ConditionEvent: GestureRightWeight
       m_EventTreshold: 0.05
+    - m_ConditionMode: 7
+      m_ConditionEvent: GestureLeft
+      m_EventTreshold: 4
   m_DstStateMachine: {fileID: 0}
-  m_DstState: {fileID: 335705499531221}
+  m_DstState: {fileID: 335705499531230}
   m_Solo: 0
   m_Mute: 0
   m_IsExit: 0
@@ -768,7 +738,7 @@ AnimatorStateTransition:
   m_Conditions:
     - m_ConditionMode: 6
       m_ConditionEvent: GestureLeft
-      m_EventTreshold: 7
+      m_EventTreshold: 5
     - m_ConditionMode: 6
       m_ConditionEvent: GestureRight
       m_EventTreshold: 0
@@ -796,10 +766,13 @@ AnimatorStateTransition:
   m_Conditions:
     - m_ConditionMode: 6
       m_ConditionEvent: GestureLeft
-      m_EventTreshold: 7
+      m_EventTreshold: 5
     - m_ConditionMode: 4
       m_ConditionEvent: GestureRightWeight
       m_EventTreshold: 0.02
+    - m_ConditionMode: 7
+      m_ConditionEvent: GestureRight
+      m_EventTreshold: 5
   m_DstStateMachine: {fileID: 0}
   m_DstState: {fileID: 335705499531221}
   m_Solo: 0
@@ -824,10 +797,193 @@ AnimatorStateTransition:
   m_Conditions:
     - m_ConditionMode: 6
       m_ConditionEvent: GestureRight
+      m_EventTreshold: 5
+    - m_ConditionMode: 3
+      m_ConditionEvent: GestureRightWeight
+      m_EventTreshold: 0.05
+    - m_ConditionMode: 7
+      m_ConditionEvent: GestureLeft
+      m_EventTreshold: 5
+  m_DstStateMachine: {fileID: 0}
+  m_DstState: {fileID: 335705499531221}
+  m_Solo: 0
+  m_Mute: 0
+  m_IsExit: 0
+  serializedVersion: 3
+  m_TransitionDuration: 0.1
+  m_TransitionOffset: 0
+  m_ExitTime: 0.75
+  m_HasExitTime: 0
+  m_HasFixedDuration: 1
+  m_InterruptionSource: 0
+  m_OrderedInterruption: 1
+  m_CanTransitionToSelf: 0
+--- !u!1101 &335705499531252
+AnimatorStateTransition:
+  m_ObjectHideFlags: 1
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: 
+  m_Conditions:
+    - m_ConditionMode: 6
+      m_ConditionEvent: GestureLeft
+      m_EventTreshold: 6
+    - m_ConditionMode: 6
+      m_ConditionEvent: GestureRight
+      m_EventTreshold: 0
+  m_DstStateMachine: {fileID: 0}
+  m_DstState: {fileID: 335705499531221}
+  m_Solo: 0
+  m_Mute: 0
+  m_IsExit: 0
+  serializedVersion: 3
+  m_TransitionDuration: 0.1
+  m_TransitionOffset: 0
+  m_ExitTime: 0.75
+  m_HasExitTime: 0
+  m_HasFixedDuration: 1
+  m_InterruptionSource: 0
+  m_OrderedInterruption: 1
+  m_CanTransitionToSelf: 0
+--- !u!1101 &335705499531253
+AnimatorStateTransition:
+  m_ObjectHideFlags: 1
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: 
+  m_Conditions:
+    - m_ConditionMode: 6
+      m_ConditionEvent: GestureLeft
+      m_EventTreshold: 6
+    - m_ConditionMode: 4
+      m_ConditionEvent: GestureRightWeight
+      m_EventTreshold: 0.02
+    - m_ConditionMode: 7
+      m_ConditionEvent: GestureRight
+      m_EventTreshold: 6
+  m_DstStateMachine: {fileID: 0}
+  m_DstState: {fileID: 335705499531221}
+  m_Solo: 0
+  m_Mute: 0
+  m_IsExit: 0
+  serializedVersion: 3
+  m_TransitionDuration: 0.1
+  m_TransitionOffset: 0
+  m_ExitTime: 0.75
+  m_HasExitTime: 0
+  m_HasFixedDuration: 1
+  m_InterruptionSource: 0
+  m_OrderedInterruption: 1
+  m_CanTransitionToSelf: 0
+--- !u!1101 &335705499531254
+AnimatorStateTransition:
+  m_ObjectHideFlags: 1
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: 
+  m_Conditions:
+    - m_ConditionMode: 6
+      m_ConditionEvent: GestureRight
+      m_EventTreshold: 6
+    - m_ConditionMode: 3
+      m_ConditionEvent: GestureRightWeight
+      m_EventTreshold: 0.05
+    - m_ConditionMode: 7
+      m_ConditionEvent: GestureLeft
+      m_EventTreshold: 6
+  m_DstStateMachine: {fileID: 0}
+  m_DstState: {fileID: 335705499531221}
+  m_Solo: 0
+  m_Mute: 0
+  m_IsExit: 0
+  serializedVersion: 3
+  m_TransitionDuration: 0.1
+  m_TransitionOffset: 0
+  m_ExitTime: 0.75
+  m_HasExitTime: 0
+  m_HasFixedDuration: 1
+  m_InterruptionSource: 0
+  m_OrderedInterruption: 1
+  m_CanTransitionToSelf: 0
+--- !u!1101 &335705499531255
+AnimatorStateTransition:
+  m_ObjectHideFlags: 1
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: 
+  m_Conditions:
+    - m_ConditionMode: 6
+      m_ConditionEvent: GestureLeft
+      m_EventTreshold: 7
+    - m_ConditionMode: 6
+      m_ConditionEvent: GestureRight
+      m_EventTreshold: 0
+  m_DstStateMachine: {fileID: 0}
+  m_DstState: {fileID: 335705499531221}
+  m_Solo: 0
+  m_Mute: 0
+  m_IsExit: 0
+  serializedVersion: 3
+  m_TransitionDuration: 0.1
+  m_TransitionOffset: 0
+  m_ExitTime: 0.75
+  m_HasExitTime: 0
+  m_HasFixedDuration: 1
+  m_InterruptionSource: 0
+  m_OrderedInterruption: 1
+  m_CanTransitionToSelf: 0
+--- !u!1101 &335705499531256
+AnimatorStateTransition:
+  m_ObjectHideFlags: 1
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: 
+  m_Conditions:
+    - m_ConditionMode: 6
+      m_ConditionEvent: GestureLeft
+      m_EventTreshold: 7
+    - m_ConditionMode: 4
+      m_ConditionEvent: GestureRightWeight
+      m_EventTreshold: 0.02
+    - m_ConditionMode: 7
+      m_ConditionEvent: GestureRight
+      m_EventTreshold: 7
+  m_DstStateMachine: {fileID: 0}
+  m_DstState: {fileID: 335705499531221}
+  m_Solo: 0
+  m_Mute: 0
+  m_IsExit: 0
+  serializedVersion: 3
+  m_TransitionDuration: 0.1
+  m_TransitionOffset: 0
+  m_ExitTime: 0.75
+  m_HasExitTime: 0
+  m_HasFixedDuration: 1
+  m_InterruptionSource: 0
+  m_OrderedInterruption: 1
+  m_CanTransitionToSelf: 0
+--- !u!1101 &335705499531257
+AnimatorStateTransition:
+  m_ObjectHideFlags: 1
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: 
+  m_Conditions:
+    - m_ConditionMode: 6
+      m_ConditionEvent: GestureRight
       m_EventTreshold: 7
     - m_ConditionMode: 3
       m_ConditionEvent: GestureRightWeight
       m_EventTreshold: 0.05
+    - m_ConditionMode: 7
+      m_ConditionEvent: GestureLeft
+      m_EventTreshold: 7
   m_DstStateMachine: {fileID: 0}
   m_DstState: {fileID: 335705499531221}
   m_Solo: 0
@@ -910,6 +1066,77 @@ BlendTree:
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
+  m_Name: Fist LR
+  m_Childs:
+  - serializedVersion: 2
+    m_Motion: {fileID: 7400000, guid: aba5abdcce20e1ac3576291c29379372, type: 2}
+    m_Threshold: 0
+    m_Position: {x: 0, y: 0}
+    m_TimeScale: 1
+    m_CycleOffset: 0
+    m_DirectBlendParameter: Blend
+    m_Mirror: 0
+  - serializedVersion: 2
+    m_Motion: {fileID: 7400000, guid: d24be6c4c02c132596cd6083665ddd41, type: 2}
+    m_Threshold: 0
+    m_Position: {x: 0.5, y: 0}
+    m_TimeScale: 1
+    m_CycleOffset: 0
+    m_DirectBlendParameter: Blend
+    m_Mirror: 0
+  - serializedVersion: 2
+    m_Motion: {fileID: 7400000, guid: d24be6c4c02c132596cd6083665ddd41, type: 2}
+    m_Threshold: 0
+    m_Position: {x: 0, y: 0.5}
+    m_TimeScale: 1
+    m_CycleOffset: 0
+    m_DirectBlendParameter: Blend
+    m_Mirror: 0
+  - serializedVersion: 2
+    m_Motion: {fileID: 7400000, guid: b8e3380addf7a01b6ad366dac5f65517, type: 2}
+    m_Threshold: 0
+    m_Position: {x: 1, y: 0}
+    m_TimeScale: 1
+    m_CycleOffset: 0
+    m_DirectBlendParameter: Blend
+    m_Mirror: 0
+  - serializedVersion: 2
+    m_Motion: {fileID: 7400000, guid: b8e3380addf7a01b6ad366dac5f65517, type: 2}
+    m_Threshold: 0
+    m_Position: {x: 0, y: 1}
+    m_TimeScale: 1
+    m_CycleOffset: 0
+    m_DirectBlendParameter: Blend
+    m_Mirror: 0
+  - serializedVersion: 2
+    m_Motion: {fileID: 7400000, guid: b8e3380addf7a01b6ad366dac5f65517, type: 2}
+    m_Threshold: 0
+    m_Position: {x: 0.5, y: 0.5}
+    m_TimeScale: 1
+    m_CycleOffset: 0
+    m_DirectBlendParameter: Blend
+    m_Mirror: 0
+  - serializedVersion: 2
+    m_Motion: {fileID: 7400000, guid: b8e3380addf7a01b6ad366dac5f65517, type: 2}
+    m_Threshold: 0
+    m_Position: {x: 1, y: 1}
+    m_TimeScale: 1
+    m_CycleOffset: 0
+    m_DirectBlendParameter: Blend
+    m_Mirror: 0
+  m_BlendParameter: GestureLeftWeight
+  m_BlendParameterY: GestureRightWeight
+  m_MinThreshold: 0
+  m_MaxThreshold: 1
+  m_UseAutomaticThresholds: 0
+  m_NormalizedBlendValues: 0
+  m_BlendType: 3
+--- !u!206 &335705499531229
+BlendTree:
+  m_ObjectHideFlags: 1
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
   m_Name: Victory L
   m_Childs:
   - serializedVersion: 2
@@ -935,7 +1162,7 @@ BlendTree:
   m_UseAutomaticThresholds: 0
   m_NormalizedBlendValues: 0
   m_BlendType: 0
---- !u!206 &335705499531229
+--- !u!206 &335705499531231
 BlendTree:
   m_ObjectHideFlags: 1
   m_CorrespondingSourceObject: {fileID: 0}
@@ -966,3 +1193,74 @@ BlendTree:
   m_UseAutomaticThresholds: 0
   m_NormalizedBlendValues: 0
   m_BlendType: 0
+--- !u!206 &335705499531233
+BlendTree:
+  m_ObjectHideFlags: 1
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: Victory LR
+  m_Childs:
+  - serializedVersion: 2
+    m_Motion: {fileID: 7400000, guid: aba5abdcce20e1ac3576291c29379372, type: 2}
+    m_Threshold: 0
+    m_Position: {x: 0, y: 0}
+    m_TimeScale: 1
+    m_CycleOffset: 0
+    m_DirectBlendParameter: Blend
+    m_Mirror: 0
+  - serializedVersion: 2
+    m_Motion: {fileID: 7400000, guid: b32f4ef16c1fcfef5b9f47807c79d89b, type: 2}
+    m_Threshold: 0
+    m_Position: {x: 0.5, y: 0}
+    m_TimeScale: 1
+    m_CycleOffset: 0
+    m_DirectBlendParameter: Blend
+    m_Mirror: 0
+  - serializedVersion: 2
+    m_Motion: {fileID: 7400000, guid: b32f4ef16c1fcfef5b9f47807c79d89b, type: 2}
+    m_Threshold: 0
+    m_Position: {x: 0, y: 0.5}
+    m_TimeScale: 1
+    m_CycleOffset: 0
+    m_DirectBlendParameter: Blend
+    m_Mirror: 0
+  - serializedVersion: 2
+    m_Motion: {fileID: 7400000, guid: ff94e3f69146f729b27bf4c1396a2675, type: 2}
+    m_Threshold: 0
+    m_Position: {x: 1, y: 0}
+    m_TimeScale: 1
+    m_CycleOffset: 0
+    m_DirectBlendParameter: Blend
+    m_Mirror: 0
+  - serializedVersion: 2
+    m_Motion: {fileID: 7400000, guid: ff94e3f69146f729b27bf4c1396a2675, type: 2}
+    m_Threshold: 0
+    m_Position: {x: 0, y: 1}
+    m_TimeScale: 1
+    m_CycleOffset: 0
+    m_DirectBlendParameter: Blend
+    m_Mirror: 0
+  - serializedVersion: 2
+    m_Motion: {fileID: 7400000, guid: ff94e3f69146f729b27bf4c1396a2675, type: 2}
+    m_Threshold: 0
+    m_Position: {x: 0.5, y: 0.5}
+    m_TimeScale: 1
+    m_CycleOffset: 0
+    m_DirectBlendParameter: Blend
+    m_Mirror: 0
+  - serializedVersion: 2
+    m_Motion: {fileID: 7400000, guid: ff94e3f69146f729b27bf4c1396a2675, type: 2}
+    m_Threshold: 0
+    m_Position: {x: 1, y: 1}
+    m_TimeScale: 1
+    m_CycleOffset: 0
+    m_DirectBlendParameter: Blend
+    m_Mirror: 0
+  m_BlendParameter: GestureLeftWeight
+  m_BlendParameterY: GestureRightWeight
+  m_MinThreshold: 0
+  m_MaxThreshold: 1
+  m_UseAutomaticThresholds: 0
+  m_NormalizedBlendValues: 0
+  m_BlendType: 3

@@ -216,9 +216,16 @@ and in analog mode "act" is weight-gated (`WEIGHT_ON` 0.05 to claim, `WEIGHT_OFF
 release; the gap is hysteresis) — necessary because a Vive-wand thumb resting on the touchpad
 centre reports **Fist at weight 0**, and an ungated phantom would mask or oscillate against the
 other hand's real expression. A lower-priority hand's transitions carry one alternative per way
-the winning hand can be inactive (`== 0` or `weight < off`). Caveat: on controllers whose weight
-only tracks an analog axis for some gestures (Index: Fist), other gestures need the trigger held
-to show — the same trade SDK2 made on wands.
+the winning hand can be inactive (`== 0` or `weight < off`). When **both hands hold the same
+gesture** (two-parameter analog layers), a dedicated `<Gesture> LR` state plays a **2D
+freeform-cartesian tree** ([`BlendTree::freeform_2d`] + [`ChildMotion::at`]) over both weights
+whose samples encode the **capped sum** `min(left + right, 1)`: Neutral at the origin, the full
+clip on and past the `x + y = 1` diagonal, and optional half-strength clips
+(`GestureLayer::motion_half`) as `(0.5, 0)`/`(0, 0.5)` midpoints — so 50 % + 10 % lands near
+60 % instead of the second hand restarting the expression; per-hand transitions gain `NotEqual`
+guards so the exclusivity invariant holds. Caveat: on controllers whose weight only tracks an
+analog axis for some gestures (Index: Fist), other gestures need the trigger held to show — the
+same trade SDK2 made on wands.
 
 ### 4c. Radial-puppet grafting (`avatar anim-gen puppet`)
 

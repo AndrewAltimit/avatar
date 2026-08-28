@@ -433,18 +433,22 @@ mod tests {
         params.insert("GestureRightWeight".into(), 0.5);
         step(&params, &mut cur);
         assert_eq!(name(cur), "Fist R");
-        // Left fist joins: right still squeezing -> right keeps the face.
+        // Left fist joins: both hands on the same gesture -> the capped-sum LR state.
         params.insert("GestureLeft".into(), 1.0);
         params.insert("GestureLeftWeight".into(), 1.0);
         step(&params, &mut cur);
-        assert_eq!(name(cur), "Fist R");
-        // Right releases below the off threshold -> left takes over.
+        assert_eq!(name(cur), "Fist LR");
+        // Right weight releases but the gesture is still held -> LR keeps the face (its tree
+        // reads the weights, so the pose decays toward left-only smoothly).
         params.insert("GestureRightWeight".into(), 0.0);
+        step(&params, &mut cur);
+        assert_eq!(name(cur), "Fist LR");
+        // Right hand leaves the gesture entirely -> left takes over.
+        params.insert("GestureRight".into(), 0.0);
         step(&params, &mut cur);
         assert_eq!(name(cur), "Fist L");
         // Both to neutral -> Neutral.
         params.insert("GestureLeft".into(), 0.0);
-        params.insert("GestureRight".into(), 0.0);
         step(&params, &mut cur);
         assert_eq!(name(cur), "Neutral");
     }

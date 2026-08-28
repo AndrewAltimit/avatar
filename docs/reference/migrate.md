@@ -100,8 +100,11 @@ gesture gets a per-hand state (`Fist L` / `Fist R`) whose motion is a 1D BlendTr
 `GestureLeftWeight`/`GestureRightWeight`, blending `Gesture_Neutral` (0) → the gesture clip (1) —
 SDK2's Vive "advanced controls", where trigger depth is expression depth. Transitions are
 mutually exclusive and weight-gated (see anim-gen.md): the actively-squeezing hand owns the face,
-the right hand wins when both squeeze, and a wand thumb resting on the touchpad (Fist at weight
-0) can never mask or oscillate against the other hand. `--no-analog-gestures` emits discrete
+the right hand wins when both squeeze **different** gestures, and a wand thumb resting on the
+touchpad (Fist at weight 0) can never mask or oscillate against the other hand. Both hands on
+the **same** gesture route to its `LR` capped-sum state (2D tree over both weights,
+`min(left + right, 1)`); the migration emits a half-strength companion clip per gesture
+(`Gesture_<Name>_Half.anim`, every shape at 50 %) as the tree's midpoint samples. `--no-analog-gestures` emits discrete
 states instead (one static state per gesture, right-priority). Note the platform trade: on
 Index-style controllers only Fist's weight tracks an analog axis, so with analog gestures the
 other expressions need the trigger held — exactly how the SDK2 avatar behaved on wands.

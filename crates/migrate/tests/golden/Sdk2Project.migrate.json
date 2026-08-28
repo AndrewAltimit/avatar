@@ -60,10 +60,22 @@
         "rel_path": "Fixture_SDK3/FX/Gesture_Fist.anim.meta"
       },
       {
+        "rel_path": "Fixture_SDK3/FX/Gesture_Fist_Half.anim"
+      },
+      {
+        "rel_path": "Fixture_SDK3/FX/Gesture_Fist_Half.anim.meta"
+      },
+      {
         "rel_path": "Fixture_SDK3/FX/Gesture_Victory.anim"
       },
       {
         "rel_path": "Fixture_SDK3/FX/Gesture_Victory.anim.meta"
+      },
+      {
+        "rel_path": "Fixture_SDK3/FX/Gesture_Victory_Half.anim"
+      },
+      {
+        "rel_path": "Fixture_SDK3/FX/Gesture_Victory_Half.anim.meta"
       },
       {
         "rel_path": "Fixture_SDK3/FX/Gesture_Neutral.anim"
@@ -165,11 +177,27 @@
     },
     {
       "kind": "clip",
+      "path": "Assets/Fixture_SDK3/FX/Gesture_Fist_Half.anim"
+    },
+    {
+      "kind": "meta",
+      "path": "Assets/Fixture_SDK3/FX/Gesture_Fist_Half.anim.meta"
+    },
+    {
+      "kind": "clip",
       "path": "Assets/Fixture_SDK3/FX/Gesture_Victory.anim"
     },
     {
       "kind": "meta",
       "path": "Assets/Fixture_SDK3/FX/Gesture_Victory.anim.meta"
+    },
+    {
+      "kind": "clip",
+      "path": "Assets/Fixture_SDK3/FX/Gesture_Victory_Half.anim"
+    },
+    {
+      "kind": "meta",
+      "path": "Assets/Fixture_SDK3/FX/Gesture_Victory_Half.anim.meta"
     },
     {
       "kind": "clip",
