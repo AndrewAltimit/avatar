@@ -11,6 +11,9 @@
 
 <section class="doc-section" id="geometry">
   <h2>Geometry (from an FBX)</h2>
+  <div class="cli"><code>avatar stats model.fbx                 # geometry: triangles, meshes, material slots, bones
+avatar stats path/to/UnityProject      # components, per avatar found in the project
+avatar stats path/to/UnityProject --json</code></div>
   <p>
     <code>analyze_fbx</code> measures triangles, meshes, material slots, and bones directly from the FBX
     geometry.
@@ -54,7 +57,7 @@
     past Poor is <strong>Very Poor</strong>.
   </p>
   <h3>PC (Windows)</h3>
-  <div class="table-wrap"><table>
+  <div class="table-wrap"><table class="num">
     <thead><tr><th>Metric</th><th>Excellent</th><th>Good</th><th>Medium</th><th>Poor</th></tr></thead>
     <tbody>
       <tr><td>Triangles</td><td>32,000</td><td>70,000</td><td>70,000</td><td>70,000</td></tr>
@@ -85,7 +88,7 @@
     </tbody>
   </table></div>
   <h3>Android / Quest (stricter)</h3>
-  <div class="table-wrap"><table>
+  <div class="table-wrap"><table class="num">
     <thead><tr><th>Metric</th><th>Excellent</th><th>Good</th><th>Medium</th><th>Poor</th></tr></thead>
     <tbody>
       <tr><td>Triangles</td><td>7,500</td><td>10,000</td><td>15,000</td><td>20,000</td></tr>
@@ -117,3 +120,11 @@
     rather than publishing a standalone table.
   </p>
 </section>
+
+<nav class="see-also" aria-label="See also">
+  <span class="see-also-label">See also</span>
+  <a href="sdk3-lint-rules.html">SDK3 lint rules</a>
+  <a href="physbone.html">PhysBone tuning</a>
+  <a href="../analyzer.html">Avatar inspector</a>
+  <a href="mcp.html">MCP server</a>
+</nav>

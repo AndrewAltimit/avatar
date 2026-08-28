@@ -6,12 +6,22 @@
     rig layer, GPU preview, and the analog-gesture OSC daemon. Crate dirs are unprefixed
     (<code>crates/fbx</code>); package names are <code>avatar-&lt;slug&gt;</code>; lib names are
     <code>avatar_&lt;slug&gt;</code>; the binary is <code>avatar</code>. Each card links to that
-    crate's README on GitHub.
+    crate's README on GitHub; the <a href="../architecture.html#diagram">stack diagram</a> shows how they
+    layer.
   </p>
 </header>
 
+<div class="hint">
+  <strong>Reading the groups.</strong> Foundation crates parse the two file formats and never depend on the
+  logic above them; the diagnostics / generation crates read both and write only Unity YAML; the runtime rig
+  and OSC crates are the only place <code>glam</code> is allowed; the surface crates (<code>cli</code>,
+  <code>mcp</code>, <code>web-analyzer</code>) expose the same graph three ways.
+</div>
+
 <section class="doc-section" id="foundation">
   <h2>Foundation &amp; models</h2>
+  <div class="cli"><code>cargo build --workspace
+cargo tree -p avatar-cli -e normal | grep -c glam   # the glam-confinement invariant</code></div>
   <div class="card-grid">
     <a class="card" href="https://github.com/AndrewAltimit/avatar/blob/main/crates/fbx/README.md" target="_blank" rel="noopener">
       <div class="card-title">avatar-fbx</div>
@@ -120,7 +130,7 @@
     </a>
     <a class="card" href="https://github.com/AndrewAltimit/avatar/blob/main/crates/web-analyzer/README.md" target="_blank" rel="noopener">
       <div class="card-title">avatar-web-analyzer</div>
-      <div class="card-body">The wasm bundle behind this site's <a href="../analyzer.html">FBX analyzer</a>: the same fbx + armature + stats diagnose graph, compiled to WebAssembly and run entirely in your browser.</div>
+      <div class="card-body">The wasm bundle behind this site's <a href="../analyzer.html">Avatar inspector</a>: the same fbx + armature + stats diagnose graph, compiled to WebAssembly and run entirely in your browser.</div>
     </a>
     <a class="card" href="https://github.com/AndrewAltimit/avatar/blob/main/crates/testkit/README.md" target="_blank" rel="noopener">
       <div class="card-title">avatar-testkit</div>
@@ -128,3 +138,10 @@
     </a>
   </div>
 </section>
+
+<nav class="see-also" aria-label="See also">
+  <span class="see-also-label">See also</span>
+  <a href="../architecture.html">How it stacks</a>
+  <a href="../cli/index.html">CLI commands</a>
+  <a href="../reference/testing.html">Testing & fixtures</a>
+</nav>

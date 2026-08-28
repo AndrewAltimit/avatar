@@ -56,7 +56,7 @@ Documentation for the [avatar](../README.md) monorepo. Start with the root
 
 The same material, rendered: [andrewaltimit.github.io/avatar](https://andrewaltimit.github.io/avatar/)
 — built from [`site/`](../site/README.md) on every push to `main`, including the in-browser
-WebAssembly [FBX analyzer](https://andrewaltimit.github.io/avatar/analyzer.html). The Markdown in
+WebAssembly [avatar inspector](https://andrewaltimit.github.io/avatar/analyzer.html). The Markdown in
 this directory stays the source of truth.
 
 ## Planned directories

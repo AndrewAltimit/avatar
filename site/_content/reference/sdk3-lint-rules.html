@@ -11,6 +11,18 @@
   </p>
 </header>
 
+<section class="doc-section" id="run">
+  <h2>Running it</h2>
+  <div class="cli"><code>avatar lint path/to/UnityProject                  # report; exit 1 on errors
+avatar lint path/to/UnityProject --deny-warnings  # exit 1 on warnings too
+avatar lint path/to/UnityProject --json           # LintReport (avatar schema lint)</code></div>
+  <div class="pills">
+    <span class="pill pill-error">error &middot; VRChat rejects it or the avatar breaks</span>
+    <span class="pill pill-warn">warn &middot; likely a problem</span>
+    <span class="pill">info &middot; advisory</span>
+  </div>
+</section>
+
 <section class="doc-section" id="rules">
   <h2>The rules</h2>
   <table>
@@ -93,3 +105,11 @@
     <code>0</code> Int, <code>1</code> Float, <code>2</code> Bool.
   </p>
 </section>
+
+<nav class="see-also" aria-label="See also">
+  <span class="see-also-label">See also</span>
+  <a href="performance-stats.html">Performance stats</a>
+  <a href="unity-asset.html">Typed asset readers</a>
+  <a href="anim-gen.html">Asset generation</a>
+  <a href="testing.html">Testing & fixtures</a>
+</nav>

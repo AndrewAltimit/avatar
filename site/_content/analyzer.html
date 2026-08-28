@@ -1,13 +1,14 @@
-<!--HEAD: <script type="module" src="js/analyzer.js"></script> -->
+<!--HEAD: <link rel="stylesheet" href="css/analyzer.css"><link rel="stylesheet" href="css/viewer.css"><script type="module" src="js/analyzer.js"></script> -->
 <header class="page-header">
-  <div class="breadcrumb"><a href="index.html">home</a> &middot; analyzer</div>
-  <h1>FBX analyzer</h1>
+  <div class="breadcrumb"><a href="index.html">home</a> &middot; inspector</div>
+  <h1>Avatar inspector</h1>
   <p class="lede">
-    Drop an avatar <code>.fbx</code> and get the same diagnosis the CLI gives &mdash; humanoid rig
-    check, VRChat performance rank, blendshape inventory &mdash; right here in the browser. The
-    analysis is the actual Rust diagnose graph (<code>avatar-fbx</code> + <code>avatar-armature</code> +
-    <code>avatar-stats</code>) compiled to WebAssembly, so it matches <code>avatar describe</code>
-    output bit for bit.
+    Drop an avatar <code>.fbx</code> and inspect it the way the CLI does &mdash; a 3D preview,
+    the humanoid rig as an interactive bone tree, VRChat performance meters against the PC and
+    Android limits, meshes, materials, textures and blendshapes &mdash; right here in the browser.
+    The analysis is the actual Rust diagnose graph (<code>avatar-fbx</code> +
+    <code>avatar-armature</code> + <code>avatar-stats</code>) compiled to WebAssembly, so it
+    matches <code>avatar describe</code> output bit for bit.
   </p>
 </header>
 
@@ -24,23 +25,60 @@
     <div class="an-drop-text">Drop a binary <code>.fbx</code> here, or click to choose a file</div>
     <input type="file" id="an-file" accept=".fbx" hidden>
   </div>
-  <p class="an-fineprint" id="an-status">Loading analyzer&hellip;</p>
+  <div class="an-toolbar" id="an-toolbar">
+    <button type="button" class="an-btn an-btn-primary" id="an-sample" disabled>Try the sample avatar</button>
+    <span class="an-fineprint" id="an-status" role="status" aria-live="polite">Loading analyzer&hellip;</span>
+  </div>
+
+  <div class="an-filebar" id="an-filebar" hidden>
+    <div class="an-filebar-name">
+      <span class="an-filebar-icon" aria-hidden="true">&#9635;</span>
+      <code id="an-file-name"></code>
+      <span class="an-filebar-meta" id="an-file-meta"></span>
+    </div>
+    <div class="an-filebar-actions">
+      <button type="button" class="an-btn" id="an-download">Download report JSON</button>
+      <button type="button" class="an-btn" id="an-screenshot">Screenshot</button>
+      <button type="button" class="an-btn an-btn-quiet" id="an-another">Load another&hellip;</button>
+    </div>
+  </div>
+
+  <div id="an-viewer" class="an-viewer" hidden aria-label="3D preview of the avatar"></div>
   <div id="an-results"></div>
 </section>
 
 <section class="doc-section" id="what-it-checks">
   <h2>What it checks</h2>
   <ul>
+    <li><strong>3D preview</strong> &mdash; the meshes are drawn from the file's raw control points
+      and auto-uprighted (hips&rarr;head) exactly as <code>avatar render</code> does, with the
+      skeleton, a wireframe / UV / skin-weight / normals view, and click-to-select bones that stay
+      in sync with the rig tree. See <a href="reference/render.html">rendering &amp; preview</a> for
+      why raw control points (not the per-cluster bind matrices) are the faithful choice for
+      ripped/MMD-derived avatars.</li>
+    <li><strong>Overview</strong> &mdash; the headline numbers (humanoid-ready, PC and Android rank,
+      triangles, bones, materials, blendshapes) and one aggregated issues list: missing or duplicate
+      humanoid bones, extra skeleton roots, a unit scale other than 100 or a non-Y up axis in the
+      file's global settings, meshes with no material, and so on &mdash; each with a plain-language
+      explanation of what Unity or VRChat will do about it.</li>
     <li><strong>Humanoid rig</strong> &mdash; infers the Unity humanoid mapping from the bone
       hierarchy and validates it against VRChat's rig requirements: required + recommended bones,
-      duplicate mappings, stray skeleton roots. See <a href="reference/humanoid-bones.html">humanoid
-      bones</a> and <a href="reference/armature-repair.html">armature repair</a> for what the CLI can
-      then fix.</li>
+      duplicate mappings, stray skeleton roots. Shown as a collapsible bone tree with the humanoid
+      slot on every mapped bone, plus a checklist of the 25 humanoid slots. See
+      <a href="reference/humanoid-bones.html">humanoid bones</a> and
+      <a href="reference/armature-repair.html">armature repair</a> for what the CLI can then fix.</li>
     <li><strong>Performance rank</strong> &mdash; VRChat's Excellent&rarr;Very Poor rank computed
-      offline from the geometry (triangles, meshes, bones, materials), against both the PC and
-      Android limit tables. See <a href="reference/performance-stats.html">performance stats</a>.</li>
-    <li><strong>Blendshapes</strong> &mdash; every blendshape channel and the mesh it deforms; the
-      raw material for visemes and expressions.</li>
+      offline from the geometry (triangles, meshes, bones, material slots), drawn as meters against
+      the PC and Android limit tables so you can see how far a metric is from the next tier. See
+      <a href="reference/performance-stats.html">performance stats</a>.</li>
+    <li><strong>Meshes &amp; materials</strong> &mdash; per-mesh vertex/triangle counts, skinning and
+      the bones that influence it; per-material diffuse colour and the embedded texture (decoded in
+      the browser, with its dimensions and the path the FBX references).</li>
+    <li><strong>Blendshapes</strong> &mdash; every blendshape channel grouped by mesh, with the
+      fifteen VRChat visemes as a checklist (the same cross-check <code>avatar lint</code> runs
+      against a descriptor's viseme setup), blink shapes, expression shapes, and a search filter.</li>
+    <li><strong>Raw JSON</strong> &mdash; the full report, the same shape as
+      <code>avatar describe --json</code>, downloadable as a file.</li>
   </ul>
   <p>
     Only binary FBX 7.x is supported (the Autodesk / Unity / Blender default export) &mdash; ASCII

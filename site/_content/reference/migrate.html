@@ -23,6 +23,11 @@
 
 <section class="doc-section" id="what-is-migrated">
   <h2>What is migrated</h2>
+  <div class="hint">
+    <strong>Verified end to end:</strong> a real SDK2 avatar (Cloth skirt, DynamicBones, gesture overrides,
+    a haptics vest to strip) went through this command, opened in the Creator Companion, built, and uploaded.
+    The synthetic <code>Sdk2Project</code> fixture pins the rewritten prefab and FX controller as goldens.
+  </div>
   <table>
     <thead><tr><th>SDK2</th><th>SDK3</th><th>How</th></tr></thead>
     <tbody>
@@ -150,3 +155,11 @@
     <li>The Unity import itself is not verified here (no editor in this toolchain); <a href="sdk3-lint-rules.html"><code>avatar lint</code></a> / <a href="performance-stats.html"><code>avatar stats</code></a> on the output are the offline checks.</li>
   </ul>
 </section>
+
+<nav class="see-also" aria-label="See also">
+  <span class="see-also-label">See also</span>
+  <a href="physbone.html">PhysBone tuning</a>
+  <a href="unity-yaml-edit.html">Editing Unity YAML</a>
+  <a href="unitypackage.html">The .unitypackage format</a>
+  <a href="anim-gen.html">Asset generation</a>
+</nav>

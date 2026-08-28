@@ -11,6 +11,17 @@
 
 <section class="doc-section" id="protocol">
   <h2>The parameter protocol</h2>
+  <div class="cli"><code>avatar osc send VRCEmote 3                      # /avatar/parameters/VRCEmote (int)
+avatar osc input Vertical 0.5                   # /input/Vertical, reset to 0 on exit
+avatar osc monitor                              # print every update VRChat broadcasts</code></div>
+  <table>
+    <thead><tr><th>Address</th><th>Direction</th><th>What</th></tr></thead>
+    <tbody>
+      <tr><td><code>/avatar/parameters/&lt;name&gt;</code></td><td>both</td><td>Expression parameters: bool / int / float, typed by the avatar's OSC config.</td></tr>
+      <tr><td><code>/input/&lt;axis|button&gt;</code></td><td>to VRChat</td><td>Locomotion axes and buttons; axes reset to 0 when the sender exits.</td></tr>
+      <tr><td><code>/avatar/change</code></td><td>both</td><td>Avatar switch (blueprint id); VRChat also emits it on every change.</td></tr>
+    </tbody>
+  </table>
   <p>
     <code>avatar-osc</code> handles <code>/avatar/parameters/*</code>, <code>/input/*</code> (axes/buttons,
     reset-to-zero), and <code>/avatar/change</code>, split into a <strong>pure</strong> <code>codec</code>
@@ -83,3 +94,11 @@ avatar osc capture --seconds 60 -o events.jsonl
 avatar osc replay events.jsonl --controller FX.controller --timeline
 avatar osc gestures --seconds 10</code></div>
 </section>
+
+<nav class="see-also" aria-label="See also">
+  <span class="see-also-label">See also</span>
+  <a href="mcp.html">MCP server</a>
+  <a href="anim-gen.html">Asset generation</a>
+  <a href="rig-runtime.html">Runtime rig layer</a>
+  <a href="../cli/index.html#osc">CLI: osc</a>
+</nav>

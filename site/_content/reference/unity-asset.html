@@ -30,6 +30,21 @@
   </table>
 </section>
 
+<section class="doc-section" id="usage">
+  <h2>Reading a controller</h2>
+  <pre><code>use avatar_unity_asset::{AnimatorController, AnimationClip};
+use avatar_unity_yaml::UnityFile;
+
+let file = UnityFile::parse(&amp;std::fs::read_to_string("Assets/FX.controller")?)?;
+let ctrl = AnimatorController::from_file(&amp;file).expect("no controller document");
+for c in &amp;ctrl.conditions {
+    println!("{} mode={} threshold={}", c.parameter, c.mode, c.threshold);
+}
+let clip = AnimationClip::from_file(&amp;UnityFile::parse(&amp;std::fs::read_to_string("Assets/Smile.anim")?)?);
+assert!(clip.map_or(true, |c| !c.animates_muscles()));</code></pre>
+  <p class="caption">There is no CLI for this crate; <code>avatar lint</code> is its consumer.</p>
+</section>
+
 <section class="doc-section" id="aggregate">
   <h2>Aggregate, not full graph</h2>
   <p>
@@ -80,3 +95,10 @@
     <code>crates/vrc-descriptor/README.md</code>. Material / scene typing is still to come.
   </div>
 </section>
+
+<nav class="see-also" aria-label="See also">
+  <span class="see-also-label">See also</span>
+  <a href="sdk3-lint-rules.html">SDK3 lint rules</a>
+  <a href="unity-yaml-edit.html">Editing Unity YAML</a>
+  <a href="anim-gen.html">Asset generation</a>
+</nav>

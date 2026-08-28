@@ -11,6 +11,7 @@
 
 <section class="doc-section" id="required">
   <h2>Required by VRChat (humanoid)</h2>
+  <div class="cli"><code>avatar armature check model.fbx --json     # the inferred mapping + what is missing</code></div>
   <ul>
     <li><strong>Spine chain:</strong> Hips, Spine, Chest, Neck &mdash; and <strong>Shoulders</strong> &mdash; must all be present/mapped.</li>
     <li><strong>Head:</strong> Head.</li>
@@ -31,6 +32,14 @@
 
 <section class="doc-section" id="naming">
   <h2>Naming conventions we infer from</h2>
+  <table>
+    <thead><tr><th>Humanoid bone</th><th>Names that map to it (examples)</th></tr></thead>
+    <tbody>
+      <tr><td><code>Hips</code></td><td><code>Hips</code>, <code>hip</code>, <code>pelvis</code>, <code>mixamorig:Hips</code>, <code>Bip01_Pelvis</code>, <code>J_Bip_C_Hips</code></td></tr>
+      <tr><td><code>LeftUpperArm</code></td><td><code>LeftUpperArm</code>, <code>mixamorig:LeftArm</code>, <code>Bip01_L_UpperArm</code>, <code>J_Bip_L_UpperArm</code>, <code>arm_L</code></td></tr>
+      <tr><td><code>Head</code></td><td><code>Head</code>, <code>head</code>, <code>mixamorig:Head</code>, <code>Bip01_Head</code>, <code>J_Bip_C_Head</code></td></tr>
+    </tbody>
+  </table>
   <p>
     Bone-name &rarr; Humanoid mapping must tolerate many rig exporters. Examples that all map to
     <code>Hips</code>: <code>Hips</code>, <code>hip</code>, <code>pelvis</code>,
@@ -40,3 +49,10 @@
     auto-mapper recognizes the rig.
   </p>
 </section>
+
+<nav class="see-also" aria-label="See also">
+  <span class="see-also-label">See also</span>
+  <a href="armature-repair.html">Armature repair</a>
+  <a href="../analyzer.html">Avatar inspector</a>
+  <a href="sdk3-lint-rules.html">SDK3 lint rules</a>
+</nav>

@@ -17,8 +17,14 @@ serde = { workspace = true }
 serde_json.workspace = true
 wasm-bindgen = "0.2"
 avatar-fbx = { path = "../fbx" }
+avatar-mesh = { path = "../mesh" }
 avatar-armature = { path = "../armature" }
 avatar-stats = { path = "../stats" }
+# Normal (not dev) dependency: `sample_fbx()` ships the synthetic humanoid to the browser so the
+# page has a "try a sample" button. Only the `fbx` feature (the in-code fbxcel writer) — no fs use
+# on that path, so it compiles for wasm32.
+avatar-testkit = { path = "../testkit", default-features = false, features = ["fbx"] }
 
 [dev-dependencies]
-avatar-testkit = { path = "../testkit", features = ["fbx"] }
+# Off-wasm tests synthesize a skinned, textured, blendshaped mesh the testkit corpus doesn't have.
+fbxcel = { version = "0.9", features = ["tree", "writer"] }
