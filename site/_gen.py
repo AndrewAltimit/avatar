@@ -129,10 +129,36 @@ WIDE_PAGES: set[str] = {
 }
 
 
+def asset_version() -> str:
+    """Short content hash of every js/css asset, appended as `?v=` so browsers never serve a stale
+    module after a deploy (or a local rebuild — `http.server` sends no cache headers)."""
+    import hashlib
+    h = hashlib.sha1()
+    for sub in ("js", "css"):
+        for f in sorted((ROOT / sub).glob("*")):
+            if f.is_file():
+                h.update(f.name.encode())
+                h.update(f.read_bytes())
+    return h.hexdigest()[:10]
+
+
+ASSET_V = None
+
+
+def versioned(extra_head: str) -> str:
+    """Append `?v=` to the local css/js references inside a page's HEAD block."""
+    return re.sub(r'((?:href|src)="(?:\.\./)*(?:css|js)/[^"?]+)"', rf'\1?v={ASSET_V}"', extra_head)
+
+
 def html_template(title: str, depth: int, active_key: str, body: str, extra_head: str = "") -> str:
-    css = "../" * depth + "css/styles.css"
-    layout_js = "../" * depth + "js/layout.js"
-    main_js = "../" * depth + "js/main.js"
+    global ASSET_V
+    if ASSET_V is None:
+        ASSET_V = asset_version()
+    v = "?v=" + ASSET_V
+    css = "../" * depth + "css/styles.css" + v
+    layout_js = "../" * depth + "js/layout.js" + v
+    main_js = "../" * depth + "js/main.js" + v
+    extra_head = versioned(extra_head)
     favicon = "../" * depth + "img/favicon.svg"
     content_cls = "content wide-page" if active_key in WIDE_PAGES else "content"
     return f"""<!DOCTYPE html>

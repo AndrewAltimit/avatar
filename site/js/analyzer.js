@@ -1011,6 +1011,9 @@ function renderReport(report, ctx) {
 // Boot
 // ---------------------------------------------------------------------------
 
+// Cache-busting query the generator stamps on this module's URL; propagated to what we import.
+const V = (() => { try { return new URL(import.meta.url).search || ''; } catch (e) { return ''; } })();
+
 async function boot() {
   document.body.classList.add('an-page');
   const $ = id => document.getElementById(id);
@@ -1020,7 +1023,7 @@ async function boot() {
 
   let wasm = null;
   try {
-    wasm = await import('../wasm/avatar_web_analyzer.js');
+    wasm = await import(new URL('../wasm/avatar_web_analyzer.js' + V, import.meta.url).href);
     await wasm.default();
     status.textContent = 'Analyzer loaded — drop a binary .fbx file, or try the sample.';
     sampleBtn.disabled = typeof wasm.sample_fbx !== 'function';
@@ -1034,7 +1037,7 @@ async function boot() {
 
   // The viewer module is optional: the report renders without it.
   let viewerModule = null;
-  const viewerPromise = import('./viewer.js').then(m => { viewerModule = m; }).catch(e => {
+  const viewerPromise = import(new URL('./viewer.js' + V, import.meta.url).href).then(m => { viewerModule = m; }).catch(e => {
     console.warn('viewer.js unavailable; 3D preview disabled', e);
   });
 
@@ -1163,8 +1166,20 @@ async function boot() {
 
   // Accept an .fbx, image files, or folders — in any combination, from any drop.
   async function ingest(list) {
-    if (!list.length) return;
+    try { await ingestInner(list); } catch (e) {
+      console.error('ingest failed', e);
+      status.textContent = 'Could not read those files: ' + (e && e.message ? e.message : e);
+    }
+  }
+  async function ingestInner(list) {
+    if (!list.length) { status.textContent = 'Nothing usable in that drop (no files).'; return; }
     let fbx = list.filter(x => extOf(x.file.name) === 'fbx');
+    const nImg = list.filter(x => IMAGE_EXTS.has(extOf(x.file.name))).length;
+    const nMat = list.filter(x => extOf(x.file.name) === 'mat').length;
+    const nMeta = list.filter(x => extOf(x.file.name) === 'meta').length;
+    status.textContent = `Received ${list.length} file${list.length === 1 ? '' : 's'}: ${fbx.length} .fbx, ${nImg} image${nImg === 1 ? '' : 's'}, ${nMat} .mat, ${nMeta} .meta…`;
+    console.info('inspector: drop contained', { files: list.length, fbx: fbx.length, images: nImg, mat: nMat, meta: nMeta });
+    await new Promise(r => setTimeout(r, 0));
     // Dropping the folder the loaded avatar sits in shouldn't re-analyze the same file.
     if (ctx.report && fbx.length === 1 && fbx[0].file.name === ctx.fileName && fbx[0].file.size === ctx.fileSize) fbx = [];
     const added = await ctx.library.addAll(list);
@@ -1177,7 +1192,7 @@ async function boot() {
       status.textContent = added ? `${added} image file${added === 1 ? '' : 's'} kept — now drop the .fbx they belong to.` : 'No .fbx or image files in that drop.';
       return;
     }
-    if (!added) { status.textContent = 'No image files (png/jpg/bmp/gif/webp/tga) in that drop.'; return; }
+    if (!added) { status.textContent = `No image files (png/jpg/bmp/gif/webp/tga) among those ${list.length} file${list.length === 1 ? '' : 's'}.`; return; }
     if (ctx.viewer) {
       status.textContent = `Matching ${added} image file${added === 1 ? '' : 's'}…`;
       try { await ctx.viewer.applyTextures(ctx.library); } catch (e) { console.warn('applyTextures', e); }
