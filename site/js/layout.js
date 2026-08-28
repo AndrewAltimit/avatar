@@ -2,7 +2,8 @@
  *
  * Each page calls injectLayout({ active: 'reference/sdk3-lint-rules' }).
  * This builds:
- *   - Left sidebar with collapsible sections, active highlight, search trigger.
+ *   - Left sidebar with collapsible sections, active highlight, search trigger,
+ *     light/dark theme toggle.
  *   - In-page TOC rail (auto-built from h2/h3 inside .content).
  *   - Prev/next page footer derived from NAV order.
  *   - Search overlay (filters NAV + headings + page snippets).
@@ -19,7 +20,7 @@ const NAV = [
       { href: 'index.html',         text: 'Home',          key: 'home' },
       { href: 'architecture.html',  text: 'How it stacks', key: 'architecture' },
       { href: 'quickstart.html',    text: 'Quick start',   key: 'quickstart' },
-      { href: 'analyzer.html',      text: 'FBX analyzer',  key: 'analyzer' },
+      { href: 'analyzer.html',      text: 'Avatar inspector', key: 'analyzer', accent: 'Try it' },
     ],
   },
   {
@@ -51,6 +52,31 @@ const NAV = [
     ],
   },
 ];
+
+/* ---------- Theme ----------
+ * The stylesheet is dark by default and follows prefers-color-scheme when no
+ * choice is stored; an explicit choice is stamped on <html data-theme="…">.
+ * applyStoredTheme() runs at load (before the chrome is built) so the page
+ * does not flash the wrong palette. */
+function currentTheme() {
+  const explicit = document.documentElement.dataset.theme;
+  if (explicit) return explicit;
+  try {
+    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) return 'light';
+  } catch (e) {}
+  return 'dark';
+}
+function setTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  try { localStorage.setItem('theme', theme); } catch (e) {}
+}
+function applyStoredTheme() {
+  try {
+    const t = localStorage.getItem('theme');
+    if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+  } catch (e) {}
+}
+applyStoredTheme();
 
 /* ---------- Helpers ---------- */
 function resolveHref(href, depth) {
@@ -106,7 +132,27 @@ function buildSidebar(active, depth) {
     '<span class="icon">⌕</span>' +
     '<span class="label">Search the site</span>' +
     '<span class="kbd">/</span>';
-  sidebar.appendChild(searchBtn);
+  /* Theme toggle (dark <-> light; persisted in localStorage as 'theme') */
+  const themeBtn = document.createElement('button');
+  themeBtn.type = 'button';
+  themeBtn.className = 'theme-toggle';
+  themeBtn.id = 'theme-toggle';
+  themeBtn.setAttribute('aria-label', 'Toggle light / dark theme');
+  themeBtn.title = 'Toggle light / dark theme';
+  const paintThemeBtn = () => {
+    themeBtn.textContent = currentTheme() === 'light' ? '\u263D' : '\u2600';
+  };
+  themeBtn.addEventListener('click', () => {
+    setTheme(currentTheme() === 'light' ? 'dark' : 'light');
+    paintThemeBtn();
+  });
+  paintThemeBtn();
+
+  const tools = document.createElement('div');
+  tools.className = 'sidebar-tools';
+  tools.appendChild(searchBtn);
+  tools.appendChild(themeBtn);
+  sidebar.appendChild(tools);
 
   for (const section of NAV) {
     const sec = document.createElement('div');
@@ -138,6 +184,12 @@ function buildSidebar(active, depth) {
       a.href = resolveHref(item.href, depth);
       a.textContent = item.text;
       a.dataset.key = item.key;
+      if (item.accent) {
+        const b = document.createElement('span');
+        b.className = 'nav-accent';
+        b.textContent = item.accent;
+        a.appendChild(b);
+      }
       if (item.key === active) a.classList.add('active');
       nav.appendChild(a);
     }
@@ -351,3 +403,5 @@ function injectLayout(opts) {
 
 window.injectLayout = injectLayout;
 window.SITE_NAV = NAV;
+window.setTheme = setTheme;
+window.currentTheme = currentTheme;

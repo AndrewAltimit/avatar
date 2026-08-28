@@ -35,7 +35,7 @@ VRChat upload step is not. For what's built and the roadmap, see [Status](#statu
 | [`docs/reference/render.md`](docs/reference/render.md) | `avatar-render` / `avatar render` + `avatar view`: offscreen wgpu preview pipeline, avatar rest-pose render (auto-upright), world-scene render, avatar-dropped-at-spawn-in-world, interactive winit viewer (orbit/zoom/walk) + limits. |
 | [`docs/reference/mcp.md`](docs/reference/mcp.md) | `avatar-mcp` / `avatar mcp serve`: the stdio MCP server exposing the read/diagnose tools to an agent host. |
 | [`docs/reference/testing.md`](docs/reference/testing.md) | The fixture corpus (`fixtures/`) + the `avatar-testkit` golden-snapshot harness: corpus layers, `golden::assert_json`/`redact_roots`, the `UPDATE_GOLDEN` workflow. |
-| [`site/README.md`](site/README.md) | The GitHub Pages docs site: fragment authoring, `_gen.py`, the wasm FBX-analyzer bundle (`crates/web-analyzer`), how CI deploys it. |
+| [`site/README.md`](site/README.md) | The GitHub Pages docs site: fragment authoring, `_gen.py`, the wasm avatar-inspector bundle (`crates/web-analyzer`: report + `SceneView` geometry export) and the three.js viewer (`site/js/viewer.js`), how CI deploys it. |
 | [`docs/tutorial.md`](docs/tutorial.md) | End-to-end CLI walkthrough (FBX → armature → lint → stats). |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | No-external-contributions policy, then the internal dev reference: build/test/lint, conventions, adding a lint rule or crate. |
 
@@ -182,8 +182,13 @@ READMEs. What exists today, with its doc:
   [`mcp.md`](docs/reference/mcp.md)). Disk writes/repairs stay on the CLI behind a dry-run-safe
   `WriteGuard`.
 - **Docs site** — the GitHub Pages site under `site/` ([site/README.md](site/README.md)), deployed
-  by the self-hosted `deploy-pages` CI job, incl. the in-browser wasm FBX analyzer
-  (`crates/web-analyzer`: the fbx+armature+stats diagnose graph via wasm-bindgen).
+  by the self-hosted `deploy-pages` CI job, incl. the in-browser wasm **avatar inspector**
+  (`crates/web-analyzer`: the fbx+armature+stats diagnose graph via wasm-bindgen, plus a `SceneView`
+  export handing uprighted geometry / skin weights / bone positions / embedded textures to a three.js
+  viewer with skeleton, weight-heatmap, wireframe, UV and normal overlays; external textures resolved
+  from image files / a Unity project folder dropped onto the page — `.prefab` renderer slot → `.mat`
+  `_MainTex` guid → `.meta`, then filename; tabbed report with rank meters, bone tree, viseme checklist, per-material texture
+  status; `sample_fbx()` = the testkit's skinned humanoid).
 - **Runtime rig** — `mesh`/`pose`/`input` + `gltf`, the renderer-agnostic VR-spectator foundation
   ([`rig-runtime.md`](docs/reference/rig-runtime.md)).
 

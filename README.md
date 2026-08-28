@@ -9,7 +9,7 @@
 A Rust monorepo of tools for working with **VRChat avatars** (Unity, SDK3 / Avatars 3.0).
 
 **Docs site:** [andrewaltimit.github.io/avatar](https://andrewaltimit.github.io/avatar/) — including
-an in-browser **[FBX analyzer](https://andrewaltimit.github.io/avatar/analyzer.html)** (the Rust
+an in-browser **[avatar inspector](https://andrewaltimit.github.io/avatar/analyzer.html)** (the Rust
 diagnose graph compiled to WebAssembly: drop an avatar `.fbx`, get the humanoid rig check and
 VRChat performance rank; the file never leaves your machine).
 
@@ -63,7 +63,7 @@ format and subsystem references.
 | [`avatar-osc-gestures`](crates/osc-gestures/README.md) | The **analog-gesture daemon** ("Vive advanced controls on any hardware"): controller trigger → `Gesture*`/`Gesture*Weight` over OSC, with deadzone + change detection. Wired to `avatar osc gestures` |
 | [`avatar-mcp`](crates/mcp/README.md) | A domain-agnostic **MCP server** (stdio JSON-RPC): exposes the read/diagnose surface plus text-returning generation tools an agent host can discover + call. Wired to `avatar mcp serve` |
 | [`avatar-cli`](crates/cli/README.md) | The `avatar` binary tying the above together |
-| [`avatar-web-analyzer`](crates/web-analyzer/README.md) | The **WebAssembly** bundle behind the docs site's in-browser FBX analyzer: the same fbx + armature + stats diagnose graph, run client-side |
+| [`avatar-web-analyzer`](crates/web-analyzer/README.md) | The **WebAssembly** bundle behind the docs site's in-browser avatar inspector: the same fbx + armature + stats diagnose graph plus a `SceneView` geometry/skin/bone export for the 3D viewer, run client-side |
 | [`avatar-testkit`](crates/testkit/README.md) | Test-only (`publish = false`): the golden-snapshot harness + in-code synthetic-FBX builders behind the workspace's fixture corpus |
 
 The asset-generation crate is driven by `avatar anim-gen`, the composite `avatar toggle`, and the

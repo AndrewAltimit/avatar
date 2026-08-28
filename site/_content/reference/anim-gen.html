@@ -52,6 +52,11 @@
 
 <section class="doc-section" id="cli">
   <h2>CLI surface</h2>
+  <div class="cli"><code>avatar anim-gen clip --name Smile --blendshape Body:Smile:100 -o Smile.anim
+avatar anim-gen controller --name FX --clip &lt;guid&gt;@0.0 --clip &lt;guid&gt;@1.0 -o FX.controller
+avatar anim-gen params --param Hat:bool -o Params.asset
+avatar anim-gen menu --toggle Hat:Hat -o Menu.asset
+avatar toggle --name Hat --toggle Armature/Head/Hat -o HatBundle/</code></div>
   <table>
     <thead><tr><th>Command</th><th>Emits</th></tr></thead>
     <tbody>
@@ -103,3 +108,11 @@
     real editor and asserts they parse with no import errors; only the in-game behaviour check remains manual.
   </p>
 </section>
+
+<nav class="see-also" aria-label="See also">
+  <span class="see-also-label">See also</span>
+  <a href="unity-yaml-edit.html">Editing Unity YAML</a>
+  <a href="migrate.html">SDK2 → SDK3 migration</a>
+  <a href="mcp.html">MCP server</a>
+  <a href="sdk3-lint-rules.html">SDK3 lint rules</a>
+</nav>

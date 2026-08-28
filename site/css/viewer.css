@@ -1,0 +1,140 @@
+/* viewer.css — styles for the 3D avatar preview (js/viewer.js).
+ * Colours come from the site tokens in styles.css (--bg-*, --border*, --text*, --accent). */
+
+.av-viewer {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  min-height: 420px;
+  background: var(--bg-code, #0a0e15);
+  border: 1px solid var(--border, #1f2630);
+  border-radius: 8px;
+  overflow: hidden;
+  font-family: var(--font-body, system-ui, sans-serif);
+  color: var(--text, #c9d1d9);
+  user-select: none;
+}
+.av-viewer.is-fullbleed {
+  border-radius: 0;
+  border-left: 0;
+  border-right: 0;
+  max-width: none;
+}
+
+.av-stage,
+.av-stage .av-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
+  display: block;
+}
+.av-canvas { touch-action: none; outline: none; }
+
+/* --- toolbar --------------------------------------------------------------- */
+.av-toolbar {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  right: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  pointer-events: none;
+  z-index: 3;
+}
+.av-tb-group {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  background: color-mix(in srgb, var(--bg-raised, #11161e) 88%, transparent);
+  border: 1px solid var(--border, #1f2630);
+  border-radius: 6px;
+  backdrop-filter: blur(4px);
+  pointer-events: auto;
+}
+.av-tb-btn {
+  appearance: none;
+  border: 0;
+  border-radius: 4px;
+  padding: 4px 9px;
+  font: 500 12px/1.4 var(--font-body, system-ui, sans-serif);
+  color: var(--text-muted, #8b949e);
+  background: transparent;
+  cursor: pointer;
+  transition: background var(--transition, 0.12s ease), color var(--transition, 0.12s ease);
+  white-space: nowrap;
+}
+.av-tb-btn:hover { color: var(--text, #c9d1d9); background: var(--bg-card-hi, #19212d); }
+.av-tb-btn.is-active {
+  color: var(--accent-hi, #7ad3c4);
+  background: var(--accent-soft, #1c2a2a);
+}
+.av-tb-btn:disabled { opacity: 0.4; cursor: default; }
+.av-tb-btn:focus-visible { outline: 2px solid var(--accent, #58c4b3); outline-offset: 1px; }
+
+/* --- stats readout ---------------------------------------------------------- */
+.av-stats {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  padding: 5px 9px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--bg-raised, #11161e) 85%, transparent);
+  border: 1px solid var(--border, #1f2630);
+  font: 12px/1.4 var(--font-mono, ui-monospace, monospace);
+  color: var(--text-muted, #8b949e);
+  pointer-events: none;
+  z-index: 3;
+}
+.av-stats[hidden] { display: none; }
+.av-stat b { color: var(--text, #c9d1d9); font-weight: 600; }
+.av-stat-bone { flex-basis: 100%; color: var(--accent, #58c4b3); }
+.av-stat-bone b { color: var(--accent-hi, #7ad3c4); }
+
+/* --- hover tooltip ------------------------------------------------------------ */
+.av-tooltip {
+  position: absolute;
+  z-index: 4;
+  max-width: 260px;
+  padding: 5px 8px;
+  border-radius: 5px;
+  background: var(--bg-card, #131922);
+  border: 1px solid var(--border-hi, #2a323e);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+  font: 12px/1.35 var(--font-mono, ui-monospace, monospace);
+  color: var(--text, #c9d1d9);
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.av-tooltip[hidden] { display: none; }
+.av-tooltip b { color: var(--accent-hi, #7ad3c4); }
+.av-tooltip-slot { color: var(--text-muted, #8b949e); }
+.av-tooltip-dim { color: var(--text-dim, #636b76); font-size: 11px; }
+
+/* --- status / error message ----------------------------------------------------- */
+.av-message {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 24px 15%;
+  font-size: 14px;
+  color: var(--text-muted, #8b949e);
+  pointer-events: none;
+  z-index: 2;
+}
+.av-message[hidden] { display: none; }
+.av-message.is-error { color: var(--open, #b56b6b); }
+
+@media (max-width: 640px) {
+  .av-viewer { aspect-ratio: 4 / 3; min-height: 320px; }
+  .av-tb-btn { padding: 4px 6px; font-size: 11px; }
+}

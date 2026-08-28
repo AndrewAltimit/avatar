@@ -10,6 +10,8 @@
 
 <section class="doc-section" id="crates">
   <h2>The crates</h2>
+  <div class="cli"><code>avatar render --avatar model.fbx --pose Avatar.prefab -o posed.png   # the rig layer, driven from a prefab's pose
+avatar render --avatar model.fbx --stretch 'Skirt_*:1.5' -o out.png</code></div>
   <ul>
     <li><code>avatar-mesh</code> &mdash; POD <code>RawMesh</code> / skin interchange, no <code>glam</code>.</li>
     <li><code>avatar-fbx::meshes()</code> + <code>avatar-gltf</code> &mdash; FBX / glTF &rarr; <code>RawMesh</code> + skin/bind.</li>
@@ -33,5 +35,23 @@
     involves the cluster binds &mdash; identity for every untouched bone. <code>avatar render --pose
     &lt;prefab&gt;</code> / <code>--stretch</code> are built on it (see <a href="render.html">render</a>).
   </p>
+  <h3>Using it from Rust</h3>
+  <pre><code>use std::path::Path;
+let scene = avatar_fbx::FbxScene::load(Path::new("model.fbx"))?;
+let meshes = avatar_fbx::FbxDocument::load(Path::new("model.fbx"))?.meshes()?;  // RawMesh + skin per mesh
+let skeleton = avatar_armature::Skeleton::from_scene(&amp;scene);
+let skel = avatar_pose::PosedSkeleton::from_fbx(&amp;skeleton, &amp;scene, &amp;meshes[0]);
+let mut pose = skel.rest_pose();                     // identity palette at rest
+pose.set_local(skel.index_of(bone_id).unwrap(), local_matrix);
+let palette = skel.palette(&amp;pose);                  // world · inverse_bind per bone
+// GPU: upload `palette`; CPU: avatar_pose::cpu_skin(&amp;mesh, &amp;vertex_skin, &amp;palette)</code></pre>
+  <p class="caption">Signatures as of this docs pass; the crate READMEs are authoritative.</p>
   <div class="hint"><code>glam</code> (f32) is confined to pose/input/gltf &mdash; it never reaches the lint/cli graph, which is verified by <code>cargo tree</code>.</div>
 </section>
+
+<nav class="see-also" aria-label="See also">
+  <span class="see-also-label">See also</span>
+  <a href="render.html">Rendering & preview</a>
+  <a href="armature-repair.html">Armature repair</a>
+  <a href="../crates/index.html#runtime">Crates: runtime rig</a>
+</nav>

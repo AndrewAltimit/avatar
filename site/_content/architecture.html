@@ -3,30 +3,55 @@
   <h1>How the layers stack</h1>
   <p class="lede">
     The whole repo follows from one architectural reality: a VRChat avatar is assembled from files in two
-    distinct formats, and only one of the two transformation layers is fully ours to own in Rust. Everything
-    &mdash; crate boundaries, what we can fix vs. only flag, why upload isn't in scope &mdash; falls out of
-    this split.
+    distinct formats, and only those two file layers &mdash; not the Unity build or the VRChat upload &mdash;
+    are ours to own in Rust. Everything (crate boundaries, what we fix vs. only flag, why upload isn't in
+    scope) falls out of this split. The conceptual overview lives in <code>docs/overview.md</code>; the
+    architecture + roadmap of record is <code>PLAN.md</code>.
   </p>
 </header>
 
+<section class="doc-section" id="diagram">
+  <h2>The crate stack</h2>
+  <p>
+    Hover or focus a crate to highlight it; each box links to its entry on the <a href="crates/index.html">crates</a>
+    page. Dashed bands are outside the repo. Arrows show where data flows: the tool crates read the two file
+    layers and write only the Unity layer; the runtime rig consumes FBX/glTF meshes; the surface crates wrap the
+    same graph for the terminal, an agent host, and the browser.
+  </p>
+  <figure class="stack-figure">
+<svg viewBox="0 0 920 506" role="img" aria-labelledby="sd-title sd-desc" xmlns="http://www.w3.org/2000/svg">
+  <title id="sd-title">How the crates stack</title>
+  <desc id="sd-desc">Five bands: the FBX layer and the Unity-YAML layer on top; the diagnose/generate/transform crates below them; the runtime rig, preview and OSC crates; and the CLI, MCP, wasm and testkit surface at the bottom. Unity + VRCSDK upload and the running VRChat instance sit outside, on the right.</desc>
+  <defs><marker id="sd-head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z"/></marker></defs>
+  <path class="sd-arrow" d="M225,134 L225,202"/><text class="sd-arrow-label" x="232" y="152">read</text><path class="sd-arrow" d="M640,134 L570,202"/><text class="sd-arrow-label" x="648" y="156">read · edit</text><path class="sd-arrow" d="M456,252 L670,232"/><text class="sd-arrow-label" x="470" y="268">generated assets →</text><path class="sd-arrow" d="M790,252 L790,284"/><text class="sd-arrow-label" x="800" y="274">upload → live</text><path class="sd-arrow" d="M363,94 L363,320"/><text class="sd-arrow-label" x="368" y="300">RawMesh</text><path class="sd-arrow" d="M636,342 L670,342"/><path class="sd-arrow" d="M330,376 L330,444"/><path class="sd-arrow" d="M100,252 L100,444"/>
+  <g class="sd-layer "><rect x="10" y="10" width="430" height="124" rx="8"/><text class="sd-layer-title" x="22" y="28">1 · 3D asset layer — .fbx</text><text class="sd-layer-sub" x="22" y="41">armature · bind poses · skinning · blendshapes</text></g><a class="sd-crate " data-key="fbx" href="crates/index.html#foundation" tabindex="0"><title>avatar-fbx — binary read + write</title><rect x="24" y="50" width="120" height="44" rx="5"/><text x="84" y="69" text-anchor="middle">avatar-fbx</text><text class="sd-crate-sub" x="84" y="83" text-anchor="middle">binary read + write</text></a><a class="sd-crate " data-key="armature" href="crates/index.html#foundation" tabindex="0"><title>avatar-armature — humanoid map · repair</title><rect x="154" y="50" width="136" height="44" rx="5"/><text x="222" y="69" text-anchor="middle">avatar-armature</text><text class="sd-crate-sub" x="222" y="83" text-anchor="middle">humanoid map · repair</text></a><a class="sd-crate " data-key="mesh" href="crates/index.html#runtime" tabindex="0"><title>avatar-mesh — RawMesh interchange</title><rect x="300" y="50" width="126" height="44" rx="5"/><text x="363" y="69" text-anchor="middle">avatar-mesh</text><text class="sd-crate-sub" x="363" y="83" text-anchor="middle">RawMesh interchange</text></a><g class="sd-layer "><rect x="460" y="10" width="450" height="124" rx="8"/><text class="sd-layer-title" x="472" y="28">2 · Unity / VRChat layer — UnityYAML</text><text class="sd-layer-sub" x="472" y="41">descriptor · animators · menus/params · prefabs · packages</text></g><a class="sd-crate " data-key="unity-yaml" href="crates/index.html#foundation" tabindex="0"><title>unity-yaml — read · splice-edit</title><rect x="474" y="50" width="132" height="40" rx="5"/><text x="540" y="67" text-anchor="middle">unity-yaml</text><text class="sd-crate-sub" x="540" y="81" text-anchor="middle">read · splice-edit</text></a><a class="sd-crate " data-key="unity-asset" href="crates/index.html#foundation" tabindex="0"><title>unity-asset — .controller / .anim</title><rect x="614" y="50" width="132" height="40" rx="5"/><text x="680" y="67" text-anchor="middle">unity-asset</text><text class="sd-crate-sub" x="680" y="81" text-anchor="middle">.controller / .anim</text></a><a class="sd-crate " data-key="vrc-descriptor" href="crates/index.html#foundation" tabindex="0"><title>vrc-descriptor — descriptor · menus</title><rect x="754" y="50" width="142" height="40" rx="5"/><text x="825" y="67" text-anchor="middle">vrc-descriptor</text><text class="sd-crate-sub" x="825" y="81" text-anchor="middle">descriptor · menus</text></a><a class="sd-crate " data-key="vpm" href="crates/index.html#foundation" tabindex="0"><title>vpm — project discovery</title><rect x="474" y="96" width="132" height="28" rx="5"/><text x="540" y="107" text-anchor="middle">vpm</text><text class="sd-crate-sub" x="540" y="121" text-anchor="middle">project discovery</text></a><a class="sd-crate " data-key="unitypackage" href="crates/index.html#foundation" tabindex="0"><title>unitypackage — gzip+tar read · extract · testbed</title><rect x="614" y="96" width="282" height="28" rx="5"/><text x="755" y="107" text-anchor="middle">unitypackage</text><text class="sd-crate-sub" x="755" y="121" text-anchor="middle">gzip+tar read · extract · testbed</text></a><g class="sd-layer "><rect x="10" y="166" width="640" height="86" rx="8"/><text class="sd-layer-title" x="22" y="184">3 · Diagnose · generate · transform</text><text class="sd-layer-sub" x="22" y="197">reads layers 1 + 2, writes layer 2</text></g><a class="sd-crate " data-key="lint" href="crates/index.html#logic" tabindex="0"><title>avatar-lint — VRC001–VRC062</title><rect x="24" y="202" width="126" height="40" rx="5"/><text x="87" y="219" text-anchor="middle">avatar-lint</text><text class="sd-crate-sub" x="87" y="233" text-anchor="middle">VRC001–VRC062</text></a><a class="sd-crate " data-key="stats" href="crates/index.html#logic" tabindex="0"><title>avatar-stats — performance rank</title><rect x="160" y="202" width="136" height="40" rx="5"/><text x="228" y="219" text-anchor="middle">avatar-stats</text><text class="sd-crate-sub" x="228" y="233" text-anchor="middle">performance rank</text></a><a class="sd-crate " data-key="anim-gen" href="crates/index.html#logic" tabindex="0"><title>avatar-anim-gen — clips · FX · params/menus</title><rect x="306" y="202" width="150" height="40" rx="5"/><text x="381" y="219" text-anchor="middle">avatar-anim-gen</text><text class="sd-crate-sub" x="381" y="233" text-anchor="middle">clips · FX · params/menus</text></a><a class="sd-crate " data-key="migrate" href="crates/index.html#logic" tabindex="0"><title>avatar-migrate — SDK2→SDK3 · physbone</title><rect x="466" y="202" width="170" height="40" rx="5"/><text x="551" y="219" text-anchor="middle">avatar-migrate</text><text class="sd-crate-sub" x="551" y="233" text-anchor="middle">SDK2→SDK3 · physbone</text></a><g class="sd-layer sd-external"><rect x="670" y="166" width="240" height="86" rx="8"/><text class="sd-layer-title" x="682" y="184">Unity + VRCSDK — not ours</text><text class="sd-layer-sub" x="682" y="197">build &amp; upload (interactive login)</text></g><g class="sd-layer "><rect x="10" y="284" width="640" height="92" rx="8"/><text class="sd-layer-title" x="22" y="302">4 · Runtime &amp; preview</text><text class="sd-layer-sub" x="22" y="315">renderer-agnostic rig · wgpu preview · live OSC</text></g><a class="sd-crate " data-key="gltf" href="crates/index.html#runtime" tabindex="0"><title>avatar-gltf — glTF → RawMesh</title><rect x="24" y="320" width="96" height="44" rx="5"/><text x="72" y="339" text-anchor="middle">avatar-gltf</text><text class="sd-crate-sub" x="72" y="353" text-anchor="middle">glTF → RawMesh</text></a><a class="sd-crate " data-key="pose" href="crates/index.html#runtime" tabindex="0"><title>avatar-pose — posing · IK · skin</title><rect x="128" y="320" width="110" height="44" rx="5"/><text x="183" y="339" text-anchor="middle">avatar-pose</text><text class="sd-crate-sub" x="183" y="353" text-anchor="middle">posing · IK · skin</text></a><a class="sd-crate " data-key="input" href="crates/index.html#runtime" tabindex="0"><title>avatar-input — tracker input</title><rect x="246" y="320" width="100" height="44" rx="5"/><text x="296" y="339" text-anchor="middle">avatar-input</text><text class="sd-crate-sub" x="296" y="353" text-anchor="middle">tracker input</text></a><a class="sd-crate " data-key="render" href="crates/index.html#runtime" tabindex="0"><title>avatar-render — wgpu · headless/view</title><rect x="354" y="320" width="116" height="44" rx="5"/><text x="412" y="339" text-anchor="middle">avatar-render</text><text class="sd-crate-sub" x="412" y="353" text-anchor="middle">wgpu · headless/view</text></a><a class="sd-crate " data-key="osc" href="crates/index.html#osc" tabindex="0"><title>osc · osc-gestures — params · gesture daemon</title><rect x="478" y="320" width="158" height="44" rx="5"/><text x="557" y="339" text-anchor="middle">osc · osc-gestures</text><text class="sd-crate-sub" x="557" y="353" text-anchor="middle">params · gesture daemon</text></a><g class="sd-layer sd-external"><rect x="670" y="284" width="240" height="92" rx="8"/><text class="sd-layer-title" x="682" y="302">Running VRChat</text><text class="sd-layer-sub" x="682" y="315">OSC in :9000 · out :9001 · OSCQuery</text></g><g class="sd-layer "><rect x="10" y="408" width="900" height="86" rx="8"/><text class="sd-layer-title" x="22" y="426">5 · App &amp; agent surface</text><text class="sd-layer-sub" x="22" y="439">one binary; the same graph over MCP and in the browser</text></g><a class="sd-crate sd-cli" data-key="cli" href="crates/index.html#surface" tabindex="0"><title>avatar-cli — the avatar binary</title><rect x="24" y="444" width="160" height="40" rx="5"/><text x="104" y="461" text-anchor="middle">avatar-cli</text><text class="sd-crate-sub" x="104" y="475" text-anchor="middle">the avatar binary</text></a><a class="sd-crate " data-key="mcp" href="crates/index.html#surface" tabindex="0"><title>avatar-mcp — stdio MCP server</title><rect x="196" y="444" width="150" height="40" rx="5"/><text x="271" y="461" text-anchor="middle">avatar-mcp</text><text class="sd-crate-sub" x="271" y="475" text-anchor="middle">stdio MCP server</text></a><a class="sd-crate " data-key="web-analyzer" href="crates/index.html#surface" tabindex="0"><title>avatar-web-analyzer — wasm · the inspector page</title><rect x="358" y="444" width="176" height="40" rx="5"/><text x="446" y="461" text-anchor="middle">avatar-web-analyzer</text><text class="sd-crate-sub" x="446" y="475" text-anchor="middle">wasm · the inspector page</text></a><a class="sd-crate " data-key="testkit" href="crates/index.html#surface" tabindex="0"><title>avatar-testkit — goldens · synthetic FBX</title><rect x="546" y="444" width="140" height="40" rx="5"/><text x="616" y="461" text-anchor="middle">avatar-testkit</text><text class="sd-crate-sub" x="616" y="475" text-anchor="middle">goldens · synthetic FBX</text></a>
+</svg>
+    <figcaption>Twenty-two crates on five bands. Package names are <code>avatar-&lt;slug&gt;</code>; the
+    diagram drops the prefix where it is obvious.</figcaption>
+  </figure>
+</section>
+
 <section class="doc-section" id="pipeline">
-  <h2>The pipeline</h2>
-  <pre><code>.unitypackage ──extract──► FBX / Unity project
-                                   │
-                                   ▼
-        [avatar tools] ──► diagnose · fix · lint · rank · generate · edit · migrate
-                                   │
-                    preview offline (avatar render / avatar view)
-                                   │
-                     drop generated assets into Unity
-                                   │
-                         (you) build &amp; upload via VRCSDK
-                                   │
-               [avatar osc] ──► drive parameters at runtime</code></pre>
+  <h2>The pipeline, end to end</h2>
+  <ol>
+    <li><strong>Unpack</strong> &mdash; <code>avatar unitypackage extract</code> turns a shipped
+      <code>.unitypackage</code> into an FBX + Unity project tree (<a href="reference/unitypackage.html">format</a>).</li>
+    <li><strong>Diagnose &amp; fix the 3D asset</strong> &mdash; <code>fbx inspect</code>, <code>armature
+      check</code>/<code>fix</code> (<a href="reference/armature-repair.html">armature repair</a>).</li>
+    <li><strong>Lint &amp; rank the project</strong> &mdash; <code>avatar lint</code> and <code>avatar stats</code>
+      (<a href="reference/sdk3-lint-rules.html">rules</a>, <a href="reference/performance-stats.html">metrics</a>).</li>
+    <li><strong>Generate, edit, migrate</strong> &mdash; <code>anim-gen</code>, <code>toggle</code>, <code>asset set</code>,
+      <code>migrate sdk3</code>, <code>physbone</code> write Unity YAML with deterministic fileIDs or splice an
+      existing asset in place.</li>
+    <li><strong>Preview offline</strong> &mdash; <code>avatar render</code> / <code>avatar view</code>
+      (<a href="reference/render.html">render</a>).</li>
+    <li><strong>You build &amp; upload</strong> in Unity via the VRCSDK.</li>
+    <li><strong>Drive at runtime</strong> &mdash; <code>avatar osc</code> and the analog-gesture daemon
+      (<a href="reference/osc-runtime.html">OSC runtime</a>).</li>
+  </ol>
   <p>
     This repo is <strong>file transformation / analysis / validation / generation</strong> plus an
-    <strong>OSC runtime daemon</strong> &mdash; not a Unity replacement. The conceptual overview lives in
-    <code>docs/overview.md</code>; the architecture + roadmap of record is <code>PLAN.md</code>.
+    <strong>OSC runtime daemon</strong> &mdash; not a Unity replacement.
   </p>
 </section>
 
@@ -38,12 +63,18 @@
     <strong>read and write</strong>. The write-back landed in M3 (<code>avatar_fbx::FbxDocument</code>),
     resolving the project's long-standing biggest risk.
   </p>
+  <h3>Ground rules</h3>
   <ul>
     <li>FBX support is <strong>binary only</strong> (FBX 7.x, the Autodesk/Unity/Blender default). ASCII FBX must be re-exported as binary.</li>
     <li>Objects are edited by FBX <strong>object id</strong> (skin/anim refs are by id, not name), so renames are safe.</li>
     <li>Bind comes from <code>TransformLink</code>/inverse-bind, never recomposed from <code>Lcl</code> + <code>PreRotation</code>.</li>
   </ul>
-  <p>See <code>docs/reference/armature-repair.md</code> and <code>docs/reference/rig-runtime.md</code>.</p>
+  <div class="notice warn"><div class="notice-title">Known limit</div>
+    A rewritten <em>full skinned avatar</em> imported invisible in Unity 2022.3 (undiagnosed). Renames are
+    safe; treat any other written FBX destined for Unity as unverified, and prefer the Blender-script route
+    for geometry-level repairs. See <a href="reference/armature-repair.html">armature repair</a>.
+  </div>
+  <p>Crates: <code>avatar-fbx</code>, <code>avatar-armature</code>. See <code>docs/reference/armature-repair.md</code> and <code>docs/reference/rig-runtime.md</code>.</p>
 </section>
 
 <section class="doc-section" id="unity-layer">
@@ -51,29 +82,36 @@
   <p>
     <code>.anim</code>, <code>.controller</code>, <code>.asset</code>, <code>.prefab</code>, scenes,
     <code>.meta</code>: the Avatar Descriptor, humanoid bone mapping, animator layers, expression
-    menus/params, blend trees, gesture keyframes. <strong>Read/lint is low-risk.</strong>
-    <strong>Generating</strong> assets Unity accepts requires correct fileIDs and GUID references &mdash; the
-    hard part the asset-generation layer (M4) solves with a faithful hand-written YAML emitter and
-    deterministic FNV-1a-seeded fileIDs.
+    menus/params, blend trees, gesture keyframes. Three modes of access, in increasing order of risk:
   </p>
+  <table>
+    <thead><tr><th>Mode</th><th>Risk</th><th>How</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Read / lint</strong></td><td><span class="badge badge-ok">low</span></td><td>Structural recognition of VRChat assets (no hardcoded script GUIDs) + a guid&rarr;path <code>.meta</code> index for cross-asset references. <code>avatar-unity-yaml</code>, <code>avatar-unity-asset</code>, <code>avatar-vrc-descriptor</code>.</td></tr>
+      <tr><td><strong>Edit in place</strong></td><td><span class="badge badge-ok">low</span></td><td><code>EditableUnityFile</code> span-splices value and structural changes into the raw text, so fileIDs, references, key order, and formatting survive round-trip (<a href="reference/unity-yaml-edit.html">editing Unity YAML</a>). This is what makes whole-avatar operations safe: <a href="reference/migrate.html">migration</a> retypes the descriptor at its existing fileIDs; <a href="reference/physbone.html">PhysBone tuning</a> rewrites one component body.</td></tr>
+      <tr><td><strong>Generate</strong></td><td><span class="badge badge-warn">the hard part</span></td><td>Assets Unity accepts need correct fileIDs, field names, and GUID references. Solved (M4) with a faithful hand-written YAML emitter and deterministic FNV-1a-seeded fileIDs; verified by a headless Unity import gate (<a href="reference/anim-gen.html">asset generation</a>).</td></tr>
+    </tbody>
+  </table>
+  <div class="hint">
+    A Unity GUID is 32 hex chars and must contain letters in test fixtures: an all-digit "guid" parses as a
+    number and silently breaks resolution. SDK3 script references are DLL class hashes, not
+    <code>11500000</code>.
+  </div>
+</section>
+
+<section class="doc-section" id="runtime-layer">
+  <h2>Layer 4 &mdash; runtime &amp; preview</h2>
   <p>
-    A Unity GUID is 32 hex chars and must contain letters; an all-digit "guid" parses as a number and breaks
-    GUID resolution. The lint engine resolves expression/playable-layer references through a guid&rarr;path
-    <code>.meta</code> index.
-  </p>
-  <p>
-    <strong>Editing</strong> an existing asset is its own third mode, distinct from read and generate:
-    <code>EditableUnityFile</code> span-splices value and structural changes into the raw text, so fileIDs,
-    references, key order, and formatting all survive round-trip (<a href="reference/unity-yaml-edit.html">editing
-    Unity YAML</a>). That editing surface is what makes whole-avatar operations safe in place:
-    <a href="reference/migrate.html">SDK2 &rarr; SDK3 migration</a> retypes the descriptor at its existing
-    fileIDs, and <a href="reference/physbone.html">PhysBone tuning</a> rewrites component values inside a
-    prefab without disturbing anything else.
+    The renderer-agnostic <a href="reference/rig-runtime.html">runtime rig</a> (<code>mesh</code>,
+    <code>gltf</code>, <code>pose</code>, <code>input</code>) loads a rig and drives it; <code>render</code>
+    draws it headlessly with wgpu or in a window; <code>osc</code> / <code>osc-gestures</code> talk to the
+    running game. <code>glam</code> (f32) is confined to these crates and never reaches the diagnose /
+    generate / OSC graph &mdash; an invariant <code>cargo tree</code> verifies.
   </p>
 </section>
 
 <section class="doc-section" id="upload">
-  <h2>Layer 3 &mdash; upload / build (not ours)</h2>
+  <h2>What is not ours &mdash; build &amp; upload</h2>
   <p>
     The VRCSDK control panel pushes to VRChat servers. It needs interactive VRChat-account login and a Unity
     license that is painful in containers &mdash; effectively Windows-only. We deliberately stop here: we
@@ -82,8 +120,9 @@
   </p>
   <div class="hint">
     The one place we reach into Unity is the optional headless <strong>Unity acceptance</strong> workflow,
-    which imports a repaired FBX inside a GameCI Docker image to assert it configures as Humanoid &mdash; the
-    "last mile" the Rust tests can't cover. It self-skips until a Unity license secret is configured.
+    which imports a repaired FBX and generated assets inside a GameCI Docker image to assert they configure
+    and parse cleanly &mdash; the "last mile" the Rust tests can't cover. It self-skips until a Unity license
+    secret is configured.
   </div>
 </section>
 
@@ -100,5 +139,14 @@
       <tr><td>M5</td><td>OSC runtime + analog-gesture daemon</td><td><span class="tag tag-partial">OpenXR input pending</span></td></tr>
     </tbody>
   </table>
-  <p>The runtime rig layer (skin/pose/IK/input/glTF) also landed alongside M4/M5. Full detail in <code>PLAN.md</code>.</p>
+  <p>The runtime rig layer, wgpu preview, Unity-YAML editing, migration + PhysBone tuning, the MCP server, and the browser inspector landed alongside M4/M5. Full detail in <code>PLAN.md</code>.</p>
 </section>
+
+<nav class="see-also" aria-label="See also">
+  <span class="see-also-label">See also</span>
+  <a href="crates/index.html">Crates</a>
+  <a href="cli/index.html">CLI commands</a>
+  <a href="reference/unity-yaml-edit.html">Editing Unity YAML</a>
+  <a href="reference/rig-runtime.html">Runtime rig layer</a>
+  <a href="quickstart.html">Quick start</a>
+</nav>

@@ -12,7 +12,7 @@
 <section class="doc-section" id="build">
   <h2>Build</h2>
   <div class="cli"><code>cargo build --workspace</code></div>
-  <p>Standard workspace conventions: edition 2024, <code>anyhow</code> + <code>clap</code> v4. The full CI gate is fmt + clippy (<code>-D warnings</code>) + test + build:</p>
+  <p>Requires a stable Rust toolchain (the exact version is pinned in <code>rust-toolchain.toml</code>; <code>rustup</code> picks it up). Standard workspace conventions: edition 2024, <code>anyhow</code> + <code>clap</code> v4. The full CI gate is fmt + clippy (<code>-D warnings</code>) + test + build:</p>
   <div class="cli"><code>cargo fmt --all -- --check
 cargo clippy --all-targets --workspace -- -D warnings
 cargo test --workspace</code></div>
@@ -85,7 +85,7 @@ cargo run -p avatar-cli -- view   --avatar avatar.fbx --world world/Assets/Scene
   <div class="cli"><code>cargo run -p avatar-cli -- osc send VRCEmote 3                         # drive a running VRChat over OSC
 cargo run -p avatar-cli -- osc query path/to/avatar-osc-config.json    # list an avatar's OSC parameters
 cargo run -p avatar-cli -- osc capture --seconds 30 -o params.log      # record the live parameter stream
-cargo run -p avatar-cli -- osc replay params.log FX.controller         # simulate the FX against the capture
+cargo run -p avatar-cli -- osc replay params.log --controller FX.controller --timeline  # simulate the FX against the capture
 cargo run -p avatar-cli -- osc gestures --seconds 10                   # analog-gesture daemon (demo sweep)</code></div>
 </section>
 
@@ -100,6 +100,16 @@ cargo run -p avatar-cli -- mcp serve                                   # stdio M
   </p>
 </section>
 
+<section class="doc-section" id="next">
+  <h2>Where next</h2>
+  <ul class="next-list">
+    <li><a href="cli/index.html">CLI commands</a> &mdash; every subcommand, grouped by layer.</li>
+    <li><a href="analyzer.html">Avatar inspector</a> &mdash; the FBX half of this page, in your browser, with a 3D viewer.</li>
+    <li><a href="reference/index.html">Reference</a> &mdash; per-subsystem behaviour, mirroring <code>docs/reference/</code>.</li>
+    <li><a href="architecture.html">How it stacks</a> &mdash; the crate diagram and the two-layer model.</li>
+  </ul>
+</section>
+
 <section class="doc-section" id="samples">
   <h2>Tests &amp; sample assets</h2>
   <p>
@@ -111,3 +121,11 @@ cargo run -p avatar-cli -- mcp serve                                   # stdio M
   </p>
   <div class="hint">Install the local pre-commit hook (fmt + clippy) with <code>scripts/install-hooks.sh</code>.</div>
 </section>
+
+<nav class="see-also" aria-label="See also">
+  <span class="see-also-label">See also</span>
+  <a href="cli/index.html">CLI commands</a>
+  <a href="architecture.html">How it stacks</a>
+  <a href="reference/index.html">Reference</a>
+  <a href="analyzer.html">Avatar inspector</a>
+</nav>

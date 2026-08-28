@@ -1,103 +1,223 @@
-<header class="page-header" id="top">
-  <div class="breadcrumb">project &middot; VRChat SDK3 / Avatars 3.0 &middot; Rust monorepo</div>
-  <h1>avatar <span class="hero-sub">tools for the files a VRChat avatar is made of</span></h1>
-  <p class="lede">
-    A Rust monorepo that operates on the <strong>files</strong> a VRChat SDK3 avatar is built from &mdash;
-    binary FBX and Unity YAML &mdash; to diagnose, fix, lint, generate, and drive them, plus an OSC runtime
-    layer. It does <strong>not</strong> replace Unity or the VRChat SDK upload step: you still build &amp;
-    upload in Unity. These tools handle everything up to that point, and the live OSC layer after it.
+<header class="page-header hero" id="top">
+  <div class="eyebrow">VRChat SDK3 / Avatars 3.0 &middot; Rust monorepo &middot; MIT or Unlicense</div>
+  <h1>Tools for the <span class="hero-sub">files</span> a VRChat avatar is made of.</h1>
+  <p class="lede hero-lede">
+    <code>avatar</code> reads, diagnoses, fixes, lints, generates, and previews the binary FBX and Unity
+    YAML an SDK3 avatar is built from &mdash; then drives the uploaded avatar over OSC. No Unity in the
+    loop until you build &amp; upload; every command runs offline and takes <code>--json</code>.
   </p>
+  <div class="hero-actions">
+    <a class="btn btn-primary" href="analyzer.html">Try the inspector in your browser</a>
+    <a class="btn" href="quickstart.html">Quick start</a>
+    <a class="btn btn-ghost" href="reference/index.html">Reference</a>
+  </div>
+  <div class="hero-meta">
+    <span class="pill">22 crates</span>
+    <span class="pill">binary FBX read + write</span>
+    <span class="pill">lint rules VRC001&ndash;VRC062</span>
+    <span class="pill">M0&ndash;M5 green</span>
+    <span class="pill pill-warn">alpha &middot; verify in Unity</span>
+  </div>
 </header>
 
-<div class="notice warn">
-  <div class="notice-title">Status: early / alpha (WIP)</div>
-  The crates build green and are covered by tests (synthetic fixtures in CI, sample-gated real assets on the
-  self-hosted runner), generated assets pass a headless Unity import-acceptance gate, and a real SDK2 avatar
-  has been migrated, built, and uploaded to VRChat with these tools. Still: expect rough edges, verify in
-  Unity before you rely on output, and treat APIs, CLI flags, and report formats as subject to change.
-</div>
-
 <div class="hint">
-  <strong>Try it without installing anything:</strong> the <a href="analyzer.html">FBX analyzer</a> runs the
-  actual Rust diagnose graph as WebAssembly in your browser &mdash; drop an avatar <code>.fbx</code>, get
-  the humanoid rig check and VRChat performance rank. The file never leaves your machine.
+  <strong>New in the inspector:</strong> the in-browser <a href="analyzer.html">Avatar inspector</a> now
+  opens your <code>.fbx</code> in a <strong>3D viewer</strong> with skeleton and skin-weight overlays next
+  to the humanoid rig check and performance rank. It runs the real Rust diagnose graph as WebAssembly
+  &mdash; the file never leaves your machine.
 </div>
 
-<section class="doc-section" id="two-layers">
-  <h2>The two-layer model</h2>
-  <p>Read this first. There are two layers we own in Rust, and one we don't.</p>
-  <div class="card-grid">
-    <a class="card" href="architecture.html#fbx-layer">
-      <div class="card-title">3D asset layer &middot; <code>.fbx</code></div>
-      <div class="card-body">Armature/skeleton, bone names, bind poses, skinning weights, blendshapes. Fully ours &mdash; native binary read <em>and</em> write via <code>fbxcel</code>.</div>
+<section class="doc-section" id="pipeline">
+  <h2>The pipeline</h2>
+  <p>
+    Every tool sits at one point on the path from a raw export to a live avatar. Click a step to jump to
+    its reference.
+  </p>
+  <div class="pipeline">
+    <a class="pipeline-step" href="cli/index.html#fbx-armature" data-step="1">
+      <span class="pipeline-format">.fbx</span>
+      <span class="pipeline-title">Inspect</span>
+      <span class="pipeline-cmd">avatar fbx inspect</span>
+      <span class="pipeline-desc">Hierarchy, units, axes, blendshapes, unapplied transforms.</span>
     </a>
-    <a class="card" href="architecture.html#unity-layer">
-      <div class="card-title">Unity / VRChat layer &middot; UnityYAML</div>
-      <div class="card-body"><code>.anim</code>, <code>.controller</code>, <code>.asset</code>, <code>.prefab</code>, scenes, <code>.meta</code>: humanoid mapping, Avatar Descriptor, animator layers, expression menus/params. Read/lint &amp; generate.</div>
+    <span class="pipeline-arrow" aria-hidden="true">&rarr;</span>
+    <a class="pipeline-step" href="reference/armature-repair.html" data-step="2">
+      <span class="pipeline-format">.fbx</span>
+      <span class="pipeline-title">Armature check / fix</span>
+      <span class="pipeline-cmd">avatar armature fix</span>
+      <span class="pipeline-desc">Humanoid mapping, canonical renames, Blender repair script.</span>
     </a>
-    <a class="card" href="architecture.html#upload">
-      <div class="card-title">Upload / build &middot; not ours</div>
-      <div class="card-body">The VRCSDK control panel &rarr; VRChat servers. Interactive account login, effectively Windows-only. We hand off generated assets; you upload.</div>
+    <span class="pipeline-arrow" aria-hidden="true">&rarr;</span>
+    <a class="pipeline-step" href="reference/sdk3-lint-rules.html" data-step="3">
+      <span class="pipeline-format">Unity project</span>
+      <span class="pipeline-title">Lint</span>
+      <span class="pipeline-cmd">avatar lint</span>
+      <span class="pipeline-desc">SDK3 compliance across descriptor, params, menus, animators, clips.</span>
+    </a>
+    <span class="pipeline-arrow" aria-hidden="true">&rarr;</span>
+    <a class="pipeline-step" href="reference/performance-stats.html" data-step="4">
+      <span class="pipeline-format">.fbx / project</span>
+      <span class="pipeline-title">Stats</span>
+      <span class="pipeline-cmd">avatar stats</span>
+      <span class="pipeline-desc">VRChat performance rank, PC and Android, offline.</span>
+    </a>
+    <span class="pipeline-arrow" aria-hidden="true">&rarr;</span>
+    <a class="pipeline-step" href="reference/anim-gen.html" data-step="5">
+      <span class="pipeline-format">Unity YAML</span>
+      <span class="pipeline-title">Generate / edit</span>
+      <span class="pipeline-cmd">avatar toggle &middot; anim-gen &middot; asset set</span>
+      <span class="pipeline-desc">Clips, FX controllers, params, menus; surgical in-place edits; SDK2 &rarr; SDK3.</span>
+    </a>
+    <span class="pipeline-arrow" aria-hidden="true">&rarr;</span>
+    <span class="pipeline-step pipeline-external" data-step="&nbsp;">
+      <span class="pipeline-format">VRCSDK</span>
+      <span class="pipeline-title">Build &amp; upload</span>
+      <span class="pipeline-cmd">(you, in Unity)</span>
+      <span class="pipeline-desc">Not ours: interactive login, effectively Windows-only.</span>
+    </span>
+    <span class="pipeline-arrow" aria-hidden="true">&rarr;</span>
+    <a class="pipeline-step" href="reference/osc-runtime.html" data-step="6">
+      <span class="pipeline-format">live</span>
+      <span class="pipeline-title">OSC</span>
+      <span class="pipeline-cmd">avatar osc</span>
+      <span class="pipeline-desc">Send, capture, replay parameters; the analog-gesture daemon.</span>
     </a>
   </div>
+  <p class="caption">
+    Preview sits alongside the whole chain: <a href="reference/render.html"><code>avatar render</code> /
+    <code>avatar view</code></a> draw the avatar, a world, or the avatar at the world's spawn without Unity.
+    The full picture is on <a href="architecture.html">How it stacks</a>.
+  </p>
 </section>
 
 <section class="doc-section" id="do">
   <h2>What you can do today</h2>
   <div class="card-grid">
+    <a class="card" href="analyzer.html">
+      <div class="card-icon" aria-hidden="true">&#9673;</div>
+      <div class="card-title">Inspect in the browser</div>
+      <div class="card-body">Drop an FBX: 3D viewer with skeleton and weight overlays, humanoid rig check, performance rank, blendshape inventory. WebAssembly, nothing uploaded.</div>
+      <span class="card-cmd">analyzer.html</span>
+    </a>
     <a class="card" href="reference/armature-repair.html">
+      <div class="card-icon" aria-hidden="true">&#9881;</div>
       <div class="card-title">Fix the armature</div>
-      <div class="card-body">Canonicalize a raw Mixamo rig so Unity auto-configures it as Humanoid. Topology / scale / orientation issues are flagged. <code>avatar armature fix</code>.</div>
+      <div class="card-body">Canonicalize a raw Mixamo rig so Unity auto-configures it as Humanoid; topology / scale / orientation issues flagged and emitted as a headless-Blender script.</div>
+      <span class="card-cmd">avatar armature fix</span>
     </a>
     <a class="card" href="reference/sdk3-lint-rules.html">
+      <div class="card-icon" aria-hidden="true">&#10003;</div>
       <div class="card-title">Lint a project</div>
-      <div class="card-body">SDK3 compliance over an entire Unity project: params, menus, descriptor refs, visemes, animator controllers. <code>avatar lint</code> &mdash; exits non-zero for CI.</div>
+      <div class="card-body">SDK3 compliance over a whole Unity project: params, menus, descriptor refs, visemes, animator controllers, clip contents, PhysBones, Quest. Exits non-zero for CI.</div>
+      <span class="card-cmd">avatar lint</span>
     </a>
     <a class="card" href="reference/performance-stats.html">
+      <div class="card-icon" aria-hidden="true">&#9636;</div>
       <div class="card-title">Rank performance offline</div>
-      <div class="card-body">VRChat's Excellent&rarr;Very Poor rank computed without Unity, against PC + Android limits. <code>avatar stats</code>.</div>
+      <div class="card-body">VRChat's Excellent &rarr; Very Poor rank without Unity, against the PC and Android limit tables, including particles, constraints, and texture VRAM.</div>
+      <span class="card-cmd">avatar stats</span>
     </a>
     <a class="card" href="reference/anim-gen.html">
+      <div class="card-icon" aria-hidden="true">&#9998;</div>
       <div class="card-title">Generate assets</div>
-      <div class="card-body">Emit <code>.anim</code> clips, blend trees, full FX controllers, expression params/menus &mdash; or a complete toggle bundle in one command. Deterministic, diffable fileIDs. <code>avatar anim-gen</code> / <code>avatar toggle</code>.</div>
+      <div class="card-body">Emit <code>.anim</code> clips, blend trees, full FX controllers, expression params/menus &mdash; or a complete ten-file toggle bundle. Deterministic, diffable fileIDs.</div>
+      <span class="card-cmd">avatar toggle &middot; anim-gen</span>
+    </a>
+    <a class="card" href="reference/unity-yaml-edit.html">
+      <div class="card-icon" aria-hidden="true">&#9986;</div>
+      <div class="card-title">Edit Unity YAML safely</div>
+      <div class="card-body">Change one value or swap one document in an existing asset by span-splicing the raw text: fileIDs, references, key order, and formatting all survive.</div>
+      <span class="card-cmd">avatar asset set</span>
     </a>
     <a class="card" href="reference/migrate.html">
+      <div class="card-icon" aria-hidden="true">&#8644;</div>
       <div class="card-title">Migrate SDK2 &rarr; SDK3</div>
-      <div class="card-body">Retype the descriptor in place, convert DynamicBone &rarr; PhysBone by the SDK's own rules, build FX from gesture overrides, and get a VCC-openable project. <code>avatar migrate sdk3</code>.</div>
+      <div class="card-body">Retype the descriptor in place, convert DynamicBone &rarr; PhysBone by the SDK's own rules, rebuild FX from gesture overrides, get a VCC-openable project.</div>
+      <span class="card-cmd">avatar migrate sdk3</span>
     </a>
     <a class="card" href="reference/physbone.html">
+      <div class="card-icon" aria-hidden="true">&#8767;</div>
       <div class="card-title">Tune PhysBones</div>
-      <div class="card-body">Inspect and retune a prefab's PhysBones in place &mdash; values, per-chain curves, split / stretch / re-angle chains &mdash; with render previews. <code>avatar physbone</code>.</div>
+      <div class="card-body">Inspect and retune a prefab's PhysBones in place: values, per-chain curves, split / stretch / flare / nudge chains, with render previews of the result.</div>
+      <span class="card-cmd">avatar physbone</span>
     </a>
     <a class="card" href="reference/render.html">
+      <div class="card-icon" aria-hidden="true">&#9635;</div>
       <div class="card-title">Preview without Unity</div>
-      <div class="card-body">Headless GPU renders of the avatar, a world scene, or the avatar at the world's spawn &mdash; plus an interactive orbit/zoom/walk viewer. <code>avatar render</code> / <code>avatar view</code>.</div>
+      <div class="card-body">Headless GPU renders of the avatar, a world scene, or the avatar at the world's spawn, plus an interactive orbit / zoom / walk viewer.</div>
+      <span class="card-cmd">avatar render &middot; view</span>
     </a>
     <a class="card" href="reference/osc-runtime.html">
+      <div class="card-icon" aria-hidden="true">&#8776;</div>
       <div class="card-title">Drive avatars over OSC</div>
-      <div class="card-body">Speak VRChat's OSC parameter protocol, capture + replay parameter streams, and run the analog-gesture daemon &mdash; "Vive advanced controls on any hardware". <code>avatar osc</code>.</div>
+      <div class="card-body">Speak VRChat's OSC parameter protocol, capture and replay parameter streams against a controller, run the analog-gesture daemon on any hardware.</div>
+      <span class="card-cmd">avatar osc</span>
     </a>
     <a class="card" href="reference/mcp.html">
+      <div class="card-icon" aria-hidden="true">&#9737;</div>
       <div class="card-title">Hand it to an agent</div>
-      <div class="card-body"><code>--json</code> + JSON Schemas across the read surface, and an MCP server exposing the diagnose/generate tools to any agent host. <code>avatar mcp serve</code>.</div>
+      <div class="card-body"><code>--json</code> and JSON Schemas across the read surface, and a non-writing MCP server exposing the diagnose and generate tools to any agent host.</div>
+      <span class="card-cmd">avatar mcp serve</span>
     </a>
     <a class="card" href="crates/index.html">
+      <div class="card-icon" aria-hidden="true">&#9707;</div>
       <div class="card-title">Browse the crates</div>
       <div class="card-body">Twenty-two crates from FBX I/O through migration and the runtime rig layer to the OSC daemon &mdash; purpose, key API, and status for each.</div>
+      <span class="card-cmd">crates/</span>
+    </a>
+  </div>
+</section>
+
+<section class="doc-section" id="two-layers">
+  <h2>The two-layer model</h2>
+  <p>Read this first. There are two file layers we own in Rust, and one step we don't.</p>
+  <div class="card-grid">
+    <a class="card" href="architecture.html#fbx-layer">
+      <div class="card-title"><span class="badge badge-accent">1</span> 3D asset &middot; <code>.fbx</code></div>
+      <div class="card-body">Armature/skeleton, bone names, bind poses, skinning weights, blendshapes. Fully ours &mdash; native binary read <em>and</em> write via <code>fbxcel</code>.</div>
+    </a>
+    <a class="card" href="architecture.html#unity-layer">
+      <div class="card-title"><span class="badge badge-accent">2</span> Unity / VRChat &middot; YAML</div>
+      <div class="card-body"><code>.anim</code>, <code>.controller</code>, <code>.asset</code>, <code>.prefab</code>, scenes, <code>.meta</code>: descriptor, animator layers, menus/params. Read, lint, generate, and edit in place.</div>
+    </a>
+    <a class="card" href="architecture.html#upload">
+      <div class="card-title"><span class="badge">3</span> Upload &middot; not ours</div>
+      <div class="card-body">The VRCSDK control panel &rarr; VRChat servers. Interactive account login, effectively Windows-only. We hand off assets; you upload.</div>
     </a>
   </div>
 </section>
 
 <section class="doc-section" id="status">
   <h2>Where the build is</h2>
+  <div class="notice warn">
+    <div class="notice-title">Status: early / alpha</div>
+    The crates build green and are covered by tests (synthetic fixtures in CI, sample-gated real assets on
+    the self-hosted runner), generated assets pass a headless Unity import-acceptance gate, and a real SDK2
+    avatar has been migrated, built, and uploaded to VRChat with these tools. Still: expect rough edges,
+    verify in Unity before you rely on output, and treat APIs, CLI flags, and report formats as subject to
+    change.
+  </div>
+  <table>
+    <thead><tr><th>Milestone</th><th>Scope</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr><td>M0&ndash;M3</td><td>Workspace, armature diagnosis + repair, native FBX write-back, SDK3 lint</td><td><span class="tag tag-done">done</span></td></tr>
+      <tr><td>M4</td><td>Asset generation: clips, blend trees, FX controllers, params/menus, the toggle bundle</td><td><span class="tag tag-done">done</span></td></tr>
+      <tr><td>M5</td><td>OSC runtime + analog-gesture daemon</td><td><span class="tag tag-partial">OpenXR input pending</span></td></tr>
+      <tr><td>alongside</td><td>Unity-YAML editing, SDK2 &rarr; SDK3 migration, PhysBone tuning, runtime rig, wgpu preview/viewer, MCP, the browser inspector</td><td><span class="tag tag-done">done</span></td></tr>
+    </tbody>
+  </table>
   <p>
-    Built and green through <strong>M5</strong>: diagnose/lint, native FBX read + write with armature repair,
-    asset generation (<strong>M4</strong>), the OSC runtime + analog-gesture daemon (<strong>M5</strong>) &mdash;
-    plus the layers that landed alongside: surgical Unity-YAML editing, SDK2 &rarr; SDK3 migration with
-    PhysBone tuning, the runtime rig layer, the wgpu preview/viewer, and the agent surface
-    (<code>--json</code> everywhere, <code>avatar mcp serve</code>). In flight: the daemon's on-device OpenXR
-    input backend and OSCQuery browse/resolve discovery. The full roadmap of record lives in
-    <code>PLAN.md</code>; this site mirrors the committed docs under <code>docs/</code>.
+    In flight: the daemon's on-device OpenXR input backend and OSCQuery browse/resolve discovery. The
+    roadmap of record is <code>PLAN.md</code>; this site mirrors the committed docs under <code>docs/</code>.
   </p>
   <div class="cli"><code>cargo run -p avatar-cli -- --help</code></div>
 </section>
+
+<nav class="see-also" aria-label="See also">
+  <span class="see-also-label">See also</span>
+  <a href="architecture.html">How it stacks</a>
+  <a href="quickstart.html">Quick start</a>
+  <a href="cli/index.html">CLI commands</a>
+  <a href="crates/index.html">Crates</a>
+  <a href="https://github.com/AndrewAltimit/avatar" target="_blank" rel="noopener">GitHub</a>
+</nav>

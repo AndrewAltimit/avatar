@@ -75,6 +75,24 @@ def _resolve_md(ref: str, paths: set[str], by_basename: dict[str, str]) -> str |
     return by_basename.get(ref.rsplit("/", 1)[-1])
 
 
+_TABLE_RE = re.compile(r"<table\b[^>]*>.*?</table>", re.S)
+
+
+def wrap_tables(body: str) -> str:
+    """Wrap every bare `<table>` in a `.table-wrap` div so wide tables scroll
+    horizontally on narrow screens instead of overflowing the page. A table
+    already inside a `.table-wrap` (the fragment author wrapped it by hand)
+    is left alone."""
+
+    def repl(m: re.Match) -> str:
+        before = body[: m.start()].rstrip()
+        if before.endswith('<div class="table-wrap">'):
+            return m.group(0)
+        return f'<div class="table-wrap">{m.group(0)}</div>'
+
+    return _TABLE_RE.sub(repl, body)
+
+
 _MD_CODE_RE = re.compile(r"<code>([^<>]+?\.md)</code>")
 
 
@@ -111,10 +129,36 @@ WIDE_PAGES: set[str] = {
 }
 
 
+def asset_version() -> str:
+    """Short content hash of every js/css asset, appended as `?v=` so browsers never serve a stale
+    module after a deploy (or a local rebuild — `http.server` sends no cache headers)."""
+    import hashlib
+    h = hashlib.sha1()
+    for sub in ("js", "css"):
+        for f in sorted((ROOT / sub).glob("*")):
+            if f.is_file():
+                h.update(f.name.encode())
+                h.update(f.read_bytes())
+    return h.hexdigest()[:10]
+
+
+ASSET_V = None
+
+
+def versioned(extra_head: str) -> str:
+    """Append `?v=` to the local css/js references inside a page's HEAD block."""
+    return re.sub(r'((?:href|src)="(?:\.\./)*(?:css|js)/[^"?]+)"', rf'\1?v={ASSET_V}"', extra_head)
+
+
 def html_template(title: str, depth: int, active_key: str, body: str, extra_head: str = "") -> str:
-    css = "../" * depth + "css/styles.css"
-    layout_js = "../" * depth + "js/layout.js"
-    main_js = "../" * depth + "js/main.js"
+    global ASSET_V
+    if ASSET_V is None:
+        ASSET_V = asset_version()
+    v = "?v=" + ASSET_V
+    css = "../" * depth + "css/styles.css" + v
+    layout_js = "../" * depth + "js/layout.js" + v
+    main_js = "../" * depth + "js/main.js" + v
+    extra_head = versioned(extra_head)
     favicon = "../" * depth + "img/favicon.svg"
     content_cls = "content wide-page" if active_key in WIDE_PAGES else "content"
     return f"""<!DOCTYPE html>
@@ -149,7 +193,7 @@ PAGES: list[tuple[str, str, str, str]] = [
     ("index.html",       "Home",          "home",         "home.html"),
     ("architecture.html","How it stacks", "architecture", "architecture.html"),
     ("quickstart.html",  "Quick start",   "quickstart",   "quickstart.html"),
-    ("analyzer.html",    "FBX analyzer",  "analyzer",     "analyzer.html"),
+    ("analyzer.html",    "Avatar inspector", "analyzer",  "analyzer.html"),
     # depth = 1
     ("crates/index.html","Crates",        "crates/index", "crates/index.html"),
     ("cli/index.html",   "CLI commands",  "cli/index",    "cli/index.html"),
@@ -319,6 +363,7 @@ def main() -> int:
             body = body[end + 3:].lstrip()
 
         body = autolink_md_refs(body, md_paths, md_by_basename)
+        body = wrap_tables(body)
 
         html = html_template(title, depth, active, body, extra_head)
         out = ROOT / out_path

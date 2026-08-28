@@ -1,4 +1,5 @@
-/* main.js - site interactions: scroll-spy, copy buttons, search.
+/* main.js - site interactions: scroll-spy, copy buttons, search, tabs,
+ * the architecture diagram's hover highlighting.
  * Loaded AFTER layout.js, so the DOM injected by injectLayout() is in place.
  */
 
@@ -206,16 +207,70 @@
     });
   }
 
+  /* ---------- Generic tabs (.tabs > .tab[role=tab] + .tab-panel) ----------
+   * A tab strip lives in a container with data-tabs; each .tab carries
+   * aria-controls="<panel id>". Nothing else to wire up. */
+  function setupTabs() {
+    document.querySelectorAll('[data-tabs]').forEach(host => {
+      const tabs = Array.from(host.querySelectorAll('.tab'));
+      if (!tabs.length) return;
+      const activate = (tab) => {
+        tabs.forEach(t => {
+          const on = t === tab;
+          t.setAttribute('aria-selected', String(on));
+          t.tabIndex = on ? 0 : -1;
+          const panel = t.getAttribute('aria-controls') && document.getElementById(t.getAttribute('aria-controls'));
+          if (panel) panel.hidden = !on;
+        });
+      };
+      tabs.forEach((t, i) => {
+        t.setAttribute('role', 'tab');
+        t.addEventListener('click', () => activate(t));
+        t.addEventListener('keydown', (e) => {
+          if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+            e.preventDefault();
+            const n = tabs[(i + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length];
+            activate(n); n.focus();
+          }
+        });
+      });
+      activate(tabs.find(t => t.getAttribute('aria-selected') === 'true') || tabs[0]);
+    });
+  }
+
+  /* ---------- Stack diagram hover (architecture page) ----------
+   * Hovering a crate box lights every box + arrow tagged with the same
+   * data-key, and dims nothing else (keeps the diagram readable). */
+  function setupStackDiagram() {
+    const svg = document.querySelector('.stack-figure svg');
+    if (!svg) return;
+    const all = Array.from(svg.querySelectorAll('[data-key]'));
+    const light = (key, on) => all.forEach(el => {
+      if (el.dataset.key === key) el.classList.toggle('sd-lit', on);
+    });
+    svg.querySelectorAll('.sd-crate').forEach(el => {
+      const key = el.dataset.key;
+      el.addEventListener('mouseenter', () => light(key, true));
+      el.addEventListener('mouseleave', () => light(key, false));
+      el.addEventListener('focus', () => light(key, true));
+      el.addEventListener('blur', () => light(key, false));
+    });
+  }
+
   /* ---------- Init ---------- */
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
       setupTocSpy();
       setupCopyButtons();
       setupSearch();
+      setupTabs();
+      setupStackDiagram();
     });
   } else {
     setupTocSpy();
     setupCopyButtons();
     setupSearch();
+    setupTabs();
+    setupStackDiagram();
   }
 })();

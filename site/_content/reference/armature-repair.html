@@ -12,6 +12,9 @@
 
 <section class="doc-section" id="applied">
   <h2>Applied: canonical humanoid renames</h2>
+  <div class="cli"><code>avatar armature check model.fbx
+avatar armature fix   model.fbx                    # dry run: print the plan
+avatar armature fix   model.fbx -o fixed.fbx       # write the repaired FBX</code></div>
   <p>
     The only native repair that is <strong>applied</strong> is canonical humanoid <strong>renames</strong> &mdash;
     e.g. <code>mixamorig:LeftArm</code> &rarr; <code>LeftUpperArm</code>. That is what Unity's humanoid
@@ -22,6 +25,15 @@
 
 <section class="doc-section" id="flagged">
   <h2>Flagged, not applied: topology, scale, orientation</h2>
+  <table>
+    <thead><tr><th>Finding</th><th>Native fix</th><th>Blender script</th></tr></thead>
+    <tbody>
+      <tr><td>Non-canonical bone names (Mixamo, Biped, VRoid&hellip;)</td><td><span class="badge badge-ok">applied</span></td><td><span class="badge badge-ok">applied</span></td></tr>
+      <tr><td>Mis-wired parent topology</td><td><span class="badge badge-warn">flagged</span></td><td><span class="badge badge-ok">reparented</span></td></tr>
+      <tr><td>Wrong scale / units, wrong up axis</td><td><span class="badge badge-warn">flagged</span></td><td><span class="badge badge-ok">baked</span></td></tr>
+      <tr><td>Extra skeleton root, unskinned mesh, missing T-pose</td><td><span class="badge badge-warn">flagged</span></td><td><span class="badge">reported</span></td></tr>
+    </tbody>
+  </table>
   <p>
     Mis-wired parent topology and scale/orientation problems are <strong>reported</strong> but not applied:
     they need a geometry transform (i.e. Blender), not a metadata relabel. Re-pointing a bone's
@@ -96,3 +108,11 @@
 avatar fbx reslot model.fbx --mesh Hair --to-slot 10 --brighter-than Hair_Emission.png:0.2 -o out.fbx
 avatar fbx blendshapes model.fbx --filter Blush --uv-mask masks/</code></div>
 </section>
+
+<nav class="see-also" aria-label="See also">
+  <span class="see-also-label">See also</span>
+  <a href="humanoid-bones.html">Humanoid bones</a>
+  <a href="../analyzer.html">Avatar inspector</a>
+  <a href="rig-runtime.html">Runtime rig layer</a>
+  <a href="render.html">Rendering & preview</a>
+</nav>

@@ -11,6 +11,10 @@
 
 <section class="doc-section" id="format">
   <h2>The format: gzip + tar, GUID directories</h2>
+  <div class="cli"><code>avatar unitypackage info    avatar.unitypackage
+avatar unitypackage list    avatar.unitypackage
+avatar unitypackage extract avatar.unitypackage -o proj
+avatar unitypackage testbed avatar.unitypackage world.unitypackage --strict</code></div>
   <p>
     A <code>.unitypackage</code> is a <strong>gzip-compressed tar</strong>. There is no manifest; every asset
     is a top-level directory named by its Unity <strong>GUID</strong> (32 hex chars), containing:
@@ -112,3 +116,10 @@ avatar armature check /tmp/proj/Assets/Avatar/.../final.fbx</code></div>
     <a href="migrate.html"><code>avatar migrate sdk3</code></a>.
   </p>
 </section>
+
+<nav class="see-also" aria-label="See also">
+  <span class="see-also-label">See also</span>
+  <a href="migrate.html">SDK2 → SDK3 migration</a>
+  <a href="render.html">Rendering & preview</a>
+  <a href="sdk3-lint-rules.html">SDK3 lint rules</a>
+</nav>
