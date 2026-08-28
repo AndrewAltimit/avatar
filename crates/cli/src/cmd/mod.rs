@@ -12,6 +12,7 @@ pub mod migrate;
 pub mod osc;
 pub mod physbone;
 pub mod render;
+pub mod replay;
 pub mod schema;
 pub mod stats;
 pub mod toggle;

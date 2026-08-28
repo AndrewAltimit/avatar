@@ -28,6 +28,10 @@ pub enum OscCommand {
     /// Run the analog-gesture daemon: map a controller trigger → `Gesture*`/`Gesture*Weight` over
     /// OSC. With no on-device input backend headless, this drives a synthetic demo trigger sweep.
     Gestures(OscGesturesArgs),
+    /// Replay a captured parameter log (`osc capture -o …`) through a `.controller`'s state
+    /// machines offline: the state timeline + dwell/blend summary the avatar's FX actually went
+    /// through — capture proves what VRChat delivered, replay proves what the controller did.
+    Replay(crate::cmd::replay::OscReplayArgs),
 }
 
 /// Where a running VRChat listens for our messages (its default OSC-in port is 9000).

@@ -186,6 +186,9 @@ fn run() -> Result<ExitCode> {
         }
         Command::Osc(OscCommand::Send(args)) => cmd::osc::send(&args).map(|()| ExitCode::SUCCESS),
         Command::Osc(OscCommand::Input(args)) => cmd::osc::input(&args).map(|()| ExitCode::SUCCESS),
+        Command::Osc(OscCommand::Replay(args)) => {
+            cmd::replay::replay(&args).map(|()| ExitCode::SUCCESS)
+        }
         Command::Osc(OscCommand::Capture(args)) => {
             cmd::osc::capture(&args).map(|()| ExitCode::SUCCESS)
         }
